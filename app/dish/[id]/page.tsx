@@ -1,69 +1,176 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Heart, Share2, ChevronDown, ShoppingCart } from "lucide-react";
-import { getDishById } from "@/lib/menu-data";
+import { ArrowLeft, Heart, NotebookPen } from "lucide-react";
+import { getDishById } from "@/lib/database";
 import { useCart } from "@/context/CartContext";
+import { useLanguage } from "@/context/LanguageContext";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  type CarouselApi,
+} from "@/components/ui/carousel";
 
 export default function DishDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const dish = getDishById(id);
   const { addItem } = useCart();
+  const { language: lang, t } = useLanguage();
 
+  const [dish, setDish] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
-  const [expandedBenefit, setExpandedBenefit] = useState<string | null>(null);
-  const [showAddedToast, setShowAddedToast] = useState(false);
 
-  if (!dish) {
+  const [showAddedToast, setShowAddedToast] = useState(false);
+  const [api, setApi] = useState<CarouselApi>();
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  useEffect(() => {
+    if (!api) return;
+    setCurrentSlide(api.selectedScrollSnap());
+    api.on("select", () => {
+      setCurrentSlide(api.selectedScrollSnap());
+    });
+  }, [api]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const timestamp = new Date().getTime();
+        const rawDish = await getDishById(id, timestamp);
+        if (!mounted || !rawDish) return;
+
+        const mappedDish = {
+          ...rawDish,
+          name: rawDish[`name_${lang}`] || rawDish.name?.[lang] || rawDish.name_en || rawDish.name?.en || "",
+          description: rawDish[`description_${lang}`] || rawDish.description?.[lang] || rawDish.description_en || rawDish.description?.en || "",
+          ingredients: rawDish[`ingredients_${lang}`] || rawDish.ingredients?.[lang] || rawDish.ingredients_en || rawDish.ingredients?.en || [],
+          tasteDescription: rawDish[`taste_${lang}`] || rawDish.taste_description?.[lang] || rawDish.tasteDescription?.[lang] || rawDish.taste_en || rawDish.tasteDescription?.en || "",
+          images: (() => {
+            if (Array.isArray(rawDish.image_url) && rawDish.image_url.length > 0) return rawDish.image_url;
+            if (typeof rawDish.image_url === 'string' && rawDish.image_url.startsWith('[')) {
+              try { 
+                const parsed = JSON.parse(rawDish.image_url);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+              } catch (e) { return [rawDish.image_url]; }
+            }
+            const fallbackImage = rawDish.image_url || rawDish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+            return Array.isArray(fallbackImage) ? (fallbackImage.length > 0 ? fallbackImage : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"]) : [fallbackImage];
+          })(),
+          spiceLevel: Number(rawDish.spice_level ?? rawDish.spiceLevel ?? 0),
+          hasSpiceIndicator: Number(rawDish.spice_level ?? rawDish.spiceLevel ?? 0) > 0,
+          isChefSpecial: rawDish.is_chef_special ?? rawDish.isChefSpecial ?? false,
+          isGuestFavorite: rawDish.is_guest_favorite ?? rawDish.isGuestFavorite ?? false,
+          isTrending: rawDish.is_trending ?? rawDish.isTrending ?? false,
+          healthBenefits: rawDish.healthBenefits || [],
+          nutrition: rawDish.nutrition || {
+            kcal: rawDish.kcal || 0,
+            protein: rawDish.protein || 0,
+            fat: rawDish.fat || 0,
+            carbs: rawDish.carbs || 0,
+            fibre: rawDish.fibre || 0
+          }
+        };
+
+        setDish(mappedDish);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [id]);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-[#0D0B0A] flex items-center justify-center">
-        <p className="text-[#E7CFA8]">Dish not found</p>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
+        <p className="ml-3 text-[#E7CFA8]">{t('loading')}</p>
       </div>
     );
   }
 
+  if (!dish) {
+    return (
+      <div className="min-h-screen bg-[#0D0B0A] flex items-center justify-center">
+        <p className="text-[#E7CFA8]">{t('dishNotFound')}</p>
+      </div>
+    );
+  }
+
+  // Explicit handleAddToCart to avoid closure or event-passing issues
   const handleAddToCart = () => {
+    if (!dish) return;
+
+    // Use a robust extraction for the image
+    const itemImage = (Array.isArray(dish.images) && dish.images.length > 0) 
+      ? dish.images[0] 
+      : (dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop");
+
     addItem({
       id: dish.id,
       name: dish.name,
       price: dish.price,
-      image: dish.image,
-      category: dish.category,
+      image: itemImage,
+      category: dish.category || "Main",
     });
+
     setShowAddedToast(true);
     setTimeout(() => setShowAddedToast(false), 2000);
   };
 
-  const relatedDishes = [
-    {
-      name: "Dal Makhani",
-      price: 260,
-      image:
-        "https://images.unsplash.com/photo-1596040541218-aecc6bafd932?w=400&h=400&fit=crop",
-    },
-    {
-      name: "Palak Paneer",
-      price: 280,
-      image:
-        "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=400&h=400&fit=crop",
-    },
-  ];
+
 
   return (
     <div className="max-w-[430px] mx-auto min-h-screen bg-[#0D0B0A]">
-      {/* Hero Image */}
-      <div className="relative h-72 w-full bg-[#15110F]">
-        <img
-          src={dish.image}
-          alt={dish.name}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            e.currentTarget.src = 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=400'
-          }}
-        />
+      {/* Hero Carousel */}
+      <div className="relative h-96 w-full bg-[#15110F]">
+        <Carousel setApi={setApi} className="w-full h-full">
+          <CarouselContent className="h-96">
+            {dish.images.map((img: string, index: number) => (
+              <CarouselItem key={index} className="h-full">
+                {(img?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || img?.includes('/video/upload/')) ? (
+                  <video
+                    src={img}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={img}
+                    alt={`${dish.name} - ${index + 1}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=400'
+                    }}
+                  />
+                )}
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+        </Carousel>
+
+        {/* Slide Indicators */}
+        {dish.images.length > 1 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+            {dish.images.map((_: any, i: number) => (
+              <div
+                key={i}
+                className={`w-1.5 h-1.5 rounded-full transition-all ${
+                  currentSlide === i ? "bg-[#E28B4B] w-4" : "bg-white/40"
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Back Button */}
         <button
@@ -73,20 +180,22 @@ export default function DishDetailPage() {
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
 
-        {/* Favorite & Share */}
-        <div className="absolute top-4 right-4 flex gap-2 z-10">
+        {/* Favorite */}
+        <div className="absolute top-6 right-6 z-10">
           <button
             onClick={() => setIsFavorited(!isFavorited)}
-            className="bg-[rgba(0,0,0,0.5)] text-white p-2 rounded-full hover:bg-[rgba(0,0,0,0.7)] transition-colors"
+            className={`w-14 h-14 flex items-center justify-center backdrop-blur-xl border-2 rounded-2xl transition-all duration-500 shadow-2xl ${
+              isFavorited 
+                ? "bg-red-500/30 border-red-500/60 shadow-red-500/40 scale-110" 
+                : "bg-white/10 border-white/20 shadow-black/50 hover:bg-white/20"
+            }`}
           >
             <Heart
-              size={24}
+              size={32}
               fill={isFavorited ? "#ef4444" : "none"}
               stroke={isFavorited ? "#ef4444" : "white"}
+              className={`${isFavorited ? "animate-pulse" : ""} transition-transform`}
             />
-          </button>
-          <button className="bg-[rgba(0,0,0,0.5)] text-white p-2 rounded-full hover:bg-[rgba(0,0,0,0.7)] transition-colors">
-            <Share2 size={24} />
           </button>
         </div>
       </div>
@@ -103,153 +212,77 @@ export default function DishDetailPage() {
         {dish.isGuestFavorite && (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-[#22c55e] mb-4">
             <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block"></span>
-            Highly Reordered
+            {t('highlyReordered')}
           </span>
         )}
 
-        {/* Spice and Details */}
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-[#C18F58]">
-            {"🌶️".repeat(dish.spiceLevel)}
-          </span>
-          <span className="text-[#E28B4B] font-medium">
-            {dish.spiceLevel === 1
-              ? "Mild"
-              : dish.spiceLevel === 2
-                ? "Medium"
-                : "Spicy"}
-          </span>
-          <span className="text-[#C18F58] italic">{dish.tasteDescription}</span>
+        {/* Spice Indicator */}
+        {dish.hasSpiceIndicator && (
+          <div className="flex items-center gap-2 mb-4 bg-red-500/10 w-fit px-3 py-1 rounded-full border border-red-500/20">
+            <span className="text-[#C18F58] text-sm">🌶️</span>
+            <span className="text-[#E28B4B] font-bold text-xs uppercase tracking-widest">
+              {t('spicy')}
+            </span>
+          </div>
+        )}
+
+        {/* How Does It Taste */}
+        <div className="bg-[#15110F] rounded-xl p-5 mb-6 border border-white/5 shadow-inner">
+          <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-2.5">
+            {t('howDoesItTaste')}
+          </h3>
+          <p className="text-[#E7CFA8] italic text-sm leading-6">
+            "{dish.tasteDescription}"
+          </p>
         </div>
 
         {/* Servings */}
         <div className="flex items-center gap-2 text-[#8E7F71] text-sm mb-6">
           <span>👥</span>
-          <span>Serves {dish.servings} people</span>
+          <span>{t('serves')} {dish.servings} {t('people')}</span>
         </div>
 
         {/* Chef's Note */}
         <div className="bg-[#15110F] rounded-xl p-4 border-l-4 border-[#E28B4B] mb-6">
           <h2 className="text-[#E7CFA8] font-bold mb-2 flex items-center gap-2">
-            👨‍🍳 Chef's Note
+            👨‍🍳 {t('chefNote')}
           </h2>
           <p className="text-[#8E7F71] italic text-sm">{dish.description}</p>
         </div>
 
         {/* Ingredients */}
-        <div className="bg-[#15110F] rounded-xl p-4 mb-6 border border-[rgba(255,255,255,0.06)]">
-          <h3 className="text-[#8E7F71] text-xs font-bold uppercase tracking-wide mb-3">
-            Ingredients
+        <div className="bg-[#15110F] rounded-xl p-6 mb-6 border border-white/5 shadow-inner">
+          <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-3">
+            {t('ingredients')}
           </h3>
-          <p className="text-[#E28B4B] text-sm">{dish.ingredients.join(", ")}</p>
+          <p className="text-[#E28B4B] text-sm leading-6 font-medium">{dish.ingredients.join(", ")}</p>
         </div>
 
-        {/* Nutritional Info */}
-        <div className="bg-[#15110F] rounded-xl p-4 mb-6 border border-[rgba(255,255,255,0.06)]">
-          <h3 className="text-[#E7CFA8] font-bold mb-4">Nutritional info*</h3>
-          <div className="grid grid-cols-5 gap-2 text-center">
-            <div>
-              <p className="text-[#E7CFA8] font-bold text-lg">{dish.nutrition.kcal}</p>
-              <p className="text-[#8E7F71] text-xs mt-1">kcal</p>
-            </div>
-            <div>
-              <p className="text-[#E7CFA8] font-bold text-lg">{dish.nutrition.protein}g</p>
-              <p className="text-[#8E7F71] text-xs mt-1">protein</p>
-            </div>
-            <div>
-              <p className="text-[#E7CFA8] font-bold text-lg">{dish.nutrition.fat}g</p>
-              <p className="text-[#8E7F71] text-xs mt-1">fat</p>
-            </div>
-            <div>
-              <p className="text-[#E7CFA8] font-bold text-lg">{dish.nutrition.carbs}g</p>
-              <p className="text-[#8E7F71] text-xs mt-1">carbs</p>
-            </div>
-            <div>
-              <p className="text-[#E7CFA8] font-bold text-lg">{dish.nutrition.fibre}g</p>
-              <p className="text-[#8E7F71] text-xs mt-1">fibre</p>
-            </div>
-          </div>
-        </div>
 
-        {/* What Makes This Healthy */}
-        <div className="bg-[#15110F] rounded-xl p-4 mb-6 border border-[rgba(255,255,255,0.06)]">
-          <h3 className="text-[#8E7F71] text-xs font-bold uppercase tracking-wide mb-4">
-            What makes this healthy
-          </h3>
-          <div className="space-y-2">
-            {dish.healthBenefits.map((benefit, index) => (
-              <button
-                key={index}
-                onClick={() =>
-                  setExpandedBenefit(
-                    expandedBenefit === benefit.ingredient ? null : benefit.ingredient
-                  )
-                }
-                className="w-full text-left"
-              >
-                <div className="flex items-center gap-2 py-2">
-                  <span className="text-[#22c55e]">✓</span>
-                  <span className="text-[#E28B4B] font-bold text-sm flex-1">
-                    {benefit.ingredient}
-                  </span>
-                  <span className="text-[#8E7F71] text-xs">
-                    {benefit.benefit}
-                  </span>
-                  <ChevronDown
-                    size={16}
-                    className={`text-[#8E7F71] transition-transform ${
-                      expandedBenefit === benefit.ingredient ? "rotate-180" : ""
-                    }`}
-                  />
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
 
-        {/* Guests Also Ordered */}
-        <div className="mb-24">
-          <h3 className="text-[#E7CFA8] font-bold text-lg mb-4">Guests Also Ordered</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {relatedDishes.map((d, index) => (
-              <div
-                key={index}
-                className="bg-[#15110F] rounded-xl overflow-hidden border border-[rgba(255,255,255,0.06)]"
-              >
-                <img
-                  src={d.image}
-                  alt={d.name}
-                  className="w-full h-32 object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=400'
-                  }}
-                />
-                <div className="p-3">
-                  <p className="text-[#E7CFA8] font-bold text-sm">{d.name}</p>
-                  <p className="text-[#E28B4B] font-bold text-sm mt-2">₹{d.price}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+
       </div>
 
-      {/* Add to Cart Button */}
-      <div className="max-w-[430px] mx-auto px-4 py-6">
-        <button
-          onClick={handleAddToCart}
-          className="w-full bg-[#E28B4B] text-[#0D0B0A] font-bold py-4 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-        >
-          <ShoppingCart size={20} />
-          Add to Cart
-        </button>
+      <div className="h-24"></div> {/* Spacer for fixed button */}
 
-        {/* Toast */}
-        {showAddedToast && (
-          <div className="mt-4 bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium text-center animate-fade-in-out">
-            Added to cart!
-          </div>
-        )}
+      {/* Add To Cart Button - Fixed at bottom */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 max-w-[430px] mx-auto">
+        <div className="bg-gradient-to-t from-[#0D0B0A] via-[#0D0B0A] to-transparent pt-8 pb-6 px-4">
+          <button
+            onClick={() => handleAddToCart()}
+            className="w-full bg-[#E28B4B] text-[#0D0B0A] font-extrabold py-4.5 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-[#E28B4B]/20 hover:scale-[1.02] active:scale-95 transition-all"
+          >
+            <NotebookPen size={22} strokeWidth={2.5} />
+            <span className="text-lg tracking-wide uppercase">{t('placeOrder')}</span>
+          </button>
+
+          {/* Toast */}
+          {showAddedToast && (
+            <div className="absolute -top-12 left-4 right-4 bg-green-500/20 text-green-500 border border-green-500/30 px-4 py-3 rounded-xl text-sm font-bold text-center animate-fade-in-out backdrop-blur-sm">
+              Added to cart!
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

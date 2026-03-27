@@ -3,15 +3,31 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
 
 export default function AdminLoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("admin@taksh.com")
-  const [password, setPassword] = useState("********")
+  const [password, setPassword] = useState("")
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
-    // UI scaffold - no authentication wired yet
+    setIsLoading(true)
+    setErrorMessage(null)
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (error) {
+      setErrorMessage(error.message)
+      setIsLoading(false)
+      return
+    }
+
     router.push("/admin/dashboard")
   }
 
@@ -65,8 +81,9 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               className="flex-1 h-12 bg-[#E8650A] text-white font-semibold rounded-lg hover:bg-[#E8650A]/90 transition-colors"
+              disabled={isLoading}
             >
-              Sign in
+              {isLoading ? "Signing in..." : "Sign in"}
             </button>
             <Link
               href="/admin/preview"
@@ -77,9 +94,11 @@ export default function AdminLoginPage() {
           </div>
         </form>
 
-        <p className="text-[#8a6a52] text-xs text-center mt-6">
-          This is a UI scaffold (no authentication wired yet).
-        </p>
+        {errorMessage ? (
+          <p className="text-[#ef4444] text-xs text-center mt-6">
+            {errorMessage}
+          </p>
+        ) : null}
       </div>
     </div>
   )

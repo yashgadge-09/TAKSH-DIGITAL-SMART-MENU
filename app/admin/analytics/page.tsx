@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
+import { getAnalyticsData } from "@/lib/database"
 import {
   LineChart,
   Line,
@@ -185,6 +186,38 @@ function ReviewStars({ rating }: { rating: number }) {
 
 export default function AnalyticsPage() {
   const [activeFilter, setActiveFilter] = useState<number | null>(null)
+  const [analytics, setAnalytics] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+      ; (async () => {
+        try {
+          const res = await getAnalyticsData()
+          if (!mounted) return
+          setAnalytics(res)
+        } finally {
+          if (!mounted) return
+          setIsLoading(false)
+        }
+      })()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const menuViewsToday = analytics?.menuViewsToday ?? 0
+  const avgRatingValue = analytics?.avgRating ?? reviewsData.averageRating
+  const totalReviewsValue = analytics?.totalReviews ?? reviewsData.totalReviews
+  const publicReviewsValue = analytics?.publicReviews ?? reviewsData.publicReviews
+  const privateReviewsValue =
+    totalReviewsValue - publicReviewsValue
+
+  const topCartBarData =
+    analytics?.topCartDishes?.length ? analytics.topCartDishes : mostAddedToCartData
+  const topFavouritesBarData =
+    analytics?.topFavourites?.length ? analytics.topFavourites : mostFavouritedData
 
   const filteredReviews = activeFilter === null
     ? recentReviews
@@ -203,7 +236,8 @@ export default function AnalyticsPage() {
       <div className="mb-8">
         <h1 className="text-white font-bold text-3xl mb-2">Analytics</h1>
         <p className="text-[#8a6a52]">
-          Track QR scans and engagement (mock data).
+          Track QR scans and engagement. Menu views today:{" "}
+          {isLoading ? "..." : menuViewsToday.toLocaleString()}
         </p>
       </div>
 
@@ -284,7 +318,7 @@ export default function AnalyticsPage() {
           </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mostAddedToCartData} layout="vertical">
+              <BarChart data={topCartBarData} layout="vertical">
                 <XAxis
                   type="number"
                   axisLine={false}
@@ -311,7 +345,7 @@ export default function AnalyticsPage() {
           <h2 className="text-white font-bold text-lg mb-6">Most Favourited</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mostFavouritedData} layout="vertical">
+              <BarChart data={topFavouritesBarData} layout="vertical">
                 <XAxis
                   type="number"
                   axisLine={false}
@@ -343,16 +377,15 @@ export default function AnalyticsPage() {
           {topDishesData.map((dish, index) => (
             <div
               key={dish.rank}
-              className={`flex items-center gap-4 p-4 rounded-lg ${
-                index % 2 === 0 ? "bg-white/[0.02]" : ""
-              }`}
+              className={`flex items-center gap-4 p-4 rounded-lg ${index % 2 === 0 ? "bg-white/[0.02]" : ""
+                }`}
             >
               <span className="text-[#E8650A] font-bold text-lg w-8">
                 #{dish.rank}
               </span>
               <div className="w-10 h-10 rounded-full overflow-hidden">
                 <Image
-                  src={dish.image}
+                  src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"}
                   alt={dish.name}
                   width={40}
                   height={40}
@@ -379,7 +412,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ============ REVIEW ANALYTICS SECTION ============ */}
-      
+
       {/* Review Analytics Header */}
       <div className="mb-6">
         <h2 className="text-[#E7CFA8] font-bold text-2xl mb-1">Review Analytics</h2>
@@ -394,7 +427,9 @@ export default function AnalyticsPage() {
             <span className="text-[#8E7F71] text-sm">Total Reviews</span>
             <Star className="w-5 h-5 text-[#E28B4B]" />
           </div>
-          <p className="text-[#E7CFA8] font-bold text-3xl mb-1">{reviewsData.totalReviews}</p>
+          <p className="text-[#E7CFA8] font-bold text-3xl mb-1">
+            {isLoading ? "..." : totalReviewsValue}
+          </p>
           <p className="text-[#8E7F71] text-xs">All time</p>
         </div>
 
@@ -404,8 +439,10 @@ export default function AnalyticsPage() {
             <span className="text-[#8E7F71] text-sm">Average Rating</span>
             <Star className="w-5 h-5 fill-[#E28B4B] text-[#E28B4B]" />
           </div>
-          <p className="text-[#E28B4B] font-bold text-3xl mb-2">{reviewsData.averageRating}</p>
-          <StarRating rating={reviewsData.averageRating} size={16} />
+          <p className="text-[#E28B4B] font-bold text-3xl mb-2">
+            {isLoading ? "..." : avgRatingValue}
+          </p>
+          <StarRating rating={avgRatingValue} size={16} />
         </div>
 
         {/* Public Reviews */}
@@ -414,7 +451,9 @@ export default function AnalyticsPage() {
             <span className="text-[#8E7F71] text-sm">Public Reviews</span>
             <Eye className="w-5 h-5 text-[#22c55e]" />
           </div>
-          <p className="text-[#22c55e] font-bold text-3xl mb-1">{reviewsData.publicReviews}</p>
+          <p className="text-[#22c55e] font-bold text-3xl mb-1">
+            {isLoading ? "..." : publicReviewsValue}
+          </p>
           <p className="text-[#8E7F71] text-xs">Visible to guests</p>
         </div>
 
@@ -424,7 +463,9 @@ export default function AnalyticsPage() {
             <span className="text-[#8E7F71] text-sm">Private Reviews</span>
             <EyeOff className="w-5 h-5 text-[#ef4444]" />
           </div>
-          <p className="text-[#ef4444] font-bold text-3xl mb-1">{reviewsData.privateReviews}</p>
+          <p className="text-[#ef4444] font-bold text-3xl mb-1">
+            {isLoading ? "..." : privateReviewsValue}
+          </p>
           <p className="text-[#8E7F71] text-xs">Hidden from guests</p>
         </div>
       </div>
@@ -457,16 +498,15 @@ export default function AnalyticsPage() {
         {/* Recent Guest Reviews */}
         <div className="bg-[#15110F] rounded-xl p-6">
           <h3 className="text-[#E7CFA8] font-bold text-lg mb-4">Recent Guest Reviews</h3>
-          
+
           {/* Filter Pills */}
           <div className="flex flex-wrap gap-2 mb-4">
             <button
               onClick={() => setActiveFilter(null)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                activeFilter === null
-                  ? "bg-[#E28B4B] text-[#0D0B0A]"
-                  : "bg-[#221C18] text-[#8E7F71] hover:text-[#E7CFA8]"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${activeFilter === null
+                ? "bg-[#E28B4B] text-[#0D0B0A]"
+                : "bg-[#221C18] text-[#8E7F71] hover:text-[#E7CFA8]"
+                }`}
             >
               All
             </button>
@@ -474,11 +514,10 @@ export default function AnalyticsPage() {
               <button
                 key={star}
                 onClick={() => setActiveFilter(star)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  activeFilter === star
-                    ? "bg-[#E28B4B] text-[#0D0B0A]"
-                    : "bg-[#221C18] text-[#8E7F71] hover:text-[#E7CFA8]"
-                }`}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${activeFilter === star
+                  ? "bg-[#E28B4B] text-[#0D0B0A]"
+                  : "bg-[#221C18] text-[#8E7F71] hover:text-[#E7CFA8]"
+                  }`}
               >
                 {star}★
               </button>
@@ -502,11 +541,10 @@ export default function AnalyticsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-[#E28B4B] text-sm font-bold">{review.reviewer}</span>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      review.isPublic
-                        ? "bg-[#22c55e]/20 text-[#22c55e]"
-                        : "bg-[#ef4444] text-white"
-                    }`}
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${review.isPublic
+                      ? "bg-[#22c55e]/20 text-[#22c55e]"
+                      : "bg-[#ef4444] text-white"
+                      }`}
                   >
                     {review.isPublic ? "Public" : "Private"}
                   </span>
@@ -524,9 +562,8 @@ export default function AnalyticsPage() {
           {topRatedDishes.map((dish, index) => (
             <div
               key={dish.rank}
-              className={`flex items-center gap-4 py-3 border-b border-white/[0.05] last:border-b-0 hover:bg-white/[0.02] transition-colors ${
-                index === 0 ? "pt-0" : ""
-              }`}
+              className={`flex items-center gap-4 py-3 border-b border-white/[0.05] last:border-b-0 hover:bg-white/[0.02] transition-colors ${index === 0 ? "pt-0" : ""
+                }`}
             >
               <div
                 className="w-7 h-7 rounded-full bg-[#E28B4B] text-[#0D0B0A] flex items-center justify-center font-bold text-sm"
@@ -535,7 +572,7 @@ export default function AnalyticsPage() {
               </div>
               <div className="w-10 h-10 rounded-full overflow-hidden">
                 <Image
-                  src={dish.image}
+                  src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"}
                   alt={dish.name}
                   width={40}
                   height={40}

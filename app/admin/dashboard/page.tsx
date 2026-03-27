@@ -3,8 +3,40 @@
 import { AdminLayout } from "@/components/AdminSidebar"
 import { QrCode, Wallet, TrendingUp } from "lucide-react"
 import Link from "next/link"
+import { useEffect, useState } from "react"
+import { getAnalyticsData } from "@/lib/database"
 
 export default function DashboardPage() {
+  const [analytics, setAnalytics] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await getAnalyticsData()
+        if (!mounted) return
+        setAnalytics(res)
+      } catch (e: any) {
+        if (!mounted) return
+        setError(e?.message || "Failed to load analytics")
+      } finally {
+        if (!mounted) return
+        setIsLoading(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const menuViewsToday = analytics?.menuViewsToday ?? 0
+  const estimatedRevenueToday = analytics?.estimatedRevenueToday ?? 0
+  const trendingDish = analytics?.topDishViews?.[0]?.name ?? "—"
+  const trendingCount = analytics?.topDishViews?.[0]?.count ?? 0
+
   return (
     <AdminLayout>
       {/* Header */}
@@ -23,8 +55,12 @@ export default function DashboardPage() {
             <span className="text-[#8a6a52] text-sm">Today&apos;s QR scans</span>
             <QrCode className="w-5 h-5 text-[#E8650A]" />
           </div>
-          <div className="text-white font-bold text-4xl mb-1">248</div>
-          <div className="text-[#22c55e] text-sm">+12% vs yesterday</div>
+          <div className="text-white font-bold text-4xl mb-1">
+            {isLoading ? "..." : menuViewsToday.toLocaleString()}
+          </div>
+          <div className="text-[#8a6a52] text-sm">
+            {isLoading ? "Loading..." : "Menu views for today"}
+          </div>
         </div>
 
         {/* Estimated Revenue */}
@@ -33,8 +69,12 @@ export default function DashboardPage() {
             <span className="text-[#8a6a52] text-sm">Estimated revenue</span>
             <Wallet className="w-5 h-5 text-[#E8650A]" />
           </div>
-          <div className="text-white font-bold text-4xl mb-1">₹18,420</div>
-          <div className="text-[#8a6a52] text-sm">Based on top items</div>
+          <div className="text-white font-bold text-4xl mb-1">
+            {isLoading ? "..." : `₹${estimatedRevenueToday.toLocaleString("en-IN")}`}
+          </div>
+          <div className="text-[#8a6a52] text-sm">
+            {isLoading ? "Loading..." : "Estimated from cart events"}
+          </div>
         </div>
 
         {/* Trending Category */}
@@ -43,10 +83,20 @@ export default function DashboardPage() {
             <span className="text-[#8a6a52] text-sm">Trending category</span>
             <TrendingUp className="w-5 h-5 text-[#E8650A]" />
           </div>
-          <div className="text-white font-bold text-4xl mb-1">Starters</div>
-          <div className="text-[#8a6a52] text-sm">Paneer Tikka leading</div>
+          <div className="text-white font-bold text-4xl mb-1">
+            {isLoading ? "..." : trendingDish}
+          </div>
+          <div className="text-[#8a6a52] text-sm">
+            {isLoading ? "" : `${trendingCount} views`}
+          </div>
         </div>
       </div>
+
+      {error ? (
+        <div className="bg-[#151210] rounded-xl p-4 mb-8 text-[#ef4444]">
+          {error}
+        </div>
+      ) : null}
 
       {/* Next Steps Card */}
       <div className="bg-[#151210] rounded-xl p-6">
