@@ -1,82 +1,59 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
-import { Pencil, Trash2, Check, X, ChevronDown, ChevronUp } from "lucide-react"
-import { initialMenuItems } from "@/lib/menu-data"
+import { Trash2, ChevronDown, ChevronUp } from "lucide-react"
+import {
+  addCategory,
+  deleteCategory,
+  getAllDishesAdmin,
+  getCategories
+} from "@/lib/database"
 
 interface Category {
   id: string
   name: string
-  itemCount: number
 }
 
-const initialCategories: Category[] = [
-  { id: "1", name: "Starter", itemCount: 2 },
-  { id: "2", name: "Main Course", itemCount: 3 },
-  { id: "3", name: "Desserts", itemCount: 1 },
-  { id: "4", name: "Cold Drinks", itemCount: 2 },
-  { id: "5", name: "Breakfast", itemCount: 2 },
-]
-
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(initialCategories)
+  const [categories, setCategories] = useState<Category[]>([])
   const [newCategoryName, setNewCategoryName] = useState("")
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState("")
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const editInputRef = useRef<HTMLInputElement>(null)
+  const [dishes, setDishes] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const loadData = async () => {
+    setIsLoading(true)
+    const [catsRes, dishesRes] = await Promise.all([
+      getCategories(),
+      getAllDishesAdmin()
+    ])
+    setCategories(catsRes || [])
+    setDishes(dishesRes || [])
+    setIsLoading(false)
+  }
 
   useEffect(() => {
-    if (editingId && editInputRef.current) {
-      editInputRef.current.focus()
-    }
-  }, [editingId])
+    void loadData()
+  }, [])
 
-  const handleSave = () => {
-    if (newCategoryName.trim()) {
-      const newCategory: Category = {
-        id: Date.now().toString(),
-        name: newCategoryName.trim(),
-        itemCount: 0,
-      }
-      setCategories([...categories, newCategory])
+  const handleSave = async () => {
+    if (!newCategoryName.trim()) return
+    setIsSaving(true)
+    try {
+      await addCategory(newCategoryName.trim())
       setNewCategoryName("")
+      await loadData()
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const handleClear = () => {
     setNewCategoryName("")
-  }
-
-  const startEditing = (category: Category) => {
-    setEditingId(category.id)
-    setEditingName(category.name)
-  }
-
-  const cancelEditing = () => {
-    setEditingId(null)
-    setEditingName("")
-  }
-
-  const saveEditing = () => {
-    if (editingName.trim() && editingId) {
-      setCategories(categories.map(cat => 
-        cat.id === editingId ? { ...cat, name: editingName.trim() } : cat
-      ))
-      setEditingId(null)
-      setEditingName("")
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      saveEditing()
-    } else if (e.key === "Escape") {
-      cancelEditing()
-    }
   }
 
   const openDeleteModal = (category: Category) => {
@@ -89,10 +66,15 @@ export default function CategoriesPage() {
     setCategoryToDelete(null)
   }
 
-  const confirmDelete = () => {
-    if (categoryToDelete) {
-      setCategories(categories.filter(cat => cat.id !== categoryToDelete.id))
+  const confirmDelete = async () => {
+    if (!categoryToDelete) return
+    setIsSaving(true)
+    try {
+      await deleteCategory(categoryToDelete.id)
       closeDeleteModal()
+      await loadData()
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -101,7 +83,7 @@ export default function CategoriesPage() {
   }
 
   const getDishesInCategory = (categoryName: string) => {
-    return initialMenuItems.filter(item => item.category === categoryName)
+    return dishes.filter((item) => item.category === categoryName)
   }
 
   return (
@@ -121,7 +103,6 @@ export default function CategoriesPage() {
             {categories.map((category) => {
               const dishes = getDishesInCategory(category.name)
               const isExpanded = expandedId === category.id
-              const isEditing = editingId === category.id
 
               return (
                 <li key={category.id}>
@@ -130,79 +111,35 @@ export default function CategoriesPage() {
                       isExpanded ? "bg-white/[0.02]" : "hover:bg-white/[0.03]"
                     }`}
                   >
-                    {/* Left side - Name or Edit Input */}
+                    {/* Category Name */}
                     <div
                       className="flex-1 cursor-pointer"
-                      onClick={() => !isEditing && toggleExpand(category.id)}
+                      onClick={() => toggleExpand(category.id)}
                     >
-                      {isEditing ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            ref={editInputRef}
-                            type="text"
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            className="h-8 px-3 bg-[#221C18] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A] transition-colors"
-                          />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              saveEditing()
-                            }}
-                            className="p-1.5 text-[#22c55e] hover:text-[#22c55e]/80 transition-colors"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              cancelEditing()
-                            }}
-                            className="p-1.5 text-[#ef4444] hover:text-[#ef4444]/80 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-[#8a6a52]" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-[#8a6a52]" />
-                          )}
-                          <span className="text-white">{category.name}</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-[#8a6a52]" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-[#8a6a52]" />
+                        )}
+                        <span className="text-white">{category.name}</span>
+                      </div>
                     </div>
 
                     {/* Right side - Item count and actions */}
                     <div className="flex items-center gap-3">
                       <span className="text-[#8a6a52] text-sm bg-[#1C1510] px-2.5 py-1 rounded-md">
-                        {category.itemCount} items
+                        {dishes.length} items
                       </span>
-                      {!isEditing && (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              startEditing(category)
-                            }}
-                            className="p-1 text-[#8E7F71] hover:text-[#E7CFA8] transition-colors"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openDeleteModal(category)
-                            }}
-                            className="p-1 text-[#8E7F71] hover:text-[#ef4444] transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openDeleteModal(category)
+                        }}
+                        className="p-1 text-[#8E7F71] hover:text-[#ef4444] transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
 
@@ -212,7 +149,9 @@ export default function CategoriesPage() {
                       {dishes.map((dish) => (
                         <div key={dish.id} className="flex items-center gap-2 py-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-[#8E7F71]" />
-                          <span className="text-[#8E7F71] text-sm">{dish.name.en}</span>
+                          <span className="text-[#8E7F71] text-sm">
+                            {dish?.name?.en ?? dish?.name ?? ""}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -245,9 +184,10 @@ export default function CategoriesPage() {
             <div className="flex gap-3">
               <button
                 onClick={handleSave}
-                className="px-6 py-2.5 bg-[#E8650A] text-white font-medium rounded-lg hover:bg-[#E8650A]/90 transition-colors"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-[#E8650A] text-white font-medium rounded-lg hover:bg-[#E8650A]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Save
+                {isSaving ? "Saving..." : "Save"}
               </button>
               <button
                 onClick={handleClear}
@@ -292,9 +232,10 @@ export default function CategoriesPage() {
                 </button>
                 <button
                   onClick={confirmDelete}
-                  className="flex-1 h-11 bg-[#ef4444] text-white font-bold rounded-xl hover:bg-[#ef4444]/90 transition-colors"
+                  disabled={isSaving}
+                  className="flex-1 h-11 bg-[#ef4444] text-white font-bold rounded-xl hover:bg-[#ef4444]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Delete
+                  {isSaving ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>

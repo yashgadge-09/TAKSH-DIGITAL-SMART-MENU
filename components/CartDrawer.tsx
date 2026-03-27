@@ -48,12 +48,16 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                 >
                   {/* Image */}
                   <div className="flex-shrink-0 relative w-16 h-16 rounded-lg overflow-hidden">
-                    <Image
-                      src={item.image}
-                      alt={item.name}
-                      fill
-                      className="object-cover"
-                    />
+                    {(item.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || item.image?.includes('/video/upload/')) ? (
+                      <video src={item.image} muted loop autoPlay className="w-full h-full object-cover" />
+                    ) : (
+                      <Image
+                        src={item.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"}
+                        alt={item.name}
+                        fill
+                        className="object-cover"
+                      />
+                    )}
                   </div>
 
                   {/* Details */}

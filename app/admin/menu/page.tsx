@@ -1,21 +1,35 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
 import { Plus, X } from "lucide-react"
 import Image from "next/image"
-import { type MenuItem, initialMenuItems, categories } from "@/lib/menu-data"
+import {
+  addDish,
+  deleteDish,
+  getAllDishesAdmin,
+  getCategories,
+  toggleAvailability,
+  updateDish
+} from "@/lib/database"
 
 type LanguageTab = "en" | "hi" | "mr"
 
-const spiceLevelLabels = ["No Spice", "Mild", "Medium", "Spicy"]
+// const spiceLevelLabels = ["No Spice", "Mild", "Medium", "Spicy"]
+
+
+type MenuItem = any
 
 export default function MenuPage() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems)
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [activeTab, setActiveTab] = useState<LanguageTab>("en")
   const [errors, setErrors] = useState<Record<string, boolean>>({})
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [categoriesList, setCategoriesList] = useState<string[]>([])
 
   const [formData, setFormData] = useState({
     // English fields
@@ -36,8 +50,9 @@ export default function MenuPage() {
     // Shared fields
     price: "",
     category: "Starter",
-    image: "",
-    spiceLevel: 1 as 0 | 1 | 2 | 3,
+    images: [] as string[],
+    spiceIndicator: false,
+
     servings: "2",
     isGuestFavorite: false,
     isChefSpecial: false,
@@ -49,6 +64,75 @@ export default function MenuPage() {
     carbs: "",
     fibre: "",
   })
+
+  const loadMenu = async () => {
+    setIsLoading(true)
+    const timestamp = new Date().getTime()
+    const [dishesRes, categoriesRes] = await Promise.all([
+      getAllDishesAdmin(timestamp),
+      getCategories()
+    ])
+
+    const dishes = dishesRes || []
+    const categoriesRows = categoriesRes || []
+
+    setCategoriesList(
+      categoriesRows.map((c: any) => c.name).filter(Boolean)
+    )
+
+    // Map Supabase rows -> UI state shape
+    setMenuItems(
+      dishes.map((dish: any) => ({
+        ...dish,
+        name: dish.name ?? {
+          en: dish.name_en ?? "",
+          hi: dish.name_hi ?? "",
+          mr: dish.name_mr ?? ""
+        },
+        description:
+          dish.description ?? {
+            en: dish.description_en ?? "",
+            hi: dish.description_hi ?? "",
+            mr: dish.description_mr ?? ""
+          },
+        ingredients:
+          dish.ingredients ?? {
+            en: dish.ingredients_en ?? [],
+            hi: dish.ingredients_hi ?? [],
+            mr: dish.ingredients_mr ?? []
+          },
+        tasteDescription:
+          dish.tasteDescription ??
+          dish.taste_description ?? {
+            en: dish.tasteDescription_en ?? "",
+            hi: dish.tasteDescription_hi ?? "",
+            mr: dish.tasteDescription_mr ?? ""
+          },
+        spiceLevel: dish.spice_level ?? dish.spiceLevel ?? 0,
+        spiceIndicator: (dish.spice_level ?? dish.spiceLevel ?? 0) > 0,
+
+        isAvailable: dish.is_available ?? dish.isAvailable ?? true,
+        isChefSpecial:
+          dish.is_chef_special ?? dish.isChefSpecial ?? false,
+        isGuestFavorite:
+          dish.is_guest_favorite ?? dish.isGuestFavorite ?? false,
+        isTrending: dish.is_trending ?? dish.isTrending ?? false,
+        images: (() => {
+          if (Array.isArray(dish.image_url)) return dish.image_url;
+          if (typeof dish.image_url === 'string' && dish.image_url.startsWith('[')) {
+            try { return JSON.parse(dish.image_url); } catch (e) { return [dish.image_url]; }
+          }
+          return dish.image_url ? [dish.image_url] : (dish.image ? [dish.image] : []);
+        })()
+      }))
+    )
+
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    void loadMenu()
+  }, [])
 
   const resetForm = () => {
     setFormData({
@@ -66,8 +150,9 @@ export default function MenuPage() {
       tasteDescription_mr: "",
       price: "",
       category: "Starter",
-      image: "",
-      spiceLevel: 1,
+      images: [],
+      spiceIndicator: false,
+
       servings: "2",
       isGuestFavorite: false,
       isChefSpecial: false,
@@ -86,14 +171,14 @@ export default function MenuPage() {
 
   const validateForm = () => {
     const newErrors: Record<string, boolean> = {}
-    
+
     if (!formData.name_en.trim()) newErrors.name_en = true
     if (!formData.description_en.trim()) newErrors.description_en = true
     if (!formData.ingredients_en.trim()) newErrors.ingredients_en = true
     if (!formData.price.trim()) newErrors.price = true
-    
+
     setErrors(newErrors)
-    
+
     if (Object.keys(newErrors).length > 0) {
       // Switch to English tab if validation fails there
       if (newErrors.name_en || newErrors.description_en || newErrors.ingredients_en) {
@@ -104,56 +189,138 @@ export default function MenuPage() {
     return true
   }
 
-  const handleSave = () => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    setIsUploading(true)
+    
+    try {
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const formDataUpload = new FormData()
+        formDataUpload.append("file", file)
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formDataUpload,
+        })
+        const data = await res.json()
+        return data.url
+      })
+
+      const urls = await Promise.all(uploadPromises)
+      const validUrls = urls.filter(Boolean)
+      
+      setFormData((prev) => ({ 
+        ...prev, 
+        images: [...prev.images, ...validUrls] 
+      }))
+    } catch (err) {
+      console.error("Error uploading:", err)
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleSave = async () => {
     if (!validateForm()) return
 
-    const newItem: MenuItem = {
-      id: editingItem?.id || Date.now().toString(),
-      name: {
-        en: formData.name_en,
-        hi: formData.name_hi,
-        mr: formData.name_mr,
-      },
-      description: {
-        en: formData.description_en,
-        hi: formData.description_hi,
-        mr: formData.description_mr,
-      },
-      ingredients: {
-        en: formData.ingredients_en.split(",").map((s) => s.trim()).filter(Boolean),
-        hi: formData.ingredients_hi.split(",").map((s) => s.trim()).filter(Boolean),
-        mr: formData.ingredients_mr.split(",").map((s) => s.trim()).filter(Boolean),
-      },
-      tasteDescription: {
-        en: formData.tasteDescription_en,
-        hi: formData.tasteDescription_hi,
-        mr: formData.tasteDescription_mr,
-      },
-      price: Number(formData.price),
-      category: formData.category,
-      image: formData.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop",
-      spiceLevel: formData.spiceLevel,
-      servings: Number(formData.servings) || 2,
-      isChefSpecial: formData.isChefSpecial,
-      isGuestFavorite: formData.isGuestFavorite,
-      isTrending: formData.isTrending,
-      isAvailable: formData.isAvailable,
-      nutrition: {
-        kcal: Number(formData.kcal) || 0,
-        protein: Number(formData.protein) || 0,
-        fat: Number(formData.fat) || 0,
-        carbs: Number(formData.carbs) || 0,
-        fibre: Number(formData.fibre) || 0,
-      },
-    }
+    setIsSaving(true)
+    try {
+      const newItem: MenuItem = {
+        id: editingItem?.id || Date.now().toString(),
+        name: {
+          en: formData.name_en,
+          hi: formData.name_hi,
+          mr: formData.name_mr,
+        },
+        description: {
+          en: formData.description_en,
+          hi: formData.description_hi,
+          mr: formData.description_mr,
+        },
+        ingredients: {
+          en: formData.ingredients_en
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          hi: formData.ingredients_hi
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          mr: formData.ingredients_mr
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        },
+        tasteDescription: {
+          en: formData.tasteDescription_en,
+          hi: formData.tasteDescription_hi,
+          mr: formData.tasteDescription_mr,
+        },
+        price: Number(formData.price),
+        category: formData.category,
+        images: formData.images.length > 0 
+          ? formData.images 
+          : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"],
+        spiceLevel: formData.spiceIndicator ? 1 : 0,
 
-    if (editingItem) {
-      setMenuItems(menuItems.map((item) => (item.id === editingItem.id ? newItem : item)))
-    } else {
-      setMenuItems([...menuItems, newItem])
+        servings: Number(formData.servings) || 2,
+        isChefSpecial: formData.isChefSpecial,
+        isGuestFavorite: formData.isGuestFavorite,
+        isTrending: formData.isTrending,
+        isAvailable: formData.isAvailable,
+        nutrition: {
+          kcal: Number(formData.kcal) || 0,
+          protein: Number(formData.protein) || 0,
+          fat: Number(formData.fat) || 0,
+          carbs: Number(formData.carbs) || 0,
+          fibre: Number(formData.fibre) || 0,
+        }
+      }
+
+      const updatePayload = {
+        name_en: newItem.name.en,
+        name_hi: newItem.name.hi || null,
+        name_mr: newItem.name.mr || null,
+        description_en: newItem.description.en,
+        description_hi: newItem.description.hi || null,
+        description_mr: newItem.description.mr || null,
+        ingredients_en: newItem.ingredients.en,
+        ingredients_hi: newItem.ingredients.hi || [],
+        ingredients_mr: newItem.ingredients.mr || [],
+        taste_en: newItem.tasteDescription.en || null,
+        taste_hi: newItem.tasteDescription.hi || null,
+        taste_mr: newItem.tasteDescription.mr || null,
+        price: newItem.price,
+        category: newItem.category,
+        image_url: newItem.images,
+        spice_level: newItem.spiceLevel,
+        spiceLevel: newItem.spiceLevel,
+
+        servings: newItem.servings,
+        is_chef_special: newItem.isChefSpecial,
+        is_guest_favorite: newItem.isGuestFavorite,
+        is_trending: newItem.isTrending,
+        is_available: newItem.isAvailable,
+        kcal: newItem.nutrition.kcal,
+        protein: newItem.nutrition.protein,
+        fat: newItem.nutrition.fat,
+        carbs: newItem.nutrition.carbs,
+        fibre: newItem.nutrition.fibre,
+      }
+
+      if (editingItem) {
+        await updateDish(editingItem.id, updatePayload)
+      } else {
+        await addDish(updatePayload)
+      }
+
+      await loadMenu()
+      setShowAddForm(false)
+      resetForm()
+    } finally {
+      setIsSaving(false)
     }
-    setShowAddForm(false)
-    resetForm()
   }
 
   const handleEdit = (item: MenuItem) => {
@@ -173,33 +340,56 @@ export default function MenuPage() {
       tasteDescription_mr: item.tasteDescription.mr,
       price: item.price.toString(),
       category: item.category,
-      image: item.image,
-      spiceLevel: item.spiceLevel,
+      images: item.images || [],
+      spiceIndicator: (item.spice_level ?? item.spiceLevel ?? 0) > 0,
+
       servings: item.servings.toString(),
       isGuestFavorite: item.isGuestFavorite,
       isChefSpecial: item.isChefSpecial,
       isTrending: item.isTrending,
       isAvailable: item.isAvailable,
-      kcal: item.nutrition.kcal.toString(),
-      protein: item.nutrition.protein.toString(),
-      fat: item.nutrition.fat.toString(),
-      carbs: item.nutrition.carbs.toString(),
-      fibre: item.nutrition.fibre.toString(),
+      kcal: item.nutrition?.kcal?.toString() || "",
+      protein: item.nutrition?.protein?.toString() || "",
+      fat: item.nutrition?.fat?.toString() || "",
+      carbs: item.nutrition?.carbs?.toString() || "",
+      fibre: item.nutrition?.fibre?.toString() || "",
     })
     setShowAddForm(true)
     setActiveTab("en")
     setErrors({})
   }
 
-  const handleDelete = (id: string) => {
-    setMenuItems(menuItems.filter((item) => item.id !== id))
+  const handleDelete = async (id: string) => {
+    setIsSaving(true)
+    try {
+      await deleteDish(id)
+      await loadMenu()
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const toggleAvailability = (id: string) => {
-    setMenuItems(
-      menuItems.map((item) =>
-        item.id === id ? { ...item, isAvailable: !item.isAvailable } : item
-      )
+  const handleToggleAvailability = async (id: string) => {
+    const current = menuItems.find((item) => item.id === id)
+    if (!current) return
+
+    const nextIsAvailable = !current.isAvailable
+    setIsSaving(true)
+    try {
+      await toggleAvailability(id, nextIsAvailable)
+      await loadMenu()
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
+        </div>
+      </AdminLayout>
     )
   }
 
@@ -237,7 +427,8 @@ export default function MenuPage() {
                 <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Dish Name</th>
                 <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Category</th>
                 <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Price</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Spice Level</th>
+                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Spice</th>
+
                 <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Availability</th>
                 <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Actions</th>
               </tr>
@@ -250,13 +441,17 @@ export default function MenuPage() {
                 >
                   <td className="p-4">
                     <div className="w-11 h-11 rounded-full overflow-hidden">
-                      <Image
-                        src={item.image}
-                        alt={item.name.en}
-                        width={44}
-                        height={44}
-                        className="w-full h-full object-cover"
-                      />
+                      {((item.images?.[0] || "").match(/\.(mp4|webm|ogg|mov|m4v)$/i) || (item.images?.[0] || "").includes('/video/upload/')) ? (
+                        <video src={item.images?.[0]} muted className="w-full h-full object-cover" />
+                      ) : (
+                        <Image
+                          src={item.images?.[0] || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"}
+                          alt={item.name.en}
+                          width={44}
+                          height={44}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
                     </div>
                   </td>
                   <td className="p-4">
@@ -265,19 +460,27 @@ export default function MenuPage() {
                   </td>
                   <td className="p-4 text-[#8a6a52] text-sm">{item.category}</td>
                   <td className="p-4 text-white text-sm">₹{item.price}</td>
-                  <td className="p-4 text-[#8a6a52] text-sm">{spiceLevelLabels[item.spiceLevel]}</td>
+                  <td className="p-4 text-sm">
+                    {item.spiceLevel > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[#E8650A]">
+                        🌶️ Spicy
+                      </span>
+                    ) : (
+                      <span className="text-[#8a6a52]">None</span>
+                    )}
+                  </td>
+
                   <td className="p-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleAvailability(item.id)}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${
-                          item.isAvailable ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
-                        }`}
+                        onClick={() => handleToggleAvailability(item.id)}
+                        disabled={isSaving}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${item.isAvailable ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
+                          }`}
                       >
                         <span
-                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                            item.isAvailable ? "left-5" : "left-0.5"
-                          }`}
+                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${item.isAvailable ? "left-5" : "left-0.5"
+                            }`}
                         />
                       </button>
                       <span className="text-[#8a6a52] text-xs">
@@ -295,7 +498,8 @@ export default function MenuPage() {
                       </button>
                       <button
                         onClick={() => handleDelete(item.id)}
-                        className="text-[#ef4444] text-sm font-medium hover:underline"
+                        disabled={isSaving}
+                        className="text-[#ef4444] text-sm font-medium hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         Delete
                       </button>
@@ -333,33 +537,30 @@ export default function MenuPage() {
                 <button
                   type="button"
                   onClick={() => setActiveTab("en")}
-                  className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${
-                    activeTab === "en"
-                      ? "bg-[#E28B4B] text-[#0D0B0A]"
-                      : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
-                  }`}
+                  className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "en"
+                    ? "bg-[#E28B4B] text-[#0D0B0A]"
+                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    }`}
                 >
                   <span className="text-base">EN</span> English
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab("hi")}
-                  className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${
-                    activeTab === "hi"
-                      ? "bg-[#E28B4B] text-[#0D0B0A]"
-                      : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
-                  }`}
+                  className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "hi"
+                    ? "bg-[#E28B4B] text-[#0D0B0A]"
+                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    }`}
                 >
                   <span className="text-base">HI</span> Hindi
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab("mr")}
-                  className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${
-                    activeTab === "mr"
-                      ? "bg-[#E28B4B] text-[#0D0B0A]"
-                      : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
-                  }`}
+                  className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "mr"
+                    ? "bg-[#E28B4B] text-[#0D0B0A]"
+                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    }`}
                 >
                   <span className="text-base">MR</span> Marathi
                 </button>
@@ -379,9 +580,8 @@ export default function MenuPage() {
                         setFormData({ ...formData, name_en: e.target.value })
                         setErrors({ ...errors, name_en: false })
                       }}
-                      className={`w-full h-11 px-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${
-                        errors.name_en ? "border-[#ef4444]" : "border-white/10"
-                      }`}
+                      className={`w-full h-11 px-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${errors.name_en ? "border-[#ef4444]" : "border-white/10"
+                        }`}
                       placeholder="e.g. Paneer Tikka"
                     />
                     {errors.name_en && (
@@ -400,9 +600,8 @@ export default function MenuPage() {
                         setErrors({ ...errors, description_en: false })
                       }}
                       rows={4}
-                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${
-                        errors.description_en ? "border-[#ef4444]" : "border-white/10"
-                      }`}
+                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${errors.description_en ? "border-[#ef4444]" : "border-white/10"
+                        }`}
                       placeholder="Describe the dish in English..."
                     />
                     {errors.description_en && (
@@ -421,9 +620,8 @@ export default function MenuPage() {
                         setErrors({ ...errors, ingredients_en: false })
                       }}
                       rows={3}
-                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${
-                        errors.ingredients_en ? "border-[#ef4444]" : "border-white/10"
-                      }`}
+                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${errors.ingredients_en ? "border-[#ef4444]" : "border-white/10"
+                        }`}
                       placeholder="Paneer, Bell Peppers, Yogurt, Spices"
                     />
                     <p className="text-[#8a6a52]/60 text-xs mt-1">comma separated</p>
@@ -578,9 +776,8 @@ export default function MenuPage() {
                           setFormData({ ...formData, price: e.target.value })
                           setErrors({ ...errors, price: false })
                         }}
-                        className={`w-full h-11 pl-8 pr-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${
-                          errors.price ? "border-[#ef4444]" : "border-white/10"
-                        }`}
+                        className={`w-full h-11 pl-8 pr-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${errors.price ? "border-[#ef4444]" : "border-white/10"
+                          }`}
                         placeholder="280"
                       />
                     </div>
@@ -595,7 +792,7 @@ export default function MenuPage() {
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                       className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#E8650A]"
                     >
-                      {categories.map((cat) => (
+                      {categoriesList.map((cat) => (
                         <option key={cat} value={cat}>
                           {cat}
                         </option>
@@ -604,29 +801,24 @@ export default function MenuPage() {
                   </div>
                 </div>
 
-                {/* Spice Level */}
+                {/* Spice Indicator */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-3">Spice Level</label>
-                  <div className="flex gap-3">
-                    {([0, 1, 2, 3] as const).map((level) => (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, spiceLevel: level })}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          formData.spiceLevel === level
-                            ? "bg-[#E8650A] text-white"
-                            : "bg-[#1C1510] border border-white/10 text-[#8a6a52] hover:border-white/20"
+                  <label className="block text-[#8a6a52] text-sm mb-3">Spice Indicator</label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, spiceIndicator: !formData.spiceIndicator })}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${formData.spiceIndicator
+                        ? "bg-[#E8650A] text-white"
+                        : "bg-[#1C1510] border border-white/10 text-[#8a6a52] hover:border-white/20"
                         }`}
-                      >
-                        {level === 0 && "None"}
-                        {level === 1 && "Mild"}
-                        {level === 2 && "Medium"}
-                        {level === 3 && "Spicy"}
-                      </button>
-                    ))}
+                    >
+                      {formData.spiceIndicator ? "🌶️ Spicy Indicator ON" : "No Spice Indicator"}
+                    </button>
+                    <p className="text-[#8a6a52]/60 text-xs">Toggle if this dish should show a spicy indicator/chili icon.</p>
                   </div>
                 </div>
+
 
                 {/* Servings */}
                 <div>
@@ -641,27 +833,72 @@ export default function MenuPage() {
                   />
                 </div>
 
-                {/* Image URL */}
+                {/* Multiple Image Upload */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-2">Upload Dish Image (URL)</label>
-                  <input
-                    type="text"
-                    value={formData.image}
-                    onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                    className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
-                    placeholder="https://..."
-                  />
-                  {formData.image && (
-                    <div className="mt-3 w-20 h-20 rounded-lg overflow-hidden">
-                      <Image
-                        src={formData.image}
-                        alt="Preview"
-                        width={80}
-                        height={80}
-                        className="w-full h-full object-cover"
+                  <label className="block text-[#8a6a52] text-sm mb-2">Dish Images / GIFs</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-start">
+                    {formData.images.map((img, idx) => (
+                      <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-white/10 relative group">
+                        {(img.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || img.includes('/video/upload/')) ? (
+                          <video src={img} muted loop autoPlay className="w-full h-full object-cover" />
+                        ) : (
+                          <Image
+                            src={img}
+                            alt={`Preview ${idx + 1}`}
+                            fill
+                            className="object-cover"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newImages = [...formData.images]
+                            newImages.splice(idx, 1)
+                            setFormData({ ...formData, images: newImages })
+                          }}
+                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                    
+                    <label className={`aspect-square flex flex-col items-center justify-center gap-2 bg-[#1C1510] border border-dashed border-white/10 rounded-lg text-white cursor-pointer hover:border-[#E8650A] transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}>
+                      {isUploading ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#E8650A]" />
+                      ) : (
+                        <Plus className="w-5 h-5 text-[#8a6a52]" />
+                      )}
+                      <span className="text-[10px] font-medium text-[#8a6a52]">
+                        {isUploading ? "Uploading..." : "Add Image"}
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                        accept="image/*,image/gif"
+                        multiple
+                        disabled={isUploading}
                       />
-                    </div>
-                  )}
+                    </label>
+                  </div>
+                  <div className="mt-4">
+                    <input
+                      type="text"
+                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] text-xs"
+                      placeholder="Paste image URL and press Enter..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          const url = (e.target as HTMLInputElement).value.trim()
+                          if (url) {
+                            setFormData({ ...formData, images: [...formData.images, url] })
+                            ;(e.target as HTMLInputElement).value = ''
+                          }
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* Nutritional Info */}
@@ -727,14 +964,12 @@ export default function MenuPage() {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, isGuestFavorite: !formData.isGuestFavorite })}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${
-                        formData.isGuestFavorite ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
-                      }`}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${formData.isGuestFavorite ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
+                        }`}
                     >
                       <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                          formData.isGuestFavorite ? "left-5" : "left-0.5"
-                        }`}
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${formData.isGuestFavorite ? "left-5" : "left-0.5"
+                          }`}
                       />
                     </button>
                     <span className="text-white text-sm">Guest Favourite</span>
@@ -744,14 +979,12 @@ export default function MenuPage() {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, isChefSpecial: !formData.isChefSpecial })}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${
-                        formData.isChefSpecial ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
-                      }`}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${formData.isChefSpecial ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
+                        }`}
                     >
                       <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                          formData.isChefSpecial ? "left-5" : "left-0.5"
-                        }`}
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${formData.isChefSpecial ? "left-5" : "left-0.5"
+                          }`}
                       />
                     </button>
                     <span className="text-white text-sm">Chef Special</span>
@@ -761,14 +994,12 @@ export default function MenuPage() {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, isTrending: !formData.isTrending })}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${
-                        formData.isTrending ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
-                      }`}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${formData.isTrending ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
+                        }`}
                     >
                       <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                          formData.isTrending ? "left-5" : "left-0.5"
-                        }`}
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${formData.isTrending ? "left-5" : "left-0.5"
+                          }`}
                       />
                     </button>
                     <span className="text-white text-sm">Trending</span>
@@ -778,14 +1009,12 @@ export default function MenuPage() {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, isAvailable: !formData.isAvailable })}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${
-                        formData.isAvailable ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
-                      }`}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${formData.isAvailable ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
+                        }`}
                     >
                       <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                          formData.isAvailable ? "left-5" : "left-0.5"
-                        }`}
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${formData.isAvailable ? "left-5" : "left-0.5"
+                          }`}
                       />
                     </button>
                     <span className="text-white text-sm">Available on Menu</span>
@@ -797,9 +1026,14 @@ export default function MenuPage() {
               <div className="flex flex-col gap-3 pt-4">
                 <button
                   onClick={handleSave}
-                  className="w-full h-12 bg-[#E8650A] text-white font-semibold rounded-lg hover:bg-[#E8650A]/90 transition-colors"
+                  disabled={isSaving}
+                  className="w-full h-12 bg-[#E8650A] text-white font-semibold rounded-lg hover:bg-[#E8650A]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {editingItem ? "Update Dish" : "Save Dish"}
+                  {isSaving
+                    ? "Saving..."
+                    : editingItem
+                      ? "Update Dish"
+                      : "Save Dish"}
                 </button>
                 <button
                   onClick={() => {

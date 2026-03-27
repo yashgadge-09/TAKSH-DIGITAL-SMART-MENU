@@ -1,31 +1,49 @@
 
 import { supabase } from './supabase'
 
-export async function getAllDishes() {
-  const { data, error } = await supabase
+export async function getAllDishes(timestamp?: number) {
+  let query = supabase
     .from('dishes')
     .select('*')
-    .eq('is_available', true)
-    .order('created_at', { ascending: true })
+    .eq('is_available', true);
+    
+  if (timestamp) {
+    // Add a unique query param via a dummy filter to bypass cache
+    query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+  }
+  
+  const { data, error } = await query.order('created_at', { ascending: true });
   if (error) throw error
   return data
 }
 
-export async function getDishById(id: string) {
-  const { data, error } = await supabase
+export async function getDishById(id: string, timestamp?: number) {
+  let query = supabase
     .from('dishes')
     .select('*')
-    .eq('id', id)
-    .single()
+    .eq('id', id);
+
+  if (timestamp) {
+    // Force bypass cache
+    query = query.neq('name_en', 'NON_EXISTENT_DISH_NAME_FOR_CACHE_BUST');
+  }
+
+  const { data, error } = await query.single();
   if (error) throw error
   return data
 }
 
-export async function getAllDishesAdmin() {
-  const { data, error } = await supabase
+export async function getAllDishesAdmin(timestamp?: number) {
+  let query = supabase
     .from('dishes')
-    .select('*')
-    .order('created_at', { ascending: true })
+    .select('*');
+
+  if (timestamp) {
+    // Force bypass cache
+    query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: true });
   if (error) throw error
   return data
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { useState, createContext, useContext, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase"
 
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -33,7 +34,13 @@ const SidebarContext = createContext<{
 
 function SidebarContent() {
   const pathname = usePathname()
+  const router = useRouter()
   const { collapsed, setCollapsed } = useContext(SidebarContext)
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push("/admin")
+  }
 
   return (
     <>
@@ -111,12 +118,13 @@ function SidebarContent() {
           collapsed ? "left-16" : "left-[220px]"
         )}
       >
-        <Link
-          href="/admin/preview"
-          className="px-4 py-2 border border-white/20 rounded-lg text-white text-sm font-medium hover:bg-white/5 transition-colors"
+
+        <button
+          onClick={handleLogout}
+          className="ml-3 px-4 py-2 bg-[#0D0B0A] border border-white/20 rounded-lg text-white text-sm font-medium hover:bg-white/5 transition-colors"
         >
-          Open menu
-        </Link>
+          Logout
+        </button>
       </header>
     </>
   )
