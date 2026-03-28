@@ -295,7 +295,6 @@ export default function MenuPage() {
         category: newItem.category,
         image_url: newItem.images,
         spice_level: newItem.spiceLevel,
-        spiceLevel: newItem.spiceLevel,
 
         servings: newItem.servings,
         is_chef_special: newItem.isChefSpecial,
