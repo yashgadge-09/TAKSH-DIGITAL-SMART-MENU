@@ -46,10 +46,10 @@ export default function DishDetailPage() {
 
         const mappedDish = {
           ...rawDish,
-          name: rawDish[`name_${lang}`] || rawDish.name?.[lang] || rawDish.name_en || rawDish.name?.en || "",
-          description: rawDish[`description_${lang}`] || rawDish.description?.[lang] || rawDish.description_en || rawDish.description?.en || "",
-          ingredients: rawDish[`ingredients_${lang}`] || rawDish.ingredients?.[lang] || rawDish.ingredients_en || rawDish.ingredients?.en || [],
-          tasteDescription: rawDish[`taste_${lang}`] || rawDish.taste_description?.[lang] || rawDish.tasteDescription?.[lang] || rawDish.taste_en || rawDish.tasteDescription?.en || "",
+          name: rawDish[`name_${lang}`] || (rawDish.name?.[lang] ?? rawDish.name_en ?? rawDish.name?.en ?? ""),
+          description: rawDish[`description_${lang}`] || (rawDish.description?.[lang] ?? rawDish.description_en ?? rawDish.description?.en ?? ""),
+          ingredients: Array.isArray(rawDish[`ingredients_${lang}`]) ? rawDish[`ingredients_${lang}`] : (rawDish.ingredients?.[lang] ?? rawDish.ingredients_en ?? rawDish.ingredients?.en ?? []),
+          tasteDescription: rawDish[`taste_${lang}`] || rawDish[`tasteDescription_${lang}`] || (rawDish.taste_description?.[lang] ?? rawDish.tasteDescription?.[lang] ?? rawDish.taste_en ?? rawDish.tasteDescription?.en ?? ""),
           images: (() => {
             if (Array.isArray(rawDish.image_url) && rawDish.image_url.length > 0) return rawDish.image_url;
             if (typeof rawDish.image_url === 'string' && rawDish.image_url.startsWith('[')) {
@@ -61,18 +61,18 @@ export default function DishDetailPage() {
             const fallbackImage = rawDish.image_url || rawDish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
             return Array.isArray(fallbackImage) ? (fallbackImage.length > 0 ? fallbackImage : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"]) : [fallbackImage];
           })(),
-          spiceLevel: Number(rawDish.spice_level ?? rawDish.spiceLevel ?? 0),
-          hasSpiceIndicator: Number(rawDish.spice_level ?? rawDish.spiceLevel ?? 0) > 0,
-          isChefSpecial: rawDish.is_chef_special ?? rawDish.isChefSpecial ?? false,
-          isGuestFavorite: rawDish.is_guest_favorite ?? rawDish.isGuestFavorite ?? false,
-          isTrending: rawDish.is_trending ?? rawDish.isTrending ?? false,
+          spiceLevel: Number(rawDish.spice_level ?? 0),
+          hasSpiceIndicator: Number(rawDish.spice_level ?? 0) > 0,
+          isChefSpecial: rawDish.is_chef_special ?? false,
+          isGuestFavorite: rawDish.is_guest_favorite ?? false,
+          isTrending: rawDish.is_trending ?? false,
           healthBenefits: rawDish.healthBenefits || [],
-          nutrition: rawDish.nutrition || {
-            kcal: rawDish.kcal || 0,
-            protein: rawDish.protein || 0,
-            fat: rawDish.fat || 0,
-            carbs: rawDish.carbs || 0,
-            fibre: rawDish.fibre || 0
+          nutrition: {
+            kcal: rawDish.kcal ?? (rawDish.nutrition?.kcal ?? 0),
+            protein: rawDish.protein ?? (rawDish.nutrition?.protein ?? 0),
+            fat: rawDish.fat ?? (rawDish.nutrition?.fat ?? 0),
+            carbs: rawDish.carbs ?? (rawDish.nutrition?.carbs ?? 0),
+            fibre: rawDish.fibre ?? (rawDish.nutrition?.fibre ?? 0)
           }
         };
 
