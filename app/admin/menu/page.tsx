@@ -84,32 +84,28 @@ export default function MenuPage() {
     setMenuItems(
       dishes.map((dish: any) => ({
         ...dish,
-        name: dish.name ?? {
-          en: dish.name_en ?? "",
-          hi: dish.name_hi ?? "",
-          mr: dish.name_mr ?? ""
+        name: {
+          en: dish.name_en ?? (dish.name?.en ?? ""),
+          hi: dish.name_hi ?? (dish.name?.hi ?? ""),
+          mr: dish.name_mr ?? (dish.name?.mr ?? "")
         },
-        description:
-          dish.description ?? {
-            en: dish.description_en ?? "",
-            hi: dish.description_hi ?? "",
-            mr: dish.description_mr ?? ""
-          },
-        ingredients:
-          dish.ingredients ?? {
-            en: dish.ingredients_en ?? [],
-            hi: dish.ingredients_hi ?? [],
-            mr: dish.ingredients_mr ?? []
-          },
-        tasteDescription:
-          dish.tasteDescription ??
-          dish.taste_description ?? {
-            en: dish.tasteDescription_en ?? "",
-            hi: dish.tasteDescription_hi ?? "",
-            mr: dish.tasteDescription_mr ?? ""
-          },
-        spiceLevel: dish.spice_level ?? dish.spiceLevel ?? 0,
-        spiceIndicator: (dish.spice_level ?? dish.spiceLevel ?? 0) > 0,
+        description: {
+          en: dish.description_en ?? (dish.description?.en ?? ""),
+          hi: dish.description_hi ?? (dish.description?.hi ?? ""),
+          mr: dish.description_mr ?? (dish.description?.mr ?? "")
+        },
+        ingredients: {
+          en: Array.isArray(dish.ingredients_en) ? dish.ingredients_en : (dish.ingredients?.en ?? []),
+          hi: Array.isArray(dish.ingredients_hi) ? dish.ingredients_hi : (dish.ingredients?.hi ?? []),
+          mr: Array.isArray(dish.ingredients_mr) ? dish.ingredients_mr : (dish.ingredients?.mr ?? [])
+        },
+        tasteDescription: {
+          en: dish.taste_description_en ?? dish.tasteDescription_en ?? dish.taste_en ?? (dish.tasteDescription?.en ?? dish.taste_description?.en ?? ""),
+          hi: dish.taste_description_hi ?? dish.tasteDescription_hi ?? dish.taste_hi ?? (dish.tasteDescription?.hi ?? dish.taste_description?.hi ?? ""),
+          mr: dish.taste_description_mr ?? dish.tasteDescription_mr ?? dish.taste_mr ?? (dish.tasteDescription?.mr ?? dish.taste_description?.mr ?? "")
+        },
+        spiceLevel: dish.spice_level ?? 0,
+        spiceIndicator: (dish.spice_level ?? 0) > 0,
 
         isAvailable: dish.is_available ?? dish.isAvailable ?? true,
         isChefSpecial:

@@ -31,25 +31,26 @@ export default function MenuPage() {
 
   const loadData = async () => {
     try {
+      setIsLoading(true);
       const timestamp = new Date().getTime(); // force fresh fetch parameter
       const data = await getAllDishes(timestamp);
 
       const mappedDishes = (data || []).map((dish: any) => ({
         ...dish,
         nameRaw: {
-          en: dish.name_en || dish.name?.en || "",
-          hi: dish.name_hi || dish.name?.hi || dish.name_en || "",
-          mr: dish.name_mr || dish.name?.mr || dish.name_en || ""
+          en: dish.name_en || (dish.name?.en ?? ""),
+          hi: dish.name_hi || (dish.name?.hi ?? dish.name_en ?? ""),
+          mr: dish.name_mr || (dish.name?.mr ?? dish.name_en ?? "")
         },
         descriptionRaw: {
-          en: dish.description_en || dish.description?.en || "",
-          hi: dish.description_hi || dish.description?.hi || dish.description_en || "",
-          mr: dish.description_mr || dish.description?.mr || dish.description_en || ""
+          en: dish.description_en || (dish.description?.en ?? ""),
+          hi: dish.description_hi || (dish.description?.hi ?? dish.description_en ?? ""),
+          mr: dish.description_mr || (dish.description?.mr ?? dish.description_en ?? "")
         },
         ingredientsRaw: {
-          en: dish.ingredients_en || dish.ingredients?.en || [],
-          hi: dish.ingredients_hi || dish.ingredients?.hi || dish.ingredients_en || [],
-          mr: dish.ingredients_mr || dish.ingredients?.mr || dish.ingredients_en || []
+          en: Array.isArray(dish.ingredients_en) ? dish.ingredients_en : (dish.ingredients?.en ?? []),
+          hi: Array.isArray(dish.ingredients_hi) ? dish.ingredients_hi : (dish.ingredients?.hi ?? dish.ingredients_en ?? []),
+          mr: Array.isArray(dish.ingredients_mr) ? dish.ingredients_mr : (dish.ingredients?.mr ?? dish.ingredients_en ?? [])
         },
         image: (() => {
           if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
@@ -61,10 +62,10 @@ export default function MenuPage() {
           }
           return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
         })(),
-        hasSpiceIndicator: Number(dish.spice_level ?? dish.spiceLevel ?? 0) > 0,
-        isChefSpecial: dish.is_chef_special ?? dish.isChefSpecial ?? false,
-        isGuestFavorite: dish.is_guest_favorite ?? dish.isGuestFavorite ?? false,
-        isTrending: dish.is_trending ?? dish.isTrending ?? false
+        hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
+        isChefSpecial: dish.is_chef_special ?? false,
+        isGuestFavorite: dish.is_guest_favorite ?? false,
+        isTrending: dish.is_trending ?? false
       }));
 
       setDishes(mappedDishes);
@@ -92,8 +93,8 @@ export default function MenuPage() {
 
   // Filter dishes
   const filteredDishes = dishes.filter((d) => {
-    const name = d.nameRaw[lang].toLowerCase();
-    const desc = d.descriptionRaw[lang].toLowerCase();
+    const name = (d.nameRaw[lang] || "").toLowerCase();
+    const desc = (d.descriptionRaw[lang] || "").toLowerCase();
     const matchesSearch = name.includes(searchQuery.toLowerCase()) || desc.includes(searchQuery.toLowerCase());
     const matchesCategory = activeCategory === "All" || d.category === activeCategory;
     return matchesSearch && matchesCategory;
@@ -146,10 +147,23 @@ export default function MenuPage() {
           <div className="max-w-[430px] mx-auto px-4 py-4 flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-[#E28B4B] rounded-full flex items-center justify-center text-[#0D0B0A] font-bold">
-                T
+              <div className="w-10 h-10 bg-[#E28B4B] rounded-full flex items-center justify-center text-[#0D0B0A] font-bold relative">
+                {isLoading ? (
+                  <RefreshCw className="animate-spin w-5 h-5" />
+                ) : (
+                  "T"
+                )}
               </div>
-              <span className="text-[#E7CFA8] font-bold text-lg">TAKSH</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[#E7CFA8] font-bold text-lg">TAKSH</span>
+                <button 
+                  onClick={() => loadData()}
+                  className="p-1.5 rounded-full hover:bg-white/5 text-[#8E7F71] transition-colors"
+                  title="Refresh Menu"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Language Switcher */}

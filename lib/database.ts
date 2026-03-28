@@ -9,7 +9,7 @@ export async function getAllDishes(timestamp?: number) {
     
   if (timestamp) {
     // Add a unique query param via a dummy filter to bypass cache
-    query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+    query = query.neq('name_en', `CACHE_BUST_${timestamp}`);
   }
   
   const { data, error } = await query.order('created_at', { ascending: true });
@@ -25,7 +25,7 @@ export async function getDishById(id: string, timestamp?: number) {
 
   if (timestamp) {
     // Force bypass cache
-    query = query.neq('name_en', 'NON_EXISTENT_DISH_NAME_FOR_CACHE_BUST');
+    query = query.neq('name_en', `CACHE_BUST_${timestamp}`);
   }
 
   const { data, error } = await query.single();
@@ -40,7 +40,7 @@ export async function getAllDishesAdmin(timestamp?: number) {
 
   if (timestamp) {
     // Force bypass cache
-    query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+    query = query.neq('name_en', `CACHE_BUST_${timestamp}`);
   }
 
   const { data, error } = await query.order('created_at', { ascending: true });
