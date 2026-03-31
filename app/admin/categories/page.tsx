@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
-import { Trash2, ChevronDown, ChevronUp } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import {
   addCategory,
   deleteCategory,
@@ -20,10 +21,10 @@ export default function CategoriesPage() {
   const [newCategoryName, setNewCategoryName] = useState("")
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [dishes, setDishes] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const router = useRouter()
 
   const loadData = async () => {
     setIsLoading(true)
@@ -78,12 +79,12 @@ export default function CategoriesPage() {
     }
   }
 
-  const toggleExpand = (categoryId: string) => {
-    setExpandedId(expandedId === categoryId ? null : categoryId)
-  }
-
   const getDishesInCategory = (categoryName: string) => {
     return dishes.filter((item) => item.category === categoryName)
+  }
+
+  const openCategoryMenu = (categoryName: string) => {
+    router.push(`/admin/menu?category=${encodeURIComponent(categoryName)}`)
   }
 
   return (
@@ -102,27 +103,20 @@ export default function CategoriesPage() {
           <ul className="space-y-1">
             {categories.map((category) => {
               const dishes = getDishesInCategory(category.name)
-              const isExpanded = expandedId === category.id
 
               return (
                 <li key={category.id}>
                   <div
-                    className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
-                      isExpanded ? "bg-white/[0.02]" : "hover:bg-white/[0.03]"
-                    }`}
+                    className="flex items-center justify-between p-3 rounded-lg transition-colors hover:bg-white/[0.03]"
                   >
                     {/* Category Name */}
                     <div
                       className="flex-1 cursor-pointer"
-                      onClick={() => toggleExpand(category.id)}
+                      onClick={() => openCategoryMenu(category.name)}
                     >
                       <div className="flex items-center gap-2">
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4 text-[#8a6a52]" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-[#8a6a52]" />
-                        )}
                         <span className="text-white">{category.name}</span>
+                        <span className="text-[#8a6a52] text-xs">Open dishes</span>
                       </div>
                     </div>
 
@@ -142,20 +136,6 @@ export default function CategoriesPage() {
                       </button>
                     </div>
                   </div>
-
-                  {/* Expanded Dishes List */}
-                  {isExpanded && dishes.length > 0 && (
-                    <div className="ml-8 mt-1 mb-2 space-y-1.5 overflow-hidden transition-all duration-200">
-                      {dishes.map((dish) => (
-                        <div key={dish.id} className="flex items-center gap-2 py-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#8E7F71]" />
-                          <span className="text-[#8E7F71] text-sm">
-                            {dish?.name?.en ?? dish?.name ?? ""}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </li>
               )
             })}

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Heart, NotebookPen } from "lucide-react";
-import { getDishById } from "@/lib/database";
+import { ArrowLeft, Heart, NotebookPen, Sparkles } from "lucide-react";
+import { getDishById, getDishRecommendations, getMoreLikeThisDishes } from "@/lib/database";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import {
@@ -21,6 +21,8 @@ export default function DishDetailPage() {
   const { language: lang, t } = useLanguage();
 
   const [dish, setDish] = useState<any>(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [moreLikeThisDishes, setMoreLikeThisDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
 
@@ -77,6 +79,28 @@ export default function DishDetailPage() {
         };
 
         setDish(mappedDish);
+
+        const dishRecommendations = await getDishRecommendations(
+          rawDish.id,
+          rawDish.category || "",
+          4,
+          10
+        );
+
+        const sameCategoryDishes = await getMoreLikeThisDishes(
+          rawDish.id,
+          rawDish.category || "",
+          10
+        );
+
+        if (mounted) {
+          setRecommendations(
+            (dishRecommendations || [])
+              .filter((recommendedDish: any) => recommendedDish.id !== rawDish.id)
+              .slice(0, 10)
+          );
+          setMoreLikeThisDishes((sameCategoryDishes || []).slice(0, 10));
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -123,6 +147,14 @@ export default function DishDetailPage() {
     setShowAddedToast(true);
     setTimeout(() => setShowAddedToast(false), 2000);
   };
+
+  const getRecommendationName = (recommendedDish: any) =>
+    recommendedDish?.[`name_${lang}`] || recommendedDish?.name_en || "";
+
+  const getRecommendationImage = (recommendedDish: any) =>
+    recommendedDish?.image ||
+    recommendedDish?.image_url ||
+    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
 
 
 
@@ -257,6 +289,94 @@ export default function DishDetailPage() {
           </h3>
           <p className="text-[#E28B4B] text-sm leading-6 font-medium">{dish.ingredients.join(", ")}</p>
         </div>
+
+        {recommendations.length > 0 && (
+          <section className="mb-8 rounded-2xl border border-[#E28B4B]/30 bg-[linear-gradient(135deg,rgba(226,139,75,0.14)_0%,rgba(21,17,15,0.95)_45%,rgba(13,11,10,0.96)_100%)] p-4 shadow-[0_0_0_1px_rgba(226,139,75,0.08),0_14px_30px_rgba(0,0,0,0.35)]">
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.24em] text-[#C18F58] mb-1">Curated Picks</p>
+                <h3 className="text-[#F5DFC0] font-extrabold text-lg leading-tight flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#E28B4B]" />
+                  {t('Recommended')}
+                </h3>
+              </div>
+              <span className="text-[11px] px-2.5 py-1 rounded-full border border-[#E28B4B]/40 text-[#E7CFA8] bg-[#0D0B0A]/60">
+                {recommendations.length} picks
+              </span>
+            </div>
+
+            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+              {recommendations.map((recommendedDish, index) => (
+                <button
+                  key={recommendedDish.id}
+                  onClick={() => router.push(`/dish/${recommendedDish.id}`)}
+                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#E28B4B]/25 bg-[#120F0D] hover:border-[#E28B4B] hover:-translate-y-0.5 transition-all text-left"
+                >
+                  <div className="relative">
+                    {(String(getRecommendationImage(recommendedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(recommendedDish)).includes('/video/upload/')) ? (
+                      <video src={String(getRecommendationImage(recommendedDish))} muted loop autoPlay className="w-full h-28 object-cover" />
+                    ) : (
+                      <img
+                        src={String(getRecommendationImage(recommendedDish))}
+                        alt={getRecommendationName(recommendedDish)}
+                        className="w-full h-28 object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+                        }}
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0" />
+                    <span className="absolute top-2 left-2 text-[11px] font-bold rounded-md px-2 py-1 bg-[#0D0B0A]/80 text-[#E7CFA8] border border-white/10">
+                      #{index + 1}
+                    </span>
+                  </div>
+
+                  <div className="p-3">
+                    <p className="text-[#F5DFC0] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
+                      {getRecommendationName(recommendedDish)}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-[#E28B4B] font-extrabold text-base">₹{recommendedDish.price}</p>
+                      <span className="text-[10px] uppercase tracking-wider text-[#8E7F71]">View</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {moreLikeThisDishes.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-[#E7CFA8] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
+            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+              {moreLikeThisDishes.map((relatedDish) => (
+                <button
+                  key={relatedDish.id}
+                  onClick={() => router.push(`/dish/${relatedDish.id}`)}
+                  className="w-36 flex-shrink-0 bg-[#15110F] rounded-xl overflow-hidden border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors text-left"
+                >
+                  {(String(getRecommendationImage(relatedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(relatedDish)).includes('/video/upload/')) ? (
+                    <video src={String(getRecommendationImage(relatedDish))} muted loop autoPlay className="w-full h-24 object-cover" />
+                  ) : (
+                    <img
+                      src={String(getRecommendationImage(relatedDish))}
+                      alt={getRecommendationName(relatedDish)}
+                      className="w-full h-24 object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+                      }}
+                    />
+                  )}
+                  <div className="p-2.5">
+                    <p className="text-[#E7CFA8] text-xs font-semibold truncate">{getRecommendationName(relatedDish)}</p>
+                    <p className="text-[#E28B4B] font-bold text-sm mt-1">₹{relatedDish.price}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
 
 

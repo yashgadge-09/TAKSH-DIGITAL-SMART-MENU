@@ -16,12 +16,13 @@ import { useLanguage } from "@/context/LanguageContext";
 
 export default function MenuPage() {
   const router = useRouter();
-  const { totalItems, addItem } = useCart();
+  const { totalItems, addItem, items } = useCart();
   const [activeCategory, setActiveCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
+  const [lastAddedCategory, setLastAddedCategory] = useState<string | null>(null);
   const categoriesRef = useRef<HTMLDivElement>(null);
 
   const [dishes, setDishes] = useState<any[]>([]);
@@ -123,6 +124,46 @@ export default function MenuPage() {
     description: d.descriptionRaw[lang],
     ingredients: d.ingredientsRaw[lang]
   }));
+
+  const normalizeCategory = (category: string | null | undefined) =>
+    (category || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  const handleAddDishToCart = (dish: {
+    id: string;
+    name: string;
+    price: number;
+    image: string;
+    category: string;
+  }) => {
+    addItem(dish);
+    setLastAddedCategory(dish.category);
+  };
+
+  const cartIds = new Set(items.map((item) => item.id));
+  const recommendationCategory = normalizeCategory(
+    lastAddedCategory || items[items.length - 1]?.category
+  );
+
+  const sameCategoryRecommendations = recommendationCategory
+    ? dishes
+      .filter((dish) => normalizeCategory(dish.category) === recommendationCategory)
+      .filter((dish) => !cartIds.has(dish.id))
+      .sort((a, b) => {
+        const score = (d: any) =>
+          (d.isGuestFavorite ? 3 : 0) +
+          (d.isChefSpecial ? 2 : 0) +
+          (d.isTrending ? 1 : 0);
+        return score(b) - score(a);
+      })
+      .slice(0, 4)
+      .map((dish) => ({
+        id: dish.id,
+        name: dish.nameRaw?.[lang] || dish.name || "",
+        price: dish.price,
+        image: dish.image,
+        category: dish.category,
+      }))
+    : [];
 
   // Group by category for display
   const groupedDishes: Record<string, any[]> = {};
@@ -294,7 +335,7 @@ export default function MenuPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                addItem({
+                                handleAddDishToCart({
                                   id: dish.id,
                                   name: dish.name,
                                   price: dish.price,
@@ -349,7 +390,7 @@ export default function MenuPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                addItem({
+                                handleAddDishToCart({
                                   id: dish.id,
                                   name: dish.name,
                                   price: dish.price,
@@ -404,7 +445,7 @@ export default function MenuPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                addItem({
+                                handleAddDishToCart({
                                   id: dish.id,
                                   name: dish.name,
                                   price: dish.price,
@@ -471,7 +512,7 @@ export default function MenuPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              addItem({
+                              handleAddDishToCart({
                                 id: dish.id,
                                 name: dish.name,
                                 price: dish.price,
@@ -518,7 +559,12 @@ export default function MenuPage() {
       )}
 
       {/* Cart Drawer */}
-      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      <CartDrawer
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        recommendations={sameCategoryRecommendations}
+        onAddRecommendation={(dish) => handleAddDishToCart(dish)}
+      />
 
       {/* Review Modal */}
       <ReviewModal
