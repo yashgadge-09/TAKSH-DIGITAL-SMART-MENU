@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
-import { Plus, X } from "lucide-react"
+import { Plus, X, Search } from "lucide-react"
 import Image from "next/image"
 import {
   addDish,
@@ -25,6 +25,7 @@ export default function MenuPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const selectedCategory = searchParams.get("category")?.trim() || ""
+  const editDishId = searchParams.get("edit")?.trim() || ""
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
@@ -34,6 +35,7 @@ export default function MenuPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [categoriesList, setCategoriesList] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
 
   const [formData, setFormData] = useState({
     // English fields
@@ -169,9 +171,26 @@ export default function MenuPage() {
     setErrors({})
   }
 
-  const filteredMenuItems = selectedCategory
-    ? menuItems.filter((item) => item.category === selectedCategory)
-    : menuItems
+  const filteredMenuItems = menuItems.filter((item) => {
+    const matchesCategory = selectedCategory
+      ? item.category === selectedCategory
+      : true
+
+    if (!matchesCategory) return false
+
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return true
+
+    const nameEn = item.name?.en?.toLowerCase() || ""
+    const nameHi = item.name?.hi?.toLowerCase() || ""
+    const nameMr = item.name?.mr?.toLowerCase() || ""
+
+    return (
+      nameEn.includes(query) ||
+      nameHi.includes(query) ||
+      nameMr.includes(query)
+    )
+  })
 
   const validateForm = () => {
     const newErrors: Record<string, boolean> = {}
@@ -362,6 +381,20 @@ export default function MenuPage() {
     setErrors({})
   }
 
+  useEffect(() => {
+    if (!editDishId || menuItems.length === 0) return
+
+    const itemToEdit = menuItems.find((item) => String(item.id) === editDishId)
+    if (!itemToEdit) return
+
+    handleEdit(itemToEdit)
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("edit")
+    const next = params.toString()
+    router.replace(next ? `/admin/menu?${next}` : "/admin/menu")
+  }, [editDishId, menuItems, searchParams, router])
+
   const handleDelete = async (id: string) => {
     setIsSaving(true)
     try {
@@ -433,9 +466,34 @@ export default function MenuPage() {
       {/* Menu Items Table */}
       <div className="bg-[#151210] rounded-xl overflow-hidden">
         <div className="p-6 border-b border-white/[0.05]">
-          <h2 className="text-white font-bold text-lg">
-            {selectedCategory ? `${selectedCategory} Items` : "Menu Items"}
-          </h2>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="text-white font-bold text-lg">
+              {selectedCategory ? `${selectedCategory} Items` : "Menu Items"}
+            </h2>
+            <span className="text-[#8a6a52] text-sm">
+              {filteredMenuItems.length} {filteredMenuItems.length === 1 ? "item" : "items"}
+              {searchQuery && ` (filtered from ${selectedCategory ? menuItems.filter((item) => item.category === selectedCategory).length : menuItems.length})`}
+            </span>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a6a52]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search dishes by name..."
+              className="w-full h-11 pl-11 pr-10 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a6a52] hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -529,7 +587,9 @@ export default function MenuPage() {
               {filteredMenuItems.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-[#8a6a52]">
-                    No dishes found for this category.
+                    {searchQuery
+                      ? "No dishes found for this search in the current category."
+                      : "No dishes found for this category."}
                   </td>
                 </tr>
               )}
