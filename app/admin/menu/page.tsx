@@ -36,6 +36,7 @@ export default function MenuPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [categoriesList, setCategoriesList] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     // English fields
@@ -417,6 +418,10 @@ export default function MenuPage() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const isVideoMedia = (url: string) => {
+    return url.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || url.includes('/video/upload/')
   }
 
   if (isLoading) {
@@ -925,7 +930,7 @@ export default function MenuPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-start">
                     {formData.images.map((img, idx) => (
                       <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-white/10 relative group">
-                        {(img.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || img.includes('/video/upload/')) ? (
+                        {isVideoMedia(img) ? (
                           <video src={img} muted loop autoPlay className="w-full h-full object-cover" />
                         ) : (
                           <Image
@@ -937,14 +942,24 @@ export default function MenuPage() {
                         )}
                         <button
                           type="button"
+                          onClick={() => setPreviewMediaUrl(img)}
+                          className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        >
+                          <span className="text-xs font-medium text-white border border-white/30 bg-black/30 px-3 py-1.5 rounded-md">
+                            Preview
+                          </span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
                             const newImages = [...formData.images]
                             newImages.splice(idx, 1)
                             setFormData({ ...formData, images: newImages })
                           }}
-                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-white flex items-center justify-center transition-colors"
+                          title="Remove image"
                         >
-                          <X className="w-5 h-5" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ))}
@@ -1132,6 +1147,36 @@ export default function MenuPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {previewMediaUrl && (
+        <div className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4">
+          <button
+            type="button"
+            onClick={() => setPreviewMediaUrl(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center"
+            aria-label="Close preview"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <div className="relative w-full max-w-3xl max-h-[88vh]">
+            {isVideoMedia(previewMediaUrl) ? (
+              <video
+                src={previewMediaUrl}
+                controls
+                autoPlay
+                className="w-full max-h-[88vh] rounded-xl"
+              />
+            ) : (
+              <img
+                src={previewMediaUrl}
+                alt="Uploaded preview"
+                className="w-full max-h-[88vh] object-contain rounded-xl"
+              />
+            )}
           </div>
         </div>
       )}
