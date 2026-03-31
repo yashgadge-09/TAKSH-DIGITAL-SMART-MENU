@@ -58,6 +58,11 @@ export default function MenuPage() {
           hi: dish.description_hi || (dish.description?.hi ?? dish.description_en ?? ""),
           mr: dish.description_mr || (dish.description?.mr ?? dish.description_en ?? "")
         },
+        tasteRaw: {
+          en: dish.taste_en || dish.taste_description_en || dish.tasteDescription_en || (dish.tasteDescription?.en ?? ""),
+          hi: dish.taste_hi || dish.taste_description_hi || dish.tasteDescription_hi || (dish.tasteDescription?.hi ?? dish.taste_en ?? ""),
+          mr: dish.taste_mr || dish.taste_description_mr || dish.tasteDescription_mr || (dish.tasteDescription?.mr ?? dish.taste_en ?? "")
+        },
         ingredientsRaw: {
           en: Array.isArray(dish.ingredients_en) ? dish.ingredients_en : (dish.ingredients?.en ?? []),
           hi: Array.isArray(dish.ingredients_hi) ? dish.ingredients_hi : (dish.ingredients?.hi ?? dish.ingredients_en ?? []),
@@ -137,6 +142,7 @@ export default function MenuPage() {
     ...d,
     name: d.nameRaw[lang],
     description: d.descriptionRaw[lang],
+    tasteDescription: d.tasteRaw[lang],
     ingredients: d.ingredientsRaw[lang]
   }));
 
@@ -144,18 +150,21 @@ export default function MenuPage() {
     ...d,
     name: d.nameRaw[lang],
     description: d.descriptionRaw[lang],
+    tasteDescription: d.tasteRaw[lang],
     ingredients: d.ingredientsRaw[lang]
   }));
   const getChefSpecials = () => dishes.filter(d => d.isChefSpecial).map(d => ({
     ...d,
     name: d.nameRaw[lang],
     description: d.descriptionRaw[lang],
+    tasteDescription: d.tasteRaw[lang],
     ingredients: d.ingredientsRaw[lang]
   }));
   const getTrendingDishes = () => dishes.filter(d => d.isTrending).map(d => ({
     ...d,
     name: d.nameRaw[lang],
     description: d.descriptionRaw[lang],
+    tasteDescription: d.tasteRaw[lang],
     ingredients: d.ingredientsRaw[lang]
   }));
 
@@ -521,9 +530,9 @@ export default function MenuPage() {
                       onClick={() => router.push(`/dish/${dish.id}`)}
                       className="w-full text-left cursor-pointer"
                     >
-                      <div className="bg-[#15110F] rounded-xl p-4 border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors flex gap-4 relative">
+                      <div className="bg-gradient-to-br from-[#1A140F] to-[#120E0B] rounded-2xl p-4 border border-[rgba(255,255,255,0.08)] hover:border-[#E28B4B]/70 transition-all duration-200 flex items-stretch gap-4 relative shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
                         {/* Image */}
-                        <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden">
+                        <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden ring-1 ring-white/10">
                             {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
                               <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
                             ) : (
@@ -539,11 +548,11 @@ export default function MenuPage() {
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between mb-1">
+                        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                          <div className="flex items-start justify-between">
                             <h3 className="text-[#E7CFA8] font-bold truncate pr-2">{dish.name}</h3>
                             <div className="flex flex-col items-end gap-2">
-                              <span className="text-[#E28B4B] font-bold flex-shrink-0">
+                              <span className="text-[#E28B4B] font-bold flex-shrink-0 text-xl leading-none">
                                 ₹{dish.price}
                               </span>
                               <button
@@ -565,20 +574,26 @@ export default function MenuPage() {
                             </div>
                           </div>
 
-                          {/* Spice Indicator */}
-                          {dish.hasSpiceIndicator && (
-                            <div className="flex items-center gap-1 mb-1">
-                              <span className="text-[#C18F58]">🌶️</span>
-                              <span className="text-[#E28B4B] font-medium text-[10px] uppercase tracking-wider">
-                                Spicy
-                              </span>
-                            </div>
-                          )}
+                          <div className="space-y-1">
+                            {dish.hasSpiceIndicator && (
+                              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#2A1A14] border border-[#E8650A]/30">
+                                <span className="text-[#FF8A3D]">🔥</span>
+                                <span className="text-[#FF9B54] font-semibold text-[10px] uppercase tracking-wider">
+                                  Spicy
+                                </span>
+                              </div>
+                            )}
 
-                          {/* Ingredients */}
-                          <p className="text-[#8E7F71] text-xs truncate max-w-[150px]">
-                            Ingredients: {dish.ingredients.join(", ")}
-                          </p>
+                            {dish.tasteDescription && (
+                              <p className="text-[#D6A77A] text-xs line-clamp-1">
+                                How does it taste: {dish.tasteDescription}
+                              </p>
+                            )}
+
+                            <p className="text-[#9A8A7B] text-xs line-clamp-1 max-w-[190px]">
+                              Ingredients: {dish.ingredients.join(", ")}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -606,9 +621,9 @@ export default function MenuPage() {
                   onClick={() => router.push(`/dish/${dish.id}`)}
                   className="w-full text-left cursor-pointer"
                 >
-                  <div className="bg-[#15110F] rounded-xl p-4 border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors flex gap-4 relative">
+                  <div className="bg-gradient-to-br from-[#1A140F] to-[#120E0B] rounded-2xl p-4 border border-[rgba(255,255,255,0.08)] hover:border-[#E28B4B]/70 transition-all duration-200 flex items-stretch gap-4 relative shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
                     {/* Image */}
-                    <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden">
+                    <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden ring-1 ring-white/10">
                         {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
                           <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
                         ) : (
@@ -624,11 +639,11 @@ export default function MenuPage() {
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between mb-1">
+                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                      <div className="flex items-start justify-between">
                         <h3 className="text-[#E7CFA8] font-bold truncate pr-2">{dish.name}</h3>
                         <div className="flex flex-col items-end gap-2">
-                          <span className="text-[#E28B4B] font-bold flex-shrink-0">
+                          <span className="text-[#E28B4B] font-bold flex-shrink-0 text-xl leading-none">
                             ₹{dish.price}
                           </span>
                           <button
@@ -650,20 +665,26 @@ export default function MenuPage() {
                         </div>
                       </div>
 
-                      {/* Spice Indicator */}
-                      {dish.hasSpiceIndicator && (
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-[#C18F58]">🌶️</span>
-                          <span className="text-[#E28B4B] font-medium text-[10px] uppercase tracking-wider">
-                            Spicy
-                          </span>
-                        </div>
-                      )}
+                      <div className="space-y-1">
+                        {dish.hasSpiceIndicator && (
+                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#2A1A14] border border-[#E8650A]/30">
+                            <span className="text-[#FF8A3D]">🔥</span>
+                            <span className="text-[#FF9B54] font-semibold text-[10px] uppercase tracking-wider">
+                              Spicy
+                            </span>
+                          </div>
+                        )}
 
-                      {/* Ingredients */}
-                      <p className="text-[#8E7F71] text-xs truncate max-w-[150px]">
-                        Ingredients: {dish.ingredients.join(", ")}
-                      </p>
+                        {dish.tasteDescription && (
+                          <p className="text-[#D6A77A] text-xs line-clamp-1">
+                            How does it taste: {dish.tasteDescription}
+                          </p>
+                        )}
+
+                        <p className="text-[#9A8A7B] text-xs line-clamp-1 max-w-[190px]">
+                          Ingredients: {dish.ingredients.join(", ")}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
