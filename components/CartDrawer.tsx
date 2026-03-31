@@ -4,12 +4,27 @@ import { useCart } from "@/context/CartContext";
 import { X, Plus, Minus, Trash2 } from "lucide-react";
 import Image from "next/image";
 
+interface RecommendedDish {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  category: string;
+}
+
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  recommendations?: RecommendedDish[];
+  onAddRecommendation?: (dish: RecommendedDish) => void;
 }
 
-export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
+export function CartDrawer({
+  isOpen,
+  onClose,
+  recommendations = [],
+  onAddRecommendation,
+}: CartDrawerProps) {
   const { items, removeItem, updateQuantity, clearCart, totalPrice } = useCart();
 
   if (!isOpen) return null;
@@ -40,62 +55,89 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
           {items.length === 0 ? (
             <p className="text-[#8E7F71] text-center py-8">Your cart is empty</p>
           ) : (
-            <div className="space-y-4">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex gap-4 pb-4 border-b border-[rgba(255,255,255,0.06)]"
-                >
-                  {/* Image */}
-                  <div className="flex-shrink-0 relative w-16 h-16 rounded-lg overflow-hidden">
-                    {(item.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || item.image?.includes('/video/upload/')) ? (
-                      <video src={item.image} muted loop autoPlay className="w-full h-full object-cover" />
-                    ) : (
-                      <Image
-                        src={item.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"}
-                        alt={item.name}
-                        fill
-                        className="object-cover"
-                      />
-                    )}
-                  </div>
-
-                  {/* Details */}
-                  <div className="flex-1">
-                    <h3 className="text-[#E7CFA8] font-bold text-sm">{item.name}</h3>
-                    <p className="text-[#E28B4B] font-bold mt-1">₹{item.price}</p>
-
-                    {/* Quantity Controls */}
-                    <div className="flex items-center gap-2 mt-2 bg-[#15110F] rounded-lg w-fit px-2 py-1">
-                      <button
-                        onClick={() =>
-                          updateQuantity(item.id, Math.max(1, item.quantity - 1))
-                        }
-                        className="text-[#8E7F71] hover:text-[#E7CFA8]"
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <span className="text-[#E7CFA8] w-6 text-center text-sm">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className="text-[#8E7F71] hover:text-[#E7CFA8]"
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Delete */}
-                  <button
-                    onClick={() => removeItem(item.id)}
-                    className="text-[#8E7F71] hover:text-[#E28B4B]"
+            <div>
+              <div className="space-y-4">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex gap-4 pb-4 border-b border-[rgba(255,255,255,0.06)]"
                   >
-                    <Trash2 size={20} />
-                  </button>
+                    {/* Image */}
+                    <div className="flex-shrink-0 relative w-16 h-16 rounded-lg overflow-hidden">
+                      {(item.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || item.image?.includes('/video/upload/')) ? (
+                        <video src={item.image} muted loop autoPlay className="w-full h-full object-cover" />
+                      ) : (
+                        <Image
+                          src={item.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"}
+                          alt={item.name}
+                          fill
+                          className="object-cover"
+                        />
+                      )}
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-1">
+                      <h3 className="text-[#E7CFA8] font-bold text-sm">{item.name}</h3>
+                      <p className="text-[#E28B4B] font-bold mt-1">₹{item.price}</p>
+
+                      {/* Quantity Controls */}
+                      <div className="flex items-center gap-2 mt-2 bg-[#15110F] rounded-lg w-fit px-2 py-1">
+                        <button
+                          onClick={() =>
+                            updateQuantity(item.id, Math.max(1, item.quantity - 1))
+                          }
+                          className="text-[#8E7F71] hover:text-[#E7CFA8]"
+                        >
+                          <Minus size={16} />
+                        </button>
+                        <span className="text-[#E7CFA8] w-6 text-center text-sm">
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          className="text-[#8E7F71] hover:text-[#E7CFA8]"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Delete */}
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="text-[#8E7F71] hover:text-[#E28B4B]"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {recommendations.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-[rgba(255,255,255,0.06)]">
+                  <h3 className="text-[#E7CFA8] font-bold text-sm mb-3">You may also like</h3>
+                  <div className="space-y-2">
+                    {recommendations.map((dish) => (
+                      <div
+                        key={dish.id}
+                        className="bg-[#15110F] rounded-lg border border-[rgba(255,255,255,0.06)] p-3 flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-[#E7CFA8] text-sm font-medium truncate">{dish.name}</p>
+                          <p className="text-[#E28B4B] text-sm font-bold">₹{dish.price}</p>
+                        </div>
+                        <button
+                          onClick={() => onAddRecommendation?.(dish)}
+                          className="px-3 py-1.5 rounded-md bg-[#E28B4B] text-[#0D0B0A] text-xs font-bold hover:opacity-90 transition-opacity"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

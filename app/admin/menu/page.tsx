@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
 import { Plus, X } from "lucide-react"
 import Image from "next/image"
@@ -21,6 +22,9 @@ type LanguageTab = "en" | "hi" | "mr"
 type MenuItem = any
 
 export default function MenuPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const selectedCategory = searchParams.get("category")?.trim() || ""
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
@@ -145,7 +149,7 @@ export default function MenuPage() {
       ingredients_mr: "",
       tasteDescription_mr: "",
       price: "",
-      category: "Starter",
+      category: selectedCategory || "Starter",
       images: [],
       spiceIndicator: false,
 
@@ -164,6 +168,10 @@ export default function MenuPage() {
     setActiveTab("en")
     setErrors({})
   }
+
+  const filteredMenuItems = selectedCategory
+    ? menuItems.filter((item) => item.category === selectedCategory)
+    : menuItems
 
   const validateForm = () => {
     const newErrors: Record<string, boolean> = {}
@@ -394,24 +402,40 @@ export default function MenuPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-white font-bold text-3xl mb-2">Menu</h1>
-          <p className="text-[#8a6a52]">View and manage dishes.</p>
+          <p className="text-[#8a6a52]">
+            {selectedCategory
+              ? `Viewing ${selectedCategory} dishes.`
+              : "View and manage dishes."}
+          </p>
         </div>
-        <button
-          onClick={() => {
-            resetForm()
-            setShowAddForm(true)
-          }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#E8650A] text-white font-medium rounded-lg hover:bg-[#E8650A]/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Dish
-        </button>
+        <div className="flex items-center gap-3">
+          {selectedCategory && (
+            <button
+              onClick={() => router.push('/admin/menu')}
+              className="px-4 py-2.5 border border-white/20 text-white font-medium rounded-lg hover:bg-white/5 transition-colors"
+            >
+              Clear Filter
+            </button>
+          )}
+          <button
+            onClick={() => {
+              resetForm()
+              setShowAddForm(true)
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#E8650A] text-white font-medium rounded-lg hover:bg-[#E8650A]/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Dish
+          </button>
+        </div>
       </div>
 
       {/* Menu Items Table */}
       <div className="bg-[#151210] rounded-xl overflow-hidden">
         <div className="p-6 border-b border-white/[0.05]">
-          <h2 className="text-white font-bold text-lg">Menu Items</h2>
+          <h2 className="text-white font-bold text-lg">
+            {selectedCategory ? `${selectedCategory} Items` : "Menu Items"}
+          </h2>
         </div>
 
         <div className="overflow-x-auto">
@@ -429,7 +453,7 @@ export default function MenuPage() {
               </tr>
             </thead>
             <tbody>
-              {menuItems.map((item) => (
+              {filteredMenuItems.map((item) => (
                 <tr
                   key={item.id}
                   className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
@@ -502,6 +526,13 @@ export default function MenuPage() {
                   </td>
                 </tr>
               ))}
+              {filteredMenuItems.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-[#8a6a52]">
+                    No dishes found for this category.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
