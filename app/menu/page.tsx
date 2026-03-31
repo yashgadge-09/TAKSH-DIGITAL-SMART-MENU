@@ -14,6 +14,16 @@ import { RateUsCard } from "@/components/RateUsCard";
 import { getAllDishes } from "@/lib/database";
 import { useLanguage } from "@/context/LanguageContext";
 
+const PREVIEW_LIMIT = 6;
+
+const MAIN_PREVIEW_CATEGORIES = [
+  { label: "Breakfast", aliases: ["breakfast"] },
+  { label: "Tandoor Starters", aliases: ["tandoor starters", "tandoori starters", "tandoor starter", "tandoori starter"] },
+  { label: "Main Course", aliases: ["main course", "maincourse"] },
+  { label: "South Indian", aliases: ["south indian", "southindian"] },
+  { label: "Chinese", aliases: ["chinese"] },
+];
+
 export default function MenuPage() {
   const router = useRouter();
   const { totalItems, addItem, items } = useCart();
@@ -92,6 +102,30 @@ export default function MenuPage() {
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
+  const normalizeCategory = (category: string | null | undefined) =>
+    (category || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  const menuTabs = [...categories].sort((a, b) => a.localeCompare(b));
+
+  const resolveCategoryFromAliases = (aliases: string[]) => {
+    return categories.find((category) => {
+      const normalizedCategory = normalizeCategory(category);
+      return aliases.some((alias) => {
+        const normalizedAlias = normalizeCategory(alias);
+        return (
+          normalizedCategory === normalizedAlias ||
+          normalizedCategory.includes(normalizedAlias) ||
+          normalizedAlias.includes(normalizedCategory)
+        );
+      });
+    }) || null;
+  };
+
+  const previewCategories = MAIN_PREVIEW_CATEGORIES.map((item) => ({
+    label: item.label,
+    categoryValue: resolveCategoryFromAliases(item.aliases),
+  })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
+
   // Filter dishes
   const filteredDishes = dishes.filter((d) => {
     const name = (d.nameRaw[lang] || "").toLowerCase();
@@ -124,9 +158,6 @@ export default function MenuPage() {
     description: d.descriptionRaw[lang],
     ingredients: d.ingredientsRaw[lang]
   }));
-
-  const normalizeCategory = (category: string | null | undefined) =>
-    (category || "").toLowerCase().replace(/\s+/g, " ").trim();
 
   const handleAddDishToCart = (dish: {
     id: string;
@@ -164,6 +195,12 @@ export default function MenuPage() {
         category: dish.category,
       }))
     : [];
+
+  const handleCategoryChange = (category: string) => {
+    setActiveCategory(category);
+    setSearchQuery("");
+    window.scrollTo({ top: 0, behavior: "auto" });
+  };
 
   // Group by category for display
   const groupedDishes: Record<string, any[]> = {};
@@ -266,8 +303,7 @@ export default function MenuPage() {
           >
             <button
               onClick={() => {
-                setActiveCategory("All");
-                setSearchQuery("");
+                handleCategoryChange("All");
               }}
               className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-colors ${activeCategory === "All"
                 ? "bg-[#E28B4B] text-[#0D0B0A]"
@@ -276,19 +312,18 @@ export default function MenuPage() {
             >
               {t('all')}
             </button>
-            {categories.map((tab) => (
+            {menuTabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => {
-                  setActiveCategory(tab);
-                  setSearchQuery("");
+                  handleCategoryChange(tab);
                 }}
                 className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-colors ${activeCategory === tab
                   ? "bg-[#E28B4B] text-[#0D0B0A]"
                   : "bg-[#15110F] text-[#8E7F71] hover:text-[#E7CFA8]"
                   }`}
               >
-                {t(tab)}
+                {tab}
               </button>
             ))}
           </div>
@@ -469,16 +504,103 @@ export default function MenuPage() {
         )}
 
         {/* Main Dish List - Grouped by Category */}
-        {Object.entries(groupedDishes).map(([category, dishes]) => (
-          <div key={category} className="mb-8">
-            {activeCategory !== "All" && (
-              <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{t(category)}</h2>
-            )}
-            {activeCategory === "All" && (
-              <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{t(category)}</h2>
-            )}
-            <div className="space-y-4">
-              {dishes.map((dish) => (
+        {activeCategory === "All" && !searchQuery ? (
+          previewCategories.map((tab) => {
+            const categoryDishes = groupedDishes[tab.categoryValue] || [];
+            if (categoryDishes.length === 0) return null;
+
+            const previewDishes = categoryDishes.slice(0, PREVIEW_LIMIT);
+
+            return (
+              <div key={tab.label} className="mb-8">
+                <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{tab.label}</h2>
+                <div className="space-y-4">
+                  {previewDishes.map((dish) => (
+                    <div
+                      key={dish.id}
+                      onClick={() => router.push(`/dish/${dish.id}`)}
+                      className="w-full text-left cursor-pointer"
+                    >
+                      <div className="bg-[#15110F] rounded-xl p-4 border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors flex gap-4 relative">
+                        {/* Image */}
+                        <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden">
+                            {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
+                              <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
+                            ) : (
+                              <img
+                                src={dish.image}
+                                alt={dish.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+                                }}
+                              />
+                            )}
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-1">
+                            <h3 className="text-[#E7CFA8] font-bold truncate pr-2">{dish.name}</h3>
+                            <div className="flex flex-col items-end gap-2">
+                              <span className="text-[#E28B4B] font-bold flex-shrink-0">
+                                ₹{dish.price}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddDishToCart({
+                                    id: dish.id,
+                                    name: dish.name,
+                                    price: dish.price,
+                                    image: dish.image,
+                                    category: dish.category,
+                                  });
+                                }}
+                                className="bg-[#E28B4B] text-[#0D0B0A] p-2 rounded-lg hover:opacity-90 transition-opacity"
+                                title="Place Order"
+                              >
+                                <NotebookPen size={16} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Spice Indicator */}
+                          {dish.hasSpiceIndicator && (
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-[#C18F58]">🌶️</span>
+                              <span className="text-[#E28B4B] font-medium text-[10px] uppercase tracking-wider">
+                                Spicy
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Ingredients */}
+                          <p className="text-[#8E7F71] text-xs truncate max-w-[150px]">
+                            Ingredients: {dish.ingredients.join(", ")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {categoryDishes.length > PREVIEW_LIMIT && (
+                  <button
+                    onClick={() => handleCategoryChange(tab.categoryValue)}
+                    className="mt-4 text-[#E28B4B] text-sm font-medium hover:underline"
+                  >
+                    Show More →
+                  </button>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          Object.entries(groupedDishes).map(([category, dishes]) => (
+            <div key={category} className="mb-8">
+              <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{category}</h2>
+              <div className="space-y-4">
+                {dishes.map((dish) => (
                 <div
                   key={dish.id}
                   onClick={() => router.push(`/dish/${dish.id}`)}
@@ -545,18 +667,17 @@ export default function MenuPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
-      {/* Rate Us Card at Bottom - Only for All category */}
-      {activeCategory === "All" && !searchQuery && (
-        <div className="max-w-[430px] mx-auto px-4 pb-8">
-          <RateUsCard />
-        </div>
-      )}
+      {/* Rate Us Card at Bottom */}
+      <div className="max-w-[430px] mx-auto px-4 pb-8">
+        <RateUsCard />
+      </div>
 
       {/* Cart Drawer */}
       <CartDrawer
