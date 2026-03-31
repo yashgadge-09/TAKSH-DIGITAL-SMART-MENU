@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
-import { Trash2 } from "lucide-react"
+import { Search, Trash2 } from "lucide-react"
 import {
   addCategory,
   deleteCategory,
@@ -24,6 +24,7 @@ export default function CategoriesPage() {
   const [dishes, setDishes] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
 
   const loadData = async () => {
@@ -83,6 +84,14 @@ export default function CategoriesPage() {
     return dishes.filter((item) => item.category === categoryName)
   }
 
+  const filteredCategories = useMemo(
+    () =>
+      categories.filter((cat) =>
+        cat.name.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [categories, searchQuery]
+  )
+
   const openCategoryMenu = (categoryName: string) => {
     router.push(`/admin/menu?category=${encodeURIComponent(categoryName)}`)
   }
@@ -100,8 +109,21 @@ export default function CategoriesPage() {
         {/* Categories List */}
         <div className="bg-[#151210] rounded-xl p-6">
           <h2 className="text-white font-bold text-lg mb-4">Categories</h2>
+
+          {/* Search Bar */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a6a52] pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search categories..."
+              className="w-full h-10 pl-9 pr-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] transition-colors text-sm"
+            />
+          </div>
+
           <ul className="space-y-1">
-            {categories.map((category) => {
+            {filteredCategories.map((category) => {
               const dishes = getDishesInCategory(category.name)
 
               return (
@@ -140,6 +162,11 @@ export default function CategoriesPage() {
               )
             })}
           </ul>
+          {filteredCategories.length === 0 && !isLoading && (
+            <p className="text-[#8a6a52] text-sm text-center py-4">
+              {searchQuery ? "No categories match your search." : "No categories yet."}
+            </p>
+          )}
         </div>
 
         {/* Add Category Form */}
