@@ -519,7 +519,7 @@ export default function MenuPage() {
               {filteredMenuItems.map((item) => (
                 <tr
                   key={item.id}
-                  className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
+                  className={`border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors ${!item.isAvailable ? "opacity-50" : ""}`}
                 >
                   <td className="p-4">
                     <div className="w-11 h-11 rounded-full overflow-hidden">

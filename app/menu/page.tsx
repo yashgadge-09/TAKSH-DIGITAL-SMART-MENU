@@ -9,6 +9,7 @@ import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
 import { getAllDishes } from "@/lib/database";
 import { useLanguage } from "@/context/LanguageContext";
+import { toast } from "sonner";
 
 const PREVIEW_LIMIT = 6;
 
@@ -170,6 +171,7 @@ export default function MenuPage() {
   }) => {
     addItem(dish);
     setLastAddedCategory(dish.category);
+    toast(`${dish.name} added to cart!`, { icon: '🛒' });
   };
 
   const cartIds = new Set(items.map((item) => item.id));

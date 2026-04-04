@@ -3,6 +3,7 @@
 import { useCart } from "@/context/CartContext";
 import { X, Plus, Minus, Trash2 } from "lucide-react";
 import Image from "next/image";
+import { toast } from "sonner";
 
 interface RecommendedDish {
   id: string;
@@ -159,7 +160,11 @@ export function CartDrawer({
               Clear Cart
             </button>
             <button
-              onClick={onClose}
+              onClick={() => {
+                toast("Order in making!", { icon: '👨‍🍳' });
+                clearCart();
+                onClose();
+              }}
               className="w-full bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] font-bold py-3 rounded-lg hover:opacity-90 transition-opacity"
             >
               Proceed to Checkout
