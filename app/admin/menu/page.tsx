@@ -545,7 +545,7 @@ export default function MenuPage() {
                   <td className="p-4 text-sm">
                     {item.spiceLevel > 0 ? (
                       <span className="inline-flex items-center gap-1 text-[#C4956A]">
-                        🌶️ Spicy
+                        🔥 Spicy
                       </span>
                     ) : (
                       <span className="text-[#B89A7D]">None</span>
@@ -904,7 +904,7 @@ export default function MenuPage() {
                         : "bg-white border border-[#EDE4D5] border border-[#EDE4D5] text-[#B89A7D] hover:border-[#EDE4D5]"
                         }`}
                     >
-                      {formData.spiceIndicator ? "🌶️ Spicy Indicator ON" : "No Spice Indicator"}
+                      {formData.spiceIndicator ? "🔥 Spice Indicator ON" : "No Spice Indicator"}
                     </button>
                     <p className="text-[#B89A7D]/60 text-xs">Toggle if this dish should show a spicy indicator/chili icon.</p>
                   </div>
