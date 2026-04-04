@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { CartProvider } from '@/context/CartContext'
 import { LanguageProvider } from '@/context/LanguageContext'
 import { Toaster } from 'sonner'
+import { SplashScreen } from '@/components/SplashScreen'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -40,6 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-sans antialiased bg-[#F8F1E8]" suppressHydrationWarning>
+        <SplashScreen />
         <LanguageProvider>
           <CartProvider>
             {children}
