@@ -14,7 +14,7 @@ function ReviewStars({ rating }: { rating: number }) {
           <Star
             key={i}
             className={`w-3.5 h-3.5 ${
-              i < rating ? "fill-[#E28B4B] text-[#E28B4B]" : "text-[#8E7F71]"
+              i < rating ? "fill-[#E28B4B] text-[#C4956A]" : "text-[#8E7F71]"
             }`}
           />
         ))}
@@ -64,26 +64,26 @@ export default function ReviewsPage() {
   return (
     <AdminLayout>
       <div className="mb-8">
-        <h1 className="text-white font-bold text-3xl mb-2">Reviews</h1>
-        <p className="text-[#8a6a52]">Manage guest feedback and visibility.</p>
+        <h1 className="text-[#2C1810] font-bold text-3xl mb-2">Reviews</h1>
+        <p className="text-[#B89A7D]">Manage guest feedback and visibility.</p>
       </div>
 
       {error ? (
-        <div className="bg-[#151210] rounded-xl p-4 mb-6 text-[#ef4444]">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-4 mb-6 text-[#ef4444]">
           {error}
         </div>
       ) : null}
 
-      <div className="bg-[#151210] rounded-xl overflow-hidden">
+      <div className="bg-white border border-[#EDE4D5] rounded-xl overflow-hidden">
         <div className="p-6 border-b border-white/[0.05]">
-          <h2 className="text-white font-bold text-lg">All reviews</h2>
+          <h2 className="text-[#2C1810] font-bold text-lg">All reviews</h2>
         </div>
 
         <div className="divide-y divide-white/[0.06]">
           {isLoading ? (
-            <div className="p-6 text-[#8a6a52]">Loading...</div>
+            <div className="p-6 text-[#B89A7D]">Loading...</div>
           ) : reviews.length === 0 ? (
-            <div className="p-6 text-[#8a6a52]">No reviews found.</div>
+            <div className="p-6 text-[#B89A7D]">No reviews found.</div>
           ) : (
             reviews.map((review) => {
               const isPublic =
@@ -94,7 +94,7 @@ export default function ReviewsPage() {
                     <ReviewStars rating={review.stars ?? 0} />
                     <button
                       onClick={() => handleToggle(review)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/[0.08] border border-white/15 rounded-lg text-white text-sm"
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/[0.08] border border-white/15 rounded-lg text-[#2C1810] text-sm"
                       type="button"
                     >
                       {isPublic ? (
@@ -111,14 +111,14 @@ export default function ReviewsPage() {
                     </button>
                   </div>
 
-                  <p className="text-[#E7CFA8] text-sm italic line-clamp-3 mb-2">
+                  <p className="text-[#2C1810] text-sm italic line-clamp-3 mb-2">
                     {"\""}
                     {review.text}
                     {"\""}
                   </p>
 
                   <div className="flex items-center justify-between text-[#8E7F71] text-xs">
-                    <span className="text-white font-medium">{review.reviewer}</span>
+                    <span className="text-[#2C1810] font-medium">{review.reviewer}</span>
                     <span>
                       {review.created_at
                         ? new Date(review.created_at).toLocaleDateString()
@@ -127,7 +127,7 @@ export default function ReviewsPage() {
                   </div>
 
                   {Array.isArray(review.dishes) && review.dishes.length ? (
-                    <div className="mt-2 text-[#8a6a52] text-xs">
+                    <div className="mt-2 text-[#B89A7D] text-xs">
                       Dishes: {review.dishes.join(", ")}
                     </div>
                   ) : null}

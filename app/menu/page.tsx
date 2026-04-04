@@ -1,12 +1,8 @@
 "use client";
-// The following route segment configs are crashing in this client component, 
-// so we'll rely on the manual refresh and window focus triggers for fresh data.
-// export const dynamic = 'force-dynamic';
-// export const revalidate = 0;
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ShoppingCart, NotebookPen, RefreshCw } from "lucide-react";
+import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { ReviewModal } from "@/components/ReviewModal";
@@ -43,7 +39,7 @@ export default function MenuPage() {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      const timestamp = new Date().getTime(); // force fresh fetch parameter
+      const timestamp = new Date().getTime();
       const data = await getAllDishes(timestamp);
 
       const mappedDishes = (data || []).map((dish: any) => ({
@@ -71,7 +67,7 @@ export default function MenuPage() {
         image: (() => {
           if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
           if (typeof dish.image_url === 'string' && dish.image_url.startsWith('[')) {
-            try { 
+            try {
               const parsed = JSON.parse(dish.image_url);
               if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
             } catch (e) { return dish.image_url; }
@@ -91,7 +87,6 @@ export default function MenuPage() {
         if (d.category) cats.add(d.category);
       });
       setCategories(Array.from(cats));
-
     } catch (err) {
       console.error("Failed to load dishes", err);
     } finally {
@@ -101,7 +96,6 @@ export default function MenuPage() {
 
   useEffect(() => {
     loadData();
-
     const handleFocus = () => loadData();
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
@@ -131,7 +125,6 @@ export default function MenuPage() {
     categoryValue: resolveCategoryFromAliases(item.aliases),
   })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
 
-  // Filter dishes
   const filteredDishes = dishes.filter((d) => {
     const name = (d.nameRaw[lang] || "").toLowerCase();
     const desc = (d.descriptionRaw[lang] || "").toLowerCase();
@@ -211,7 +204,6 @@ export default function MenuPage() {
     window.scrollTo({ top: 0, behavior: "auto" });
   };
 
-  // Group by category for display
   const groupedDishes: Record<string, any[]> = {};
   filteredDishes.forEach((dish) => {
     if (!groupedDishes[dish.category]) {
@@ -225,176 +217,275 @@ export default function MenuPage() {
     setIsReviewOpen(true);
   };
 
+  /* ─── Dish Card Component ─── */
+  const DishCard = ({ dish, compact = false }: { dish: any; compact?: boolean }) => (
+    <div
+      onClick={() => router.push(`/dish/${dish.id}`)}
+      className="cursor-pointer group"
+    >
+      <div className={`
+        bg-white rounded-2xl border border-[#EDE4D5] 
+        flex items-center gap-4
+        transition-all duration-200
+        hover:border-[#C4956A]/50 hover:shadow-[0_4px_20px_rgba(196,149,106,0.12)]
+        ${compact ? 'p-3' : 'p-4'}
+      `}>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <h3 className={`text-[#2C1810] font-bold truncate ${compact ? 'text-sm' : 'text-base'}`}>
+            {dish.name}
+          </h3>
+
+          {dish.tasteDescription && (
+            <p className="text-[#B89A7D] text-sm italic mt-1 line-clamp-1">
+              {dish.tasteDescription}
+            </p>
+          )}
+
+          {!compact && dish.ingredients && dish.ingredients.length > 0 && (
+            <p className="text-[#C5B5A3] text-xs mt-1 line-clamp-1">
+              {dish.ingredients.slice(0, 3).join(" · ")}
+            </p>
+          )}
+
+          <div className="flex items-center gap-2 mt-2">
+            <span className={`text-[#2C1810] font-bold ${compact ? 'text-sm' : 'text-lg'}`}>
+              ₹{dish.price}
+            </span>
+            {dish.hasSpiceIndicator && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-[#FFF0E5] text-[#E8650A] font-medium">
+                🌶️ Spicy
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Image + Add Button */}
+        <div className="flex flex-col items-center gap-2 flex-shrink-0">
+          <div className={`rounded-2xl overflow-hidden bg-[#1A0D04] ring-1 ring-[#3B2314]/30 shadow-md ${compact ? 'w-14 h-14' : 'w-[72px] h-[72px]'}`}>
+            {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
+              <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
+            ) : (
+              <img
+                src={dish.image}
+                alt={dish.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+                }}
+              />
+            )}
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAddDishToCart({
+                id: dish.id,
+                name: dish.name,
+                price: dish.price,
+                image: dish.image,
+                category: dish.category,
+              });
+            }}
+            className="bg-[#3B2314] text-[#E7CFA8] p-1.5 rounded-lg hover:bg-[#2A1609] transition-colors"
+            title="Add to order"
+          >
+            <NotebookPen size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ─── Horizontal Scroll Card ─── */
+  const ScrollCard = ({ dish }: { dish: any }) => (
+    <div
+      onClick={() => router.push(`/dish/${dish.id}`)}
+      className="flex-shrink-0 w-36 cursor-pointer group"
+    >
+      <div className="bg-white rounded-2xl overflow-hidden border border-[#EDE4D5] hover:border-[#C4956A]/50 transition-all hover:shadow-[0_4px_16px_rgba(196,149,106,0.12)]">
+        <div className="w-full h-28 overflow-hidden bg-[#1A0D04]">
+          {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
+            <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
+          ) : (
+            <img
+              src={dish.image}
+              alt={dish.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={(e) => {
+                e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+              }}
+            />
+          )}
+        </div>
+        <div className="p-3">
+          <p className="text-[#2C1810] font-bold text-sm truncate">{dish.name}</p>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-[#2C1810] font-bold text-sm">₹{dish.price}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddDishToCart({
+                  id: dish.id,
+                  name: dish.name,
+                  price: dish.price,
+                  image: dish.image,
+                  category: dish.category,
+                });
+              }}
+              className="bg-[#3B2314] text-[#E7CFA8] p-1.5 rounded-lg hover:bg-[#2A1609] transition-colors"
+            >
+              <NotebookPen size={12} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-[#0D0B0A]">
-      {/* Sticky Container: Header, Search, Categories */}
-      <div className="sticky top-0 z-50 bg-[#0D0B0A]">
-        {/* Header */}
-        <header className="bg-[#15110F] border-b border-[rgba(255,255,255,0.06)]">
-          <div className="max-w-[430px] mx-auto px-4 py-4 flex items-center justify-between">
-            {/* Logo */}
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-[#E28B4B] rounded-full flex items-center justify-center text-[#0D0B0A] font-bold relative">
-                {isLoading ? (
-                  <RefreshCw className="animate-spin w-5 h-5" />
-                ) : (
-                  "T"
-                )}
+    <div className="min-h-screen bg-[#F8F1E8]">
+      {/* ─── Sticky Header ─── */}
+      <div className="sticky top-0 z-50">
+        {/* Dark Brown Header */}
+        <header className="bg-gradient-to-b from-[#3B2314] to-[#2E1A0E]">
+          <div className="max-w-[430px] mx-auto px-5 pt-5 pb-4">
+            {/* Top Row: Brand + Actions */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1
+                    className="text-3xl font-bold tracking-[0.2em]"
+                    style={{ fontFamily: "Georgia, 'Times New Roman', serif", color: "#C4956A" }}
+                  >
+                    TAKSH
+                  </h1>
+                  {isLoading && (
+                    <RefreshCw className="animate-spin w-4 h-4 text-[#C4956A]/50" />
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <div className="w-2 h-2 rounded-full" style={{ background: "radial-gradient(circle, #66BB6A, #388E3C)" }} />
+                  <span className="text-[#B89A7D] text-[10px] tracking-[0.2em] uppercase font-medium">
+                    Pure Veg Restaurant
+                  </span>
+                </div>
               </div>
+
+              {/* Right: Language + Cart */}
               <div className="flex items-center gap-2">
-                <span className="text-[#E7CFA8] font-bold text-lg">TAKSH</span>
-                <button 
+                {/* Language Switcher */}
+                <div className="flex items-center bg-[#2A1609] rounded-full p-0.5">
+                  {(['en', 'hi', 'mr'] as const).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setLang(l)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide transition-all ${
+                        lang === l
+                          ? "bg-[#C4956A] text-[#1A0D04]"
+                          : "text-[#8E7F71] hover:text-[#C4956A]"
+                      }`}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Refresh */}
+                <button
                   onClick={() => loadData()}
-                  className="p-1.5 rounded-full hover:bg-white/5 text-[#8E7F71] transition-colors"
+                  className="p-2 rounded-full hover:bg-white/5 text-[#8E7F71] transition-colors"
                   title="Refresh Menu"
                 >
                   <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
+
+                {/* Cart */}
+                <button
+                  onClick={() => setIsCartOpen(true)}
+                  className="relative p-2 rounded-full hover:bg-white/5 text-[#C4956A] transition-colors"
+                >
+                  <ShoppingCart size={20} />
+                  {totalItems > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-[#E28B4B] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-lg">
+                      {totalItems}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Language Switcher */}
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setLang('en')}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${lang === 'en' ? "bg-[#E28B4B] text-[#0D0B0A]" : "text-[#8E7F71] hover:text-[#E7CFA8]"}`}
-              >
-                EN
-              </button>
-              <button 
-                onClick={() => setLang('hi')}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${lang === 'hi' ? "bg-[#E28B4B] text-[#0D0B0A]" : "text-[#8E7F71] hover:text-[#E7CFA8]"}`}
-              >
-                HI
-              </button>
-              <button 
-                onClick={() => setLang('mr')}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${lang === 'mr' ? "bg-[#E28B4B] text-[#0D0B0A]" : "text-[#8E7F71] hover:text-[#E7CFA8]"}`}
-              >
-                MR
-              </button>
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8E7F71]" size={18} />
+              <input
+                type="text"
+                placeholder={t('searchPlaceholder') || "Search dishes, flavours..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-[#1A0D04]/60 text-[#E7CFA8] placeholder-[#8E7F71] rounded-xl pl-11 pr-4 py-3 border border-[rgba(196,149,106,0.15)] focus:outline-none focus:border-[#C4956A]/50 text-sm backdrop-blur-sm"
+              />
             </div>
-
-            {/* Cart Icon */}
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="relative text-[#E7CFA8] hover:text-[#E28B4B]"
-            >
-              <ShoppingCart size={24} />
-              {totalItems > 0 && (
-                <span className="absolute -top-2 -right-2 bg-[#E28B4B] text-[#0D0B0A] text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                  {totalItems}
-                </span>
-              )}
-            </button>
           </div>
         </header>
 
-        {/* Search Bar */}
-        <div className="max-w-[430px] mx-auto px-4 py-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8E7F71]" size={20} />
-            <input
-              type="text"
-              placeholder={t('searchPlaceholder')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#221C18] text-[#E7CFA8] placeholder-[#8E7F71] rounded-full pl-12 pr-4 py-3 border border-[rgba(255,255,255,0.06)] focus:outline-none focus:border-[#E28B4B]"
-            />
-          </div>
-        </div>
-
-        {/* Category Tabs */}
-        <div className="max-w-[430px] mx-auto px-4 pb-4 bg-[#0D0B0A] border-b border-[rgba(255,255,255,0.06)]">
-          <div
-            ref={categoriesRef}
-            className="flex gap-2 overflow-x-auto scrollbar-hide pb-2"
-          >
-            <button
-              onClick={() => {
-                handleCategoryChange("All");
-              }}
-              className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-colors ${activeCategory === "All"
-                ? "bg-[#E28B4B] text-[#0D0B0A]"
-                : "bg-[#15110F] text-[#8E7F71] hover:text-[#E7CFA8]"
-                }`}
+        {/* Category Tabs - Light background */}
+        <div className="bg-[#F8F1E8] border-b border-[#E8DDD0]">
+          <div className="max-w-[430px] mx-auto px-5">
+            <div
+              ref={categoriesRef}
+              className="flex gap-6 overflow-x-auto scrollbar-hide py-3"
             >
-              {t('all')}
-            </button>
-            {menuTabs.map((tab) => (
               <button
-                key={tab}
-                onClick={() => {
-                  handleCategoryChange(tab);
-                }}
-                className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-colors ${activeCategory === tab
-                  ? "bg-[#E28B4B] text-[#0D0B0A]"
-                  : "bg-[#15110F] text-[#8E7F71] hover:text-[#E7CFA8]"
-                  }`}
+                onClick={() => handleCategoryChange("All")}
+                className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${
+                  activeCategory === "All"
+                    ? "text-[#3B2314] border-[#3B2314] font-bold"
+                    : "text-[#A09080] border-transparent hover:text-[#3B2314]"
+                }`}
               >
-                {tab}
+                {t('all') || 'All'}
               </button>
-            ))}
+              {menuTabs.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => handleCategoryChange(tab)}
+                  className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${
+                    activeCategory === tab
+                      ? "text-[#3B2314] border-[#3B2314] font-bold"
+                      : "text-[#A09080] border-transparent hover:text-[#3B2314]"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-[430px] mx-auto px-4 pb-20">
-        {/* Discovery Sections - Only show for "All" category */}
+      {/* ─── Main Content ─── */}
+      <div className="max-w-[430px] mx-auto px-5 pb-20 pt-4">
+        {/* Loading State */}
+        {isLoading && dishes.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20">
+            <RefreshCw className="animate-spin w-8 h-8 text-[#C4956A] mb-4" />
+            <p className="text-[#B89A7D] text-sm">Loading menu...</p>
+          </div>
+        )}
+
+        {/* Discovery Sections - Only on "All" */}
         {activeCategory === "All" && !searchQuery && (
           <>
-
             {/* Most Loved */}
             {getGuestFavorites().length > 0 && (
               <div className="mb-8">
-                <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{t('mostLoved')}</h2>
-                <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-[#2C1810] font-bold text-lg">{t('mostLoved') || '❤️ Most Loved'}</h2>
+                </div>
+                <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
                   {getGuestFavorites().map((dish) => (
-                    <div
-                      key={dish.id}
-                      onClick={() => router.push(`/dish/${dish.id}`)}
-                      className="flex-shrink-0 w-40 cursor-pointer"
-                    >
-                      <div className="bg-[#15110F] rounded-xl overflow-hidden border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors relative group">
-                        {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
-                          <video src={dish.image} muted loop autoPlay className="w-full h-32 object-cover" />
-                        ) : (
-                          <img
-                            src={dish.image}
-                            alt={dish.name}
-                            className="w-full h-32 object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                            }}
-                          />
-                        )}
-                        <div className="p-3">
-                          <p className="text-[#E7CFA8] font-bold text-sm truncate">{dish.name}</p>
-                          <div className="flex justify-between items-center mt-2">
-                            <div className="flex items-center gap-1">
-                              <p className="text-[#E28B4B] font-bold text-sm">₹{dish.price}</p>
-                              {dish.hasSpiceIndicator && <span className="text-xs">🌶️</span>}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddDishToCart({
-                                  id: dish.id,
-                                  name: dish.name,
-                                  price: dish.price,
-                                  image: dish.image,
-                                  category: dish.category,
-                                });
-                              }}
-                              className="bg-[#E28B4B] text-[#0D0B0A] p-1.5 rounded-lg hover:opacity-90 transition-opacity"
-                            >
-                              <NotebookPen size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <ScrollCard key={dish.id} dish={dish} />
                   ))}
                 </div>
               </div>
@@ -403,108 +494,26 @@ export default function MenuPage() {
             {/* Chef's Favourites */}
             {getChefSpecials().length > 0 && (
               <div className="mb-8">
-                <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{t('chefFavourites')}</h2>
-                <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-[#2C1810] font-bold text-lg">{t('chefFavourites') || '👨‍🍳 Chef\'s Picks'}</h2>
+                </div>
+                <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
                   {getChefSpecials().map((dish) => (
-                    <div
-                      key={dish.id}
-                      onClick={() => router.push(`/dish/${dish.id}`)}
-                      className="flex-shrink-0 w-40 cursor-pointer"
-                    >
-                      <div className="bg-[#15110F] rounded-xl overflow-hidden border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors relative group">
-                        {(dish.image.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image.includes('/video/upload/')) ? (
-                          <video src={dish.image} muted loop autoPlay className="w-full h-32 object-cover" />
-                        ) : (
-                          <img
-                            src={dish.image}
-                            alt={dish.name}
-                            className="w-full h-32 object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                            }}
-                          />
-                        )}
-                        <div className="p-3">
-                          <p className="text-[#E7CFA8] font-bold text-sm truncate">{dish.name}</p>
-                          <div className="flex justify-between items-center mt-2">
-                            <div className="flex items-center gap-1">
-                              <p className="text-[#E28B4B] font-bold text-sm">₹{dish.price}</p>
-                              {dish.hasSpiceIndicator && <span className="text-xs">🌶️</span>}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddDishToCart({
-                                  id: dish.id,
-                                  name: dish.name,
-                                  price: dish.price,
-                                  image: dish.image,
-                                  category: dish.category,
-                                });
-                              }}
-                              className="bg-[#E28B4B] text-[#0D0B0A] p-1.5 rounded-lg hover:opacity-90 transition-opacity"
-                            >
-                              <NotebookPen size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <ScrollCard key={dish.id} dish={dish} />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Trending Today */}
+            {/* Trending */}
             {getTrendingDishes().length > 0 && (
               <div className="mb-8">
-                <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{t('trendingToday')}</h2>
-                <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-[#2C1810] font-bold text-lg">{t('trendingToday') || '🔥 Trending Today'}</h2>
+                </div>
+                <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
                   {getTrendingDishes().map((dish) => (
-                    <div
-                      key={dish.id}
-                      onClick={() => router.push(`/dish/${dish.id}`)}
-                      className="flex-shrink-0 w-40 cursor-pointer"
-                    >
-                      <div className="bg-[#15110F] rounded-xl overflow-hidden border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors relative group">
-                        {(dish.image.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image.includes('/video/upload/')) ? (
-                          <video src={dish.image} muted loop autoPlay className="w-full h-32 object-cover" />
-                        ) : (
-                          <img
-                            src={dish.image}
-                            alt={dish.name}
-                            className="w-full h-32 object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                            }}
-                          />
-                        )}
-                        <div className="p-3">
-                          <p className="text-[#E7CFA8] font-bold text-sm truncate">{dish.name}</p>
-                          <div className="flex justify-between items-center mt-2">
-                            <div className="flex items-center gap-1">
-                              <p className="text-[#E28B4B] font-bold text-sm">₹{dish.price}</p>
-                              {dish.hasSpiceIndicator && <span className="text-xs">🌶️</span>}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddDishToCart({
-                                  id: dish.id,
-                                  name: dish.name,
-                                  price: dish.price,
-                                  image: dish.image,
-                                  category: dish.category,
-                                });
-                              }}
-                              className="bg-[#E28B4B] text-[#0D0B0A] p-1.5 rounded-lg hover:opacity-90 transition-opacity"
-                            >
-                              <NotebookPen size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <ScrollCard key={dish.id} dish={dish} />
                   ))}
                 </div>
               </div>
@@ -512,191 +521,62 @@ export default function MenuPage() {
           </>
         )}
 
-        {/* Main Dish List - Grouped by Category */}
+        {/* ─── Dish Listing ─── */}
         {activeCategory === "All" && !searchQuery ? (
           previewCategories.map((tab) => {
             const categoryDishes = groupedDishes[tab.categoryValue] || [];
             if (categoryDishes.length === 0) return null;
-
             const previewDishes = categoryDishes.slice(0, PREVIEW_LIMIT);
 
             return (
               <div key={tab.label} className="mb-8">
-                <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{tab.label}</h2>
-                <div className="space-y-4">
+                <h2 className="text-[#2C1810] font-bold text-xl mb-4" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                  {tab.label}
+                </h2>
+                <div className="space-y-3">
                   {previewDishes.map((dish) => (
-                    <div
-                      key={dish.id}
-                      onClick={() => router.push(`/dish/${dish.id}`)}
-                      className="w-full text-left cursor-pointer"
-                    >
-                      <div className="bg-gradient-to-br from-[#1A140F] to-[#120E0B] rounded-2xl p-4 border border-[rgba(255,255,255,0.08)] hover:border-[#E28B4B]/70 transition-all duration-200 flex items-stretch gap-4 relative shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
-                        {/* Image */}
-                        <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden ring-1 ring-white/10">
-                            {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
-                              <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
-                            ) : (
-                              <img
-                                src={dish.image}
-                                alt={dish.name}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                                }}
-                              />
-                            )}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                          <div className="flex items-start justify-between">
-                            <h3 className="text-[#E7CFA8] font-bold truncate pr-2">{dish.name}</h3>
-                            <div className="flex flex-col items-end gap-2">
-                              <span className="text-[#E28B4B] font-bold flex-shrink-0 text-xl leading-none">
-                                ₹{dish.price}
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddDishToCart({
-                                    id: dish.id,
-                                    name: dish.name,
-                                    price: dish.price,
-                                    image: dish.image,
-                                    category: dish.category,
-                                  });
-                                }}
-                                className="bg-[#E28B4B] text-[#0D0B0A] p-2 rounded-lg hover:opacity-90 transition-opacity"
-                                title="Place Order"
-                              >
-                                <NotebookPen size={16} />
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="space-y-1">
-                            {dish.hasSpiceIndicator && (
-                              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#2A1A14] border border-[#E8650A]/30">
-                                <span className="text-[#FF8A3D]">🔥</span>
-                                <span className="text-[#FF9B54] font-semibold text-[10px] uppercase tracking-wider">
-                                  Spicy
-                                </span>
-                              </div>
-                            )}
-
-                            {dish.tasteDescription && (
-                              <p className="text-[#D6A77A] text-xs line-clamp-1">
-                                How does it taste: {dish.tasteDescription}
-                              </p>
-                            )}
-
-                            <p className="text-[#9A8A7B] text-xs line-clamp-1 max-w-[190px]">
-                              Ingredients: {dish.ingredients.join(", ")}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <DishCard key={dish.id} dish={dish} />
                   ))}
                 </div>
                 {categoryDishes.length > PREVIEW_LIMIT && (
                   <button
                     onClick={() => handleCategoryChange(tab.categoryValue)}
-                    className="mt-4 text-[#E28B4B] text-sm font-medium hover:underline"
+                    className="mt-4 flex items-center gap-1 text-[#C4956A] text-sm font-semibold hover:text-[#A07A4A] transition-colors"
                   >
-                    Show More →
+                    Show all {categoryDishes.length} dishes
+                    <ChevronRight size={16} />
                   </button>
                 )}
               </div>
             );
           })
         ) : (
-          Object.entries(groupedDishes).map(([category, dishes]) => (
+          Object.entries(groupedDishes).map(([category, categoryDishes]) => (
             <div key={category} className="mb-8">
-              <h2 className="text-[#E7CFA8] font-bold text-lg mb-4">{category}</h2>
-              <div className="space-y-4">
-                {dishes.map((dish) => (
-                <div
-                  key={dish.id}
-                  onClick={() => router.push(`/dish/${dish.id}`)}
-                  className="w-full text-left cursor-pointer"
-                >
-                  <div className="bg-gradient-to-br from-[#1A140F] to-[#120E0B] rounded-2xl p-4 border border-[rgba(255,255,255,0.08)] hover:border-[#E28B4B]/70 transition-all duration-200 flex items-stretch gap-4 relative shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
-                    {/* Image */}
-                    <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden ring-1 ring-white/10">
-                        {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
-                          <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
-                        ) : (
-                          <img
-                            src={dish.image}
-                            alt={dish.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                            }}
-                          />
-                        )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                      <div className="flex items-start justify-between">
-                        <h3 className="text-[#E7CFA8] font-bold truncate pr-2">{dish.name}</h3>
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="text-[#E28B4B] font-bold flex-shrink-0 text-xl leading-none">
-                            ₹{dish.price}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAddDishToCart({
-                                id: dish.id,
-                                name: dish.name,
-                                price: dish.price,
-                                image: dish.image,
-                                category: dish.category,
-                              });
-                            }}
-                            className="bg-[#E28B4B] text-[#0D0B0A] p-2 rounded-lg hover:opacity-90 transition-opacity"
-                            title="Place Order"
-                          >
-                            <NotebookPen size={16} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        {dish.hasSpiceIndicator && (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#2A1A14] border border-[#E8650A]/30">
-                            <span className="text-[#FF8A3D]">🔥</span>
-                            <span className="text-[#FF9B54] font-semibold text-[10px] uppercase tracking-wider">
-                              Spicy
-                            </span>
-                          </div>
-                        )}
-
-                        {dish.tasteDescription && (
-                          <p className="text-[#D6A77A] text-xs line-clamp-1">
-                            How does it taste: {dish.tasteDescription}
-                          </p>
-                        )}
-
-                        <p className="text-[#9A8A7B] text-xs line-clamp-1 max-w-[190px]">
-                          Ingredients: {dish.ingredients.join(", ")}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <h2 className="text-[#2C1810] font-bold text-xl mb-4" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                {category}
+              </h2>
+              <div className="space-y-3">
+                {categoryDishes.map((dish) => (
+                  <DishCard key={dish.id} dish={dish} />
                 ))}
               </div>
             </div>
           ))
         )}
+
+        {/* Empty Search State */}
+        {!isLoading && filteredDishes.length === 0 && searchQuery && (
+          <div className="text-center py-16">
+            <div className="text-5xl mb-4">🍽️</div>
+            <p className="text-[#2C1810] font-bold text-lg mb-2">No dishes found</p>
+            <p className="text-[#B89A7D] text-sm">Try searching with different keywords</p>
+          </div>
+        )}
       </div>
 
-      {/* Rate Us Card at Bottom */}
-      <div className="max-w-[430px] mx-auto px-4 pb-8">
+      {/* Rate Us */}
+      <div className="max-w-[430px] mx-auto px-5 pb-8">
         <RateUsCard />
       </div>
 

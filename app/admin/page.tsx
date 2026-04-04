@@ -32,19 +32,19 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0603] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#151210] rounded-2xl p-10">
+    <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white border border-[#EDE4D5] rounded-2xl p-10">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-full bg-[#E8650A] flex items-center justify-center mb-4">
-            <span className="text-white font-bold text-2xl">T</span>
+          <div className="w-16 h-16 rounded-full bg-[#3B2314] flex items-center justify-center mb-4">
+            <span className="text-[#2C1810] font-bold text-2xl">T</span>
           </div>
         </div>
 
         {/* Title */}
         <div className="mb-8">
-          <h1 className="text-white font-bold text-2xl mb-2">Admin Login</h1>
-          <p className="text-[#8a6a52] text-sm">
+          <h1 className="text-[#2C1810] font-bold text-2xl mb-2">Admin Login</h1>
+          <p className="text-[#B89A7D] text-sm">
             Sign in to manage your TAKSH menu.
           </p>
         </div>
@@ -52,27 +52,27 @@ export default function AdminLoginPage() {
         {/* Form */}
         <form onSubmit={handleSignIn} className="space-y-5">
           <div>
-            <label className="block text-white text-sm font-medium mb-2">
+            <label className="block text-[#2C1810] text-sm font-medium mb-2">
               Email
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-12 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] transition-colors"
+              className="w-full h-12 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
               placeholder="admin@taksh.com"
             />
           </div>
 
           <div>
-            <label className="block text-white text-sm font-medium mb-2">
+            <label className="block text-[#2C1810] text-sm font-medium mb-2">
               Password
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full h-12 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] transition-colors"
+              className="w-full h-12 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -80,14 +80,14 @@ export default function AdminLoginPage() {
           <div className="flex gap-3 pt-2">
             <button
               type="submit"
-              className="flex-1 h-12 bg-[#E8650A] text-white font-semibold rounded-lg hover:bg-[#E8650A]/90 transition-colors"
+              className="flex-1 h-12 bg-[#3B2314] text-[#E7CFA8] font-semibold rounded-lg hover:bg-[#3B2314]/90 transition-colors"
               disabled={isLoading}
             >
               {isLoading ? "Signing in..." : "Sign in"}
             </button>
             <Link
               href="/admin/preview"
-              className="h-12 px-6 bg-[#1C1510] border border-white/20 text-white font-medium rounded-lg hover:bg-white/5 transition-colors flex items-center justify-center"
+              className="h-12 px-6 bg-white border border-[#EDE4D5] border border-[#EDE4D5] text-[#2C1810] font-medium rounded-lg hover:bg-[#EDE4D5] transition-colors flex items-center justify-center"
             >
               Menu
             </Link>

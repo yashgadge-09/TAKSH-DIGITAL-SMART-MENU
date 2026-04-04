@@ -138,10 +138,10 @@ const CustomTooltip = ({
 }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-[#1C1510] border border-white/10 rounded-lg p-3 shadow-lg">
-        <p className="text-white text-sm font-medium mb-1">{label}</p>
+      <div className="bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg p-3 shadow-lg">
+        <p className="text-[#2C1810] text-sm font-medium mb-1">{label}</p>
         {payload.map((entry, index) => (
-          <p key={index} className="text-[#8a6a52] text-sm">
+          <p key={index} className="text-[#B89A7D] text-sm">
             {entry.dataKey}: {entry.value}
           </p>
         ))}
@@ -160,11 +160,11 @@ function StarRating({ rating, size = 16 }: { rating: number; size?: number }) {
   return (
     <div className="flex items-center gap-0.5">
       {Array(fullStars).fill(0).map((_, i) => (
-        <Star key={`full-${i}`} className="fill-[#E28B4B] text-[#E28B4B]" style={{ width: size, height: size }} />
+        <Star key={`full-${i}`} className="fill-[#E28B4B] text-[#C4956A]" style={{ width: size, height: size }} />
       ))}
-      {hasHalfStar && <StarHalf className="fill-[#E28B4B] text-[#E28B4B]" style={{ width: size, height: size }} />}
+      {hasHalfStar && <StarHalf className="fill-[#E28B4B] text-[#C4956A]" style={{ width: size, height: size }} />}
       {Array(emptyStars).fill(0).map((_, i) => (
-        <Star key={`empty-${i}`} className="text-[#E28B4B]" style={{ width: size, height: size }} />
+        <Star key={`empty-${i}`} className="text-[#C4956A]" style={{ width: size, height: size }} />
       ))}
     </div>
   )
@@ -177,7 +177,7 @@ function ReviewStars({ rating }: { rating: number }) {
       {Array(5).fill(0).map((_, i) => (
         <Star
           key={i}
-          className={`w-3.5 h-3.5 ${i < rating ? "fill-[#E28B4B] text-[#E28B4B]" : "text-[#8E7F71]"}`}
+          className={`w-3.5 h-3.5 ${i < rating ? "fill-[#E28B4B] text-[#C4956A]" : "text-[#8E7F71]"}`}
         />
       ))}
     </div>
@@ -234,8 +234,8 @@ export default function AnalyticsPage() {
     <AdminLayout>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-white font-bold text-3xl mb-2">Analytics</h1>
-        <p className="text-[#8a6a52]">
+        <h1 className="text-[#2C1810] font-bold text-3xl mb-2">Analytics</h1>
+        <p className="text-[#B89A7D]">
           Track QR scans and engagement. Menu views today:{" "}
           {isLoading ? "..." : menuViewsToday.toLocaleString()}
         </p>
@@ -244,8 +244,8 @@ export default function AnalyticsPage() {
       {/* Row 1: Line Chart and Grouped Bar Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Weekly QR Scans - Line Chart */}
-        <div className="bg-[#151210] rounded-xl p-6">
-          <h2 className="text-white font-bold text-lg mb-6">Weekly QR scans</h2>
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+          <h2 className="text-[#2C1810] font-bold text-lg mb-6">Weekly QR scans</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={weeklyScansData}>
@@ -270,8 +270,8 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Scans vs Favourites - Grouped Bar Chart */}
-        <div className="bg-[#151210] rounded-xl p-6">
-          <h2 className="text-white font-bold text-lg mb-6">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+          <h2 className="text-[#2C1810] font-bold text-lg mb-6">
             Scans vs favourites
           </h2>
           <div className="h-64">
@@ -288,7 +288,7 @@ export default function AnalyticsPage() {
                 <Legend
                   wrapperStyle={{ paddingTop: 20 }}
                   formatter={(value) => (
-                    <span className="text-[#8a6a52] text-sm">{value}</span>
+                    <span className="text-[#B89A7D] text-sm">{value}</span>
                   )}
                 />
                 <Bar
@@ -312,8 +312,8 @@ export default function AnalyticsPage() {
       {/* Row 2: Horizontal Bar Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Most Added to Cart */}
-        <div className="bg-[#151210] rounded-xl p-6">
-          <h2 className="text-white font-bold text-lg mb-6">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+          <h2 className="text-[#2C1810] font-bold text-lg mb-6">
             Most Added to Cart
           </h2>
           <div className="h-64">
@@ -341,8 +341,8 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Most Favourited */}
-        <div className="bg-[#151210] rounded-xl p-6">
-          <h2 className="text-white font-bold text-lg mb-6">Most Favourited</h2>
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+          <h2 className="text-[#2C1810] font-bold text-lg mb-6">Most Favourited</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topFavouritesBarData} layout="vertical">
@@ -369,8 +369,8 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Row 3: Top Dishes This Week */}
-      <div className="bg-[#151210] rounded-xl p-6 mb-8">
-        <h2 className="text-white font-bold text-lg mb-6">
+      <div className="bg-white border border-[#EDE4D5] rounded-xl p-6 mb-8">
+        <h2 className="text-[#2C1810] font-bold text-lg mb-6">
           Top Dishes This Week
         </h2>
         <div className="space-y-1">
@@ -380,7 +380,7 @@ export default function AnalyticsPage() {
               className={`flex items-center gap-4 p-4 rounded-lg ${index % 2 === 0 ? "bg-white/[0.02]" : ""
                 }`}
             >
-              <span className="text-[#E8650A] font-bold text-lg w-8">
+              <span className="text-[#C4956A] font-bold text-lg w-8">
                 #{dish.rank}
               </span>
               <div className="w-10 h-10 rounded-full overflow-hidden">
@@ -393,11 +393,11 @@ export default function AnalyticsPage() {
                 />
               </div>
               <div className="flex-1">
-                <p className="text-white font-medium">{dish.name}</p>
-                <p className="text-[#8a6a52] text-sm">{dish.category}</p>
+                <p className="text-[#2C1810] font-medium">{dish.name}</p>
+                <p className="text-[#B89A7D] text-sm">{dish.category}</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[#8a6a52] text-sm">
+                <span className="text-[#B89A7D] text-sm">
                   {dish.views} views
                 </span>
                 {dish.trending === "up" ? (
@@ -415,38 +415,38 @@ export default function AnalyticsPage() {
 
       {/* Review Analytics Header */}
       <div className="mb-6">
-        <h2 className="text-[#E7CFA8] font-bold text-2xl mb-1">Review Analytics</h2>
+        <h2 className="text-[#2C1810] font-bold text-2xl mb-1">Review Analytics</h2>
         <p className="text-[#8E7F71] text-sm">Based on guest feedback collected.</p>
       </div>
 
       {/* Row 1: 4 Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Total Reviews */}
-        <div className="bg-[#15110F] rounded-xl p-5">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
             <span className="text-[#8E7F71] text-sm">Total Reviews</span>
-            <Star className="w-5 h-5 text-[#E28B4B]" />
+            <Star className="w-5 h-5 text-[#C4956A]" />
           </div>
-          <p className="text-[#E7CFA8] font-bold text-3xl mb-1">
+          <p className="text-[#2C1810] font-bold text-3xl mb-1">
             {isLoading ? "..." : totalReviewsValue}
           </p>
           <p className="text-[#8E7F71] text-xs">All time</p>
         </div>
 
         {/* Average Rating */}
-        <div className="bg-[#15110F] rounded-xl p-5">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
             <span className="text-[#8E7F71] text-sm">Average Rating</span>
-            <Star className="w-5 h-5 fill-[#E28B4B] text-[#E28B4B]" />
+            <Star className="w-5 h-5 fill-[#E28B4B] text-[#C4956A]" />
           </div>
-          <p className="text-[#E28B4B] font-bold text-3xl mb-2">
+          <p className="text-[#C4956A] font-bold text-3xl mb-2">
             {isLoading ? "..." : avgRatingValue}
           </p>
           <StarRating rating={avgRatingValue} size={16} />
         </div>
 
         {/* Public Reviews */}
-        <div className="bg-[#15110F] rounded-xl p-5">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
             <span className="text-[#8E7F71] text-sm">Public Reviews</span>
             <Eye className="w-5 h-5 text-[#22c55e]" />
@@ -458,7 +458,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Private Reviews */}
-        <div className="bg-[#15110F] rounded-xl p-5">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
             <span className="text-[#8E7F71] text-sm">Private Reviews</span>
             <EyeOff className="w-5 h-5 text-[#ef4444]" />
@@ -473,12 +473,12 @@ export default function AnalyticsPage() {
       {/* Row 2: Rating Distribution + Recent Reviews */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Rating Distribution */}
-        <div className="bg-[#15110F] rounded-xl p-6">
-          <h3 className="text-[#E7CFA8] font-bold text-lg mb-5">Rating Distribution</h3>
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+          <h3 className="text-[#2C1810] font-bold text-lg mb-5">Rating Distribution</h3>
           <div className="space-y-3">
             {reviewsData.ratingDistribution.map((item) => (
               <div key={item.stars} className="flex items-center gap-3">
-                <span className="text-[#E7CFA8] text-sm w-10">{item.stars} ★</span>
+                <span className="text-[#2C1810] text-sm w-10">{item.stars} ★</span>
                 <div className="flex-1 h-2.5 bg-[#221C18] rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-300"
@@ -488,7 +488,7 @@ export default function AnalyticsPage() {
                     }}
                   />
                 </div>
-                <span className="text-[#E7CFA8] text-sm w-7 text-right">{item.count}</span>
+                <span className="text-[#2C1810] text-sm w-7 text-right">{item.count}</span>
                 <span className="text-[#8E7F71] text-xs w-12 text-right">({item.percentage}%)</span>
               </div>
             ))}
@@ -496,16 +496,16 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Recent Guest Reviews */}
-        <div className="bg-[#15110F] rounded-xl p-6">
-          <h3 className="text-[#E7CFA8] font-bold text-lg mb-4">Recent Guest Reviews</h3>
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+          <h3 className="text-[#2C1810] font-bold text-lg mb-4">Recent Guest Reviews</h3>
 
           {/* Filter Pills */}
           <div className="flex flex-wrap gap-2 mb-4">
             <button
               onClick={() => setActiveFilter(null)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${activeFilter === null
-                ? "bg-[#E28B4B] text-[#0D0B0A]"
-                : "bg-[#221C18] text-[#8E7F71] hover:text-[#E7CFA8]"
+                ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
+                : "bg-[#221C18] text-[#8E7F71] hover:text-[#2C1810]"
                 }`}
             >
               All
@@ -515,8 +515,8 @@ export default function AnalyticsPage() {
                 key={star}
                 onClick={() => setActiveFilter(star)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${activeFilter === star
-                  ? "bg-[#E28B4B] text-[#0D0B0A]"
-                  : "bg-[#221C18] text-[#8E7F71] hover:text-[#E7CFA8]"
+                  ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
+                  : "bg-[#221C18] text-[#8E7F71] hover:text-[#2C1810]"
                   }`}
               >
                 {star}★
@@ -535,15 +535,15 @@ export default function AnalyticsPage() {
                   <ReviewStars rating={review.stars} />
                   <span className="text-[#8E7F71] text-xs">{review.date}</span>
                 </div>
-                <p className="text-[#E7CFA8] text-sm italic line-clamp-2 mb-2">
+                <p className="text-[#2C1810] text-sm italic line-clamp-2 mb-2">
                   {'"'}{review.text}{'"'}
                 </p>
                 <div className="flex items-center justify-between">
-                  <span className="text-[#E28B4B] text-sm font-bold">{review.reviewer}</span>
+                  <span className="text-[#C4956A] text-sm font-bold">{review.reviewer}</span>
                   <span
                     className={`px-2 py-0.5 rounded-full text-xs font-medium ${review.isPublic
                       ? "bg-[#22c55e]/20 text-[#22c55e]"
-                      : "bg-[#ef4444] text-white"
+                      : "bg-[#ef4444] text-[#2C1810]"
                       }`}
                   >
                     {review.isPublic ? "Public" : "Private"}
@@ -556,8 +556,8 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Row 3: Top Rated Dishes */}
-      <div className="bg-[#15110F] rounded-xl p-6">
-        <h3 className="text-[#E7CFA8] font-bold text-lg mb-5">Top Rated Dishes</h3>
+      <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+        <h3 className="text-[#2C1810] font-bold text-lg mb-5">Top Rated Dishes</h3>
         <div className="space-y-0">
           {topRatedDishes.map((dish, index) => (
             <div
@@ -566,7 +566,7 @@ export default function AnalyticsPage() {
                 }`}
             >
               <div
-                className="w-7 h-7 rounded-full bg-[#E28B4B] text-[#0D0B0A] flex items-center justify-center font-bold text-sm"
+                className="w-7 h-7 rounded-full bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] flex items-center justify-center font-bold text-sm"
               >
                 #{dish.rank}
               </div>
@@ -580,15 +580,15 @@ export default function AnalyticsPage() {
                 />
               </div>
               <div className="flex-1">
-                <p className="text-[#E7CFA8] font-bold text-sm">{dish.name}</p>
+                <p className="text-[#2C1810] font-bold text-sm">{dish.name}</p>
                 <p className="text-[#8E7F71] text-xs">{dish.category}</p>
               </div>
               <div className="flex items-center gap-1">
                 {Array(Math.floor(dish.rating)).fill(0).map((_, i) => (
-                  <Star key={i} className="w-3.5 h-3.5 fill-[#E28B4B] text-[#E28B4B]" />
+                  <Star key={i} className="w-3.5 h-3.5 fill-[#E28B4B] text-[#C4956A]" />
                 ))}
                 {dish.rating % 1 >= 0.5 && (
-                  <StarHalf className="w-3.5 h-3.5 fill-[#E28B4B] text-[#E28B4B]" />
+                  <StarHalf className="w-3.5 h-3.5 fill-[#E28B4B] text-[#C4956A]" />
                 )}
               </div>
               <span className="text-[#8E7F71] text-sm">{dish.mentions} mentions</span>

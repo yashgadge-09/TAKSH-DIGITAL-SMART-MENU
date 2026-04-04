@@ -47,7 +47,7 @@ function SidebarContent() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen bg-[#0f0805] border-r border-white/[0.08] flex flex-col transition-all duration-300 z-40",
+          "fixed left-0 top-0 h-screen bg-[#F8F1E8] border-r border-[#EDE4D5] border-r border-[#EDE4D5] flex flex-col transition-all duration-300 z-40",
           collapsed ? "w-16" : "w-[220px]"
         )}
       >
@@ -55,7 +55,7 @@ function SidebarContent() {
         <div className="p-4 flex items-center gap-3">
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="text-white/60 hover:text-white transition-colors"
+            className="text-[#8E7F71] hover:text-[#2C1810] transition-colors"
           >
             {collapsed ? (
               <PanelLeft className="w-5 h-5" />
@@ -65,12 +65,12 @@ function SidebarContent() {
           </button>
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[#E8650A] flex items-center justify-center">
-                <span className="text-white font-bold text-sm">T</span>
+              <div className="w-8 h-8 rounded-full bg-[#3B2314] flex items-center justify-center">
+                <span className="text-[#2C1810] font-bold text-sm">T</span>
               </div>
               <div>
-                <span className="text-white font-bold text-lg">TAKSH</span>
-                <span className="text-[#8a6a52] text-sm ml-2">Admin Panel</span>
+                <span className="text-[#2C1810] font-bold text-lg">TAKSH</span>
+                <span className="text-[#B89A7D] text-sm ml-2">Admin Panel</span>
               </div>
             </div>
           )}
@@ -79,7 +79,7 @@ function SidebarContent() {
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4">
           {!collapsed && (
-            <p className="text-[#8a6a52] text-xs font-medium px-3 mb-3">
+            <p className="text-[#B89A7D] text-xs font-medium px-3 mb-3">
               Control panel
             </p>
           )}
@@ -94,8 +94,8 @@ function SidebarContent() {
                     className={cn(
                       "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
                       isActive
-                        ? "bg-[#E8650A] text-white"
-                        : "text-white hover:bg-white/5",
+                        ? "bg-[#3B2314] text-[#E7CFA8]"
+                        : "text-[#2C1810] hover:bg-[#EDE4D5]",
                       collapsed && "justify-center px-2"
                     )}
                   >
@@ -114,14 +114,14 @@ function SidebarContent() {
       {/* Top Header Bar */}
       <header
         className={cn(
-          "fixed top-0 right-0 h-14 bg-[#151210] border-b border-white/[0.08] flex items-center justify-end px-6 z-30 transition-all duration-300",
+          "fixed top-0 right-0 h-14 bg-white border border-[#EDE4D5] border-b border-[#EDE4D5] flex items-center justify-end px-6 z-30 transition-all duration-300",
           collapsed ? "left-16" : "left-[220px]"
         )}
       >
 
         <button
           onClick={handleLogout}
-          className="ml-3 px-4 py-2 bg-[#0D0B0A] border border-white/20 rounded-lg text-white text-sm font-medium hover:bg-white/5 transition-colors"
+          className="ml-3 px-4 py-2 bg-[#F8F1E8] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm font-medium hover:bg-[#EDE4D5] transition-colors"
         >
           Logout
         </button>
@@ -139,7 +139,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarContext.Provider value={{ collapsed, setCollapsed }}>
-      <div className="min-h-screen bg-[#0a0603]">
+      <div className="min-h-screen bg-[#F8F1E8]">
         <SidebarContent />
         <main
           className={cn(
