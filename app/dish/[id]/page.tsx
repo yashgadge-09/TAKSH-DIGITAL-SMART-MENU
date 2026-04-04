@@ -161,7 +161,7 @@ export default function DishDetailPage() {
   return (
     <div className="max-w-[430px] mx-auto min-h-screen bg-[#F8F1E8]">
       {/* Hero Carousel */}
-      <div className="relative h-96 w-full bg-white border border-[#EDE4D5]">
+      <div className="relative h-96 w-full bg-white border-b border-[#EDE4D5] rounded-b-[2.5rem] overflow-hidden shadow-sm">
         <Carousel setApi={setApi} className="w-full h-full">
           <CarouselContent className="h-96">
             {dish.images.map((img: string, index: number) => (
@@ -233,144 +233,76 @@ export default function DishDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-[430px] mx-auto px-4 py-6">
+      <div className="max-w-[430px] mx-auto px-5 py-6">
         {/* Header */}
-        <div className="flex justify-between items-start mb-4">
-          <h1 className="text-[#2C1810] font-bold text-2xl">{dish.name}</h1>
+        <div className="flex justify-between items-start mb-3">
+          <h1 className="text-[#2C1810] font-bold text-3xl">{dish.name}</h1>
           <span className="text-[#C4956A] font-bold text-2xl">₹{dish.price}</span>
         </div>
 
-        {/* Highly Reordered */}
-        {dish.isGuestFavorite && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-[#22c55e] mb-4">
-            <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block"></span>
-            {t('highlyReordered')}
-          </span>
-        )}
-
-        {/* Spice Indicator */}
-        {dish.hasSpiceIndicator && (
-          <div className="flex items-center gap-2 mb-4 bg-red-500/10 w-fit px-3 py-1 rounded-full border border-red-500/20">
-            <span className="text-[#C18F58] text-sm">🌶️</span>
-            <span className="text-[#C4956A] font-bold text-xs uppercase tracking-widest">
-              {t('spicy')}
-            </span>
+        {/* Flavor & Spice Line */}
+        {(dish.tasteDescription || dish.hasSpiceIndicator) && (
+          <div className="flex items-start gap-2 text-[#8E7F71] text-sm mb-2 font-medium">
+            <span className="text-base text-[#C18F58]">{dish.hasSpiceIndicator ? '🔥' : '✨'}</span>
+            <span className="leading-snug">{dish.tasteDescription || t('spicy')}</span>
           </div>
         )}
 
-        {/* How Does It Taste */}
-        <div className="bg-white border border-[#EDE4D5] rounded-xl p-5 mb-6 border border-[#EDE4D5] shadow-inner">
-          <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-2.5">
-            {t('howDoesItTaste')}
-          </h3>
-          <p className="text-[#2C1810] italic text-sm leading-6">
-            "{dish.tasteDescription}"
-          </p>
-        </div>
-
         {/* Servings */}
-        <div className="flex items-center gap-2 text-[#8E7F71] text-sm mb-6">
-          <span>👥</span>
-          <span>{t('serves')} {dish.servings} {t('people')}</span>
-        </div>
+        {dish.servings && (
+          <div className="flex items-center gap-2 text-[#8E7F71] text-sm mb-6 font-medium">
+            <span className="text-base">👥</span>
+            <span>{t('serves')} {dish.servings} {t('people')}</span>
+          </div>
+        )}
 
         {/* Chef's Note */}
-        <div className="bg-white border border-[#EDE4D5] rounded-xl p-4 border-l-4 border-[#E28B4B] mb-6">
-          <h2 className="text-[#2C1810] font-bold mb-2 flex items-center gap-2">
-            👨‍🍳 {t('chefNote')}
-          </h2>
-          <p className="text-[#8E7F71] italic text-sm">{dish.description}</p>
-        </div>
+        {dish.description && (
+          <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-4 shadow-sm">
+            <h2 className="text-[#2C1810] font-bold mb-1.5 text-base">👨‍🍳 Chef's Note</h2>
+            <p className="text-[#8E7F71] text-sm leading-relaxed italic">{dish.description}</p>
+          </div>
+        )}
 
         {/* Ingredients */}
-        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6 mb-6 border border-[#EDE4D5] shadow-inner">
-          <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-3">
-            {t('ingredients')}
-          </h3>
-          <p className="text-[#C4956A] text-sm leading-6 font-medium">{dish.ingredients.join(", ")}</p>
-        </div>
+        {dish.ingredients && dish.ingredients.length > 0 && (
+          <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-8 shadow-sm">
+            <h3 className="text-[#2C1810] font-bold mb-1.5 text-base">Ingredients</h3>
+            <p className="text-[#C4956A] text-sm leading-relaxed font-medium">{dish.ingredients.join(", ")}</p>
+          </div>
+        )}
 
-        {recommendations.length > 0 && (
-          <section className="mb-8 rounded-2xl border border-[#E28B4B]/30 bg-white p-4 shadow-[0_0_0_1px_rgba(226,139,75,0.08),0_14px_30px_rgba(0,0,0,0.35)]">
-            <div className="flex items-start justify-between gap-4 mb-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.24em] text-[#C18F58] mb-1">Curated Picks</p>
-                <h3 className="text-[#2C1810] font-extrabold text-lg leading-tight flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#C4956A]" />
-                  {t('Recommended')}
-                </h3>
-              </div>
-              <span className="text-[11px] px-2.5 py-1 rounded-full border border-[#E28B4B]/40 text-[#2C1810] bg-[#F8F1E8]/60">
-                {recommendations.length} picks
-              </span>
-            </div>
-
-            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-              {recommendations.map((recommendedDish, index) => (
+        {/* More Like This (Combining curations to match sketch) */}
+        {(recommendations.length > 0 || moreLikeThisDishes.length > 0) && (
+          <div className="mb-6">
+            <h3 className="text-[#2C1810] font-bold text-lg mb-3">More like This</h3>
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+              {[...recommendations, ...moreLikeThisDishes]
+                .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i) // unique
+                .slice(0, 8)
+                .map((relatedDish: any) => (
                 <button
-                  key={recommendedDish.id}
-                  onClick={() => router.push(`/dish/${recommendedDish.id}`)}
-                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#E28B4B]/25 bg-white hover:border-[#E28B4B] hover:-translate-y-0.5 transition-all text-left"
+                  key={relatedDish.id}
+                  onClick={() => router.push(`/dish/${relatedDish.id}`)}
+                  className="w-[120px] shrink-0 bg-white border border-[#EDE4D5] hover:border-[#E28B4B] rounded-[1.75rem] overflow-hidden text-left transition-colors shadow-sm"
                 >
-                  <div className="relative">
-                    {(String(getRecommendationImage(recommendedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(recommendedDish)).includes('/video/upload/')) ? (
-                      <video src={String(getRecommendationImage(recommendedDish))} muted loop autoPlay className="w-full h-28 object-cover" />
+                  <div className="h-[90px] w-full border-b border-[#EDE4D5]">
+                    {(String(getRecommendationImage(relatedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(relatedDish)).includes('/video/upload/')) ? (
+                      <video src={String(getRecommendationImage(relatedDish))} muted loop autoPlay className="w-full h-full object-cover" />
                     ) : (
                       <img
-                        src={String(getRecommendationImage(recommendedDish))}
-                        alt={getRecommendationName(recommendedDish)}
-                        className="w-full h-28 object-cover"
+                        src={String(getRecommendationImage(relatedDish))}
+                        alt={getRecommendationName(relatedDish)}
+                        className="w-full h-full object-cover"
                         onError={(e) => {
                           e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
                         }}
                       />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0" />
-                    <span className="absolute top-2 left-2 text-[11px] font-bold rounded-md px-2 py-1 bg-[#F8F1E8]/80 text-[#2C1810] border border-[#EDE4D5]">
-                      #{index + 1}
-                    </span>
                   </div>
-
                   <div className="p-3">
-                    <p className="text-[#2C1810] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
-                      {getRecommendationName(recommendedDish)}
-                    </p>
-                    <div className="mt-2 flex items-center justify-between">
-                      <p className="text-[#C4956A] font-extrabold text-base">₹{recommendedDish.price}</p>
-                      <span className="text-[10px] uppercase tracking-wider text-[#8E7F71]">View</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {moreLikeThisDishes.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-[#2C1810] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
-            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-              {moreLikeThisDishes.map((relatedDish) => (
-                <button
-                  key={relatedDish.id}
-                  onClick={() => router.push(`/dish/${relatedDish.id}`)}
-                  className="w-36 flex-shrink-0 bg-white border border-[#EDE4D5] rounded-xl overflow-hidden border border-[#EDE4D5] hover:border-[#E28B4B] transition-colors text-left"
-                >
-                  {(String(getRecommendationImage(relatedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(relatedDish)).includes('/video/upload/')) ? (
-                    <video src={String(getRecommendationImage(relatedDish))} muted loop autoPlay className="w-full h-24 object-cover" />
-                  ) : (
-                    <img
-                      src={String(getRecommendationImage(relatedDish))}
-                      alt={getRecommendationName(relatedDish)}
-                      className="w-full h-24 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                      }}
-                    />
-                  )}
-                  <div className="p-2.5">
-                    <p className="text-[#2C1810] text-xs font-semibold truncate">{getRecommendationName(relatedDish)}</p>
-                    <p className="text-[#C4956A] font-bold text-sm mt-1">₹{relatedDish.price}</p>
+                    <p className="text-[#2C1810] text-[13px] font-bold truncate leading-tight mb-1">{getRecommendationName(relatedDish)}</p>
+                    <p className="text-[#C4956A] font-bold text-xs">₹{relatedDish.price}</p>
                   </div>
                 </button>
               ))}
@@ -378,31 +310,25 @@ export default function DishDetailPage() {
           </div>
         )}
 
-
-
-
       </div>
 
-      <div className="h-24"></div> {/* Spacer for fixed button */}
+      <div className="h-28"></div> {/* Spacer for fixed button */}
 
       {/* Add To Cart Button - Fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 max-w-[430px] mx-auto">
-        <div className="bg-gradient-to-t from-[#F8F1E8] via-[#F8F1E8] to-transparent pt-8 pb-6 px-4">
-          <button
-            onClick={() => handleAddToCart()}
-            className="w-full bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] font-extrabold py-4.5 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-[#E28B4B]/20 hover:scale-[1.02] active:scale-95 transition-all"
-          >
-            <NotebookPen size={22} strokeWidth={2.5} />
-            <span className="text-lg tracking-wide uppercase">{t('placeOrder')}</span>
-          </button>
+      <div className="fixed bottom-0 left-0 right-0 z-20 max-w-[430px] mx-auto bg-gradient-to-t from-[#F8F1E8] via-[#F8F1E8] to-transparent pt-8 pb-8 px-5">
+        <button
+          onClick={() => handleAddToCart()}
+          className="w-full bg-[#3B2314] text-[#E7CFA8] font-bold py-4 rounded-full flex items-center justify-center gap-3 shadow-xl hover:scale-[1.02] active:scale-95 transition-all outline outline-offset-2 outline-[#3B2314]/50"
+        >
+          <span className="text-[17px] tracking-widest uppercase">ADD TO CART</span>
+        </button>
 
-          {/* Toast */}
-          {showAddedToast && (
-            <div className="absolute -top-12 left-4 right-4 bg-green-500/20 text-green-500 border border-green-500/30 px-4 py-3 rounded-xl text-sm font-bold text-center animate-fade-in-out backdrop-blur-sm">
-              Added to cart!
-            </div>
-          )}
-        </div>
+        {/* Toast */}
+        {showAddedToast && (
+          <div className="absolute -top-12 left-4 right-4 bg-green-500/20 text-green-500 border border-green-500/30 px-4 py-3 rounded-xl text-sm font-bold text-center animate-fade-in-out backdrop-blur-sm">
+            Added to cart!
+          </div>
+        )}
       </div>
     </div>
   );

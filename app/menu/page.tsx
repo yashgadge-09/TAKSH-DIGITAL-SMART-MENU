@@ -255,8 +255,8 @@ export default function MenuPage() {
               ₹{dish.price}
             </span>
             {dish.hasSpiceIndicator && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full bg-[#FFF0E5] text-[#E8650A] font-medium">
-                🌶️ Spicy
+              <span className="text-[10px] font-bold text-[#E8650A] uppercase tracking-wider bg-[#E8650A]/10 px-2.5 py-0.5 rounded-sm flex items-center justify-center min-w-16">
+                🔥 Spicy
               </span>
             )}
           </div>
