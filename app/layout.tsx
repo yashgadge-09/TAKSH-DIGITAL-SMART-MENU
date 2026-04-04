@@ -38,7 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased bg-[#0D0B0A]" suppressHydrationWarning>
+      <body className="font-sans antialiased bg-[#F8F1E8]" suppressHydrationWarning>
         <LanguageProvider>
           <CartProvider>
             {children}

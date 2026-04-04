@@ -439,8 +439,8 @@ export default function MenuPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-white font-bold text-3xl mb-2">Menu</h1>
-          <p className="text-[#8a6a52]">
+          <h1 className="text-[#2C1810] font-bold text-3xl mb-2">Menu</h1>
+          <p className="text-[#B89A7D]">
             {selectedCategory
               ? `Viewing ${selectedCategory} dishes.`
               : "View and manage dishes."}
@@ -450,7 +450,7 @@ export default function MenuPage() {
           {selectedCategory && (
             <button
               onClick={() => router.push('/admin/menu')}
-              className="px-4 py-2.5 border border-white/20 text-white font-medium rounded-lg hover:bg-white/5 transition-colors"
+              className="px-4 py-2.5 border border-[#EDE4D5] text-[#2C1810] font-medium rounded-lg hover:bg-[#EDE4D5] transition-colors"
             >
               Clear Filter
             </button>
@@ -460,7 +460,7 @@ export default function MenuPage() {
               resetForm()
               setShowAddForm(true)
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#E8650A] text-white font-medium rounded-lg hover:bg-[#E8650A]/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#3B2314] text-[#E7CFA8] font-medium rounded-lg hover:bg-[#3B2314]/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Dish
@@ -469,31 +469,31 @@ export default function MenuPage() {
       </div>
 
       {/* Menu Items Table */}
-      <div className="bg-[#151210] rounded-xl overflow-hidden">
+      <div className="bg-white border border-[#EDE4D5] rounded-xl overflow-hidden">
         <div className="p-6 border-b border-white/[0.05]">
           <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="text-white font-bold text-lg">
+            <h2 className="text-[#2C1810] font-bold text-lg">
               {selectedCategory ? `${selectedCategory} Items` : "Menu Items"}
             </h2>
-            <span className="text-[#8a6a52] text-sm">
+            <span className="text-[#B89A7D] text-sm">
               {filteredMenuItems.length} {filteredMenuItems.length === 1 ? "item" : "items"}
               {searchQuery && ` (filtered from ${selectedCategory ? menuItems.filter((item) => item.category === selectedCategory).length : menuItems.length})`}
             </span>
           </div>
 
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a6a52]" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B89A7D]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search dishes by name..."
-              className="w-full h-11 pl-11 pr-10 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] transition-colors"
+              className="w-full h-11 pl-11 pr-10 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a6a52] hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#B89A7D] hover:text-[#2C1810] transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -505,14 +505,14 @@ export default function MenuPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/[0.05]">
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Dish Image</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Dish Name</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Category</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Price</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Spice</th>
+                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Dish Image</th>
+                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Dish Name</th>
+                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Category</th>
+                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Price</th>
+                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Spice</th>
 
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Availability</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Actions</th>
+                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Availability</th>
+                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -537,18 +537,18 @@ export default function MenuPage() {
                     </div>
                   </td>
                   <td className="p-4">
-                    <div className="text-white font-medium text-sm">{item.name.en}</div>
-                    <div className="text-[#8a6a52] text-xs mt-0.5">{item.ingredients.en.join(", ")}</div>
+                    <div className="text-[#2C1810] font-medium text-sm">{item.name.en}</div>
+                    <div className="text-[#B89A7D] text-xs mt-0.5">{item.ingredients.en.join(", ")}</div>
                   </td>
-                  <td className="p-4 text-[#8a6a52] text-sm">{item.category}</td>
-                  <td className="p-4 text-white text-sm">₹{item.price}</td>
+                  <td className="p-4 text-[#B89A7D] text-sm">{item.category}</td>
+                  <td className="p-4 text-[#2C1810] text-sm">₹{item.price}</td>
                   <td className="p-4 text-sm">
                     {item.spiceLevel > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-[#E8650A]">
+                      <span className="inline-flex items-center gap-1 text-[#C4956A]">
                         🌶️ Spicy
                       </span>
                     ) : (
-                      <span className="text-[#8a6a52]">None</span>
+                      <span className="text-[#B89A7D]">None</span>
                     )}
                   </td>
 
@@ -565,7 +565,7 @@ export default function MenuPage() {
                             }`}
                         />
                       </button>
-                      <span className="text-[#8a6a52] text-xs">
+                      <span className="text-[#B89A7D] text-xs">
                         {item.isAvailable ? "Available" : "Hidden"}
                       </span>
                     </div>
@@ -574,7 +574,7 @@ export default function MenuPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleEdit(item)}
-                        className="px-3 py-1.5 border border-white/20 text-white text-sm rounded-md hover:bg-white/5 transition-colors"
+                        className="px-3 py-1.5 border border-[#EDE4D5] text-[#2C1810] text-sm rounded-md hover:bg-[#EDE4D5] transition-colors"
                       >
                         Edit
                       </button>
@@ -591,7 +591,7 @@ export default function MenuPage() {
               ))}
               {filteredMenuItems.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-[#8a6a52]">
+                  <td colSpan={7} className="p-8 text-center text-[#B89A7D]">
                     {searchQuery
                       ? "No dishes found for this search in the current category."
                       : "No dishes found for this category."}
@@ -606,9 +606,9 @@ export default function MenuPage() {
       {/* Add/Edit Form Modal */}
       {showAddForm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#151210] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-[#151210] p-6 border-b border-white/[0.05] flex items-center justify-between z-10">
-              <h2 className="text-white font-bold text-xl">
+          <div className="bg-white border border-[#EDE4D5] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border border-[#EDE4D5] p-6 border-b border-white/[0.05] flex items-center justify-between z-10">
+              <h2 className="text-[#2C1810] font-bold text-xl">
                 {editingItem ? "Edit Dish" : "Add New Dish"}
               </h2>
               <button
@@ -616,7 +616,7 @@ export default function MenuPage() {
                   setShowAddForm(false)
                   resetForm()
                 }}
-                className="text-[#8a6a52] hover:text-white transition-colors"
+                className="text-[#B89A7D] hover:text-[#2C1810] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -629,7 +629,7 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => setActiveTab("en")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "en"
-                    ? "bg-[#E28B4B] text-[#0D0B0A]"
+                    ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
                     : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
                     }`}
                 >
@@ -639,7 +639,7 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => setActiveTab("hi")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "hi"
-                    ? "bg-[#E28B4B] text-[#0D0B0A]"
+                    ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
                     : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
                     }`}
                 >
@@ -649,7 +649,7 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => setActiveTab("mr")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "mr"
-                    ? "bg-[#E28B4B] text-[#0D0B0A]"
+                    ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
                     : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
                     }`}
                 >
@@ -661,7 +661,7 @@ export default function MenuPage() {
               {activeTab === "en" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Dish Name (English) <span className="text-[#ef4444]">*</span>
                     </label>
                     <input
@@ -671,7 +671,7 @@ export default function MenuPage() {
                         setFormData({ ...formData, name_en: e.target.value })
                         setErrors({ ...errors, name_en: false })
                       }}
-                      className={`w-full h-11 px-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${errors.name_en ? "border-[#ef4444]" : "border-white/10"
+                      className={`w-full h-11 px-4 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] ${errors.name_en ? "border-[#ef4444]" : "border-[#EDE4D5]"
                         }`}
                       placeholder="e.g. Paneer Tikka"
                     />
@@ -681,7 +681,7 @@ export default function MenuPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       {"Chef's Note / Description (English)"} <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
@@ -691,7 +691,7 @@ export default function MenuPage() {
                         setErrors({ ...errors, description_en: false })
                       }}
                       rows={4}
-                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${errors.description_en ? "border-[#ef4444]" : "border-white/10"
+                      className={`w-full px-4 py-3 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none ${errors.description_en ? "border-[#ef4444]" : "border-[#EDE4D5]"
                         }`}
                       placeholder="Describe the dish in English..."
                     />
@@ -701,7 +701,7 @@ export default function MenuPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Ingredients (English) <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
@@ -711,25 +711,25 @@ export default function MenuPage() {
                         setErrors({ ...errors, ingredients_en: false })
                       }}
                       rows={3}
-                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${errors.ingredients_en ? "border-[#ef4444]" : "border-white/10"
+                      className={`w-full px-4 py-3 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none ${errors.ingredients_en ? "border-[#ef4444]" : "border-[#EDE4D5]"
                         }`}
                       placeholder="Paneer, Bell Peppers, Yogurt, Spices"
                     />
-                    <p className="text-[#8a6a52]/60 text-xs mt-1">comma separated</p>
+                    <p className="text-[#B89A7D]/60 text-xs mt-1">comma separated</p>
                     {errors.ingredients_en && (
                       <p className="text-[#ef4444] text-xs mt-1">This field is required</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Taste Description (English)
                     </label>
                     <input
                       type="text"
                       value={formData.tasteDescription_en}
                       onChange={(e) => setFormData({ ...formData, tasteDescription_en: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. Smoky & Tangy"
                     />
                   </div>
@@ -744,48 +744,48 @@ export default function MenuPage() {
                   </p>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Dish Name (Hindi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Dish Name (Hindi)</label>
                     <input
                       type="text"
                       value={formData.name_hi}
                       onChange={(e) => setFormData({ ...formData, name_hi: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. पनीर टिक्का"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       {"Chef's Note / Description (Hindi)"}
                     </label>
                     <textarea
                       value={formData.description_hi}
                       onChange={(e) => setFormData({ ...formData, description_hi: e.target.value })}
                       rows={4}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="हिंदी में विवरण लिखें..."
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Ingredients (Hindi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Ingredients (Hindi)</label>
                     <textarea
                       value={formData.ingredients_hi}
                       onChange={(e) => setFormData({ ...formData, ingredients_hi: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="पनीर, शिमला मिर्च, दही, मसाले"
                     />
-                    <p className="text-[#8a6a52]/60 text-xs mt-1">अल्पविराम से अलग करें</p>
+                    <p className="text-[#B89A7D]/60 text-xs mt-1">अल्पविराम से अलग करें</p>
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Taste Description (Hindi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Taste Description (Hindi)</label>
                     <input
                       type="text"
                       value={formData.tasteDescription_hi}
                       onChange={(e) => setFormData({ ...formData, tasteDescription_hi: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. धुएंदार और तीखा"
                     />
                   </div>
@@ -800,48 +800,48 @@ export default function MenuPage() {
                   </p>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Dish Name (Marathi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Dish Name (Marathi)</label>
                     <input
                       type="text"
                       value={formData.name_mr}
                       onChange={(e) => setFormData({ ...formData, name_mr: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. पनीर टिक्का"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       {"Chef's Note / Description (Marathi)"}
                     </label>
                     <textarea
                       value={formData.description_mr}
                       onChange={(e) => setFormData({ ...formData, description_mr: e.target.value })}
                       rows={4}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="मराठीत वर्णन लिहा..."
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Ingredients (Marathi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Ingredients (Marathi)</label>
                     <textarea
                       value={formData.ingredients_mr}
                       onChange={(e) => setFormData({ ...formData, ingredients_mr: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="पनीर, सिमला मिरची, दही, मसाले"
                     />
-                    <p className="text-[#8a6a52]/60 text-xs mt-1">स्वल्पविरामाने वेगळे करा</p>
+                    <p className="text-[#B89A7D]/60 text-xs mt-1">स्वल्पविरामाने वेगळे करा</p>
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Taste Description (Marathi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Taste Description (Marathi)</label>
                     <input
                       type="text"
                       value={formData.tasteDescription_mr}
                       onChange={(e) => setFormData({ ...formData, tasteDescription_mr: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. धुराळलेला आणि तिखट"
                     />
                   </div>
@@ -850,16 +850,16 @@ export default function MenuPage() {
 
               {/* Shared Fields - Always Visible */}
               <div className="border-t border-white/[0.05] pt-6 space-y-6">
-                <h3 className="text-white font-medium text-sm">Common Details</h3>
+                <h3 className="text-[#2C1810] font-medium text-sm">Common Details</h3>
 
                 {/* Price and Category */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Price <span className="text-[#ef4444]">*</span>
                     </label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a6a52]">₹</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#B89A7D]">₹</span>
                       <input
                         type="number"
                         value={formData.price}
@@ -867,7 +867,7 @@ export default function MenuPage() {
                           setFormData({ ...formData, price: e.target.value })
                           setErrors({ ...errors, price: false })
                         }}
-                        className={`w-full h-11 pl-8 pr-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${errors.price ? "border-[#ef4444]" : "border-white/10"
+                        className={`w-full h-11 pl-8 pr-4 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] ${errors.price ? "border-[#ef4444]" : "border-[#EDE4D5]"
                           }`}
                         placeholder="280"
                       />
@@ -877,11 +877,11 @@ export default function MenuPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Category</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Category</label>
                     <select
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] focus:outline-none focus:border-[#E8650A]"
                     >
                       {categoriesList.map((cat) => (
                         <option key={cat} value={cat}>
@@ -894,31 +894,31 @@ export default function MenuPage() {
 
                 {/* Spice Indicator */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-3">Spice Indicator</label>
+                  <label className="block text-[#B89A7D] text-sm mb-3">Spice Indicator</label>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, spiceIndicator: !formData.spiceIndicator })}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${formData.spiceIndicator
-                        ? "bg-[#E8650A] text-white"
-                        : "bg-[#1C1510] border border-white/10 text-[#8a6a52] hover:border-white/20"
+                        ? "bg-[#3B2314] text-[#E7CFA8]"
+                        : "bg-white border border-[#EDE4D5] border border-[#EDE4D5] text-[#B89A7D] hover:border-[#EDE4D5]"
                         }`}
                     >
                       {formData.spiceIndicator ? "🌶️ Spicy Indicator ON" : "No Spice Indicator"}
                     </button>
-                    <p className="text-[#8a6a52]/60 text-xs">Toggle if this dish should show a spicy indicator/chili icon.</p>
+                    <p className="text-[#B89A7D]/60 text-xs">Toggle if this dish should show a spicy indicator/chili icon.</p>
                   </div>
                 </div>
 
 
                 {/* Servings */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-2">Serves how many people</label>
+                  <label className="block text-[#B89A7D] text-sm mb-2">Serves how many people</label>
                   <input
                     type="number"
                     value={formData.servings}
                     onChange={(e) => setFormData({ ...formData, servings: e.target.value })}
-                    className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                    className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                     placeholder="2"
                     min="1"
                   />
@@ -926,10 +926,10 @@ export default function MenuPage() {
 
                 {/* Multiple Image Upload */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-2">Dish Images / GIFs</label>
+                  <label className="block text-[#B89A7D] text-sm mb-2">Dish Images / GIFs</label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-start">
                     {formData.images.map((img, idx) => (
-                      <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-white/10 relative group">
+                      <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-[#EDE4D5] relative group">
                         {isVideoMedia(img) ? (
                           <video src={img} muted loop autoPlay className="w-full h-full object-cover" />
                         ) : (
@@ -945,7 +945,7 @@ export default function MenuPage() {
                           onClick={() => setPreviewMediaUrl(img)}
                           className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
                         >
-                          <span className="text-xs font-medium text-white border border-white/30 bg-black/30 px-3 py-1.5 rounded-md">
+                          <span className="text-xs font-medium text-[#2C1810] border border-white/30 bg-black/30 px-3 py-1.5 rounded-md">
                             Preview
                           </span>
                         </button>
@@ -956,7 +956,7 @@ export default function MenuPage() {
                             newImages.splice(idx, 1)
                             setFormData({ ...formData, images: newImages })
                           }}
-                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-white flex items-center justify-center transition-colors"
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-[#2C1810] flex items-center justify-center transition-colors"
                           title="Remove image"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -964,13 +964,13 @@ export default function MenuPage() {
                       </div>
                     ))}
                     
-                    <label className={`aspect-square flex flex-col items-center justify-center gap-2 bg-[#1C1510] border border-dashed border-white/10 rounded-lg text-white cursor-pointer hover:border-[#E8650A] transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}>
+                    <label className={`aspect-square flex flex-col items-center justify-center gap-2 bg-white border border-[#EDE4D5] border border-dashed border-[#EDE4D5] rounded-lg text-[#2C1810] cursor-pointer hover:border-[#E8650A] transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}>
                       {isUploading ? (
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#E8650A]" />
                       ) : (
-                        <Plus className="w-5 h-5 text-[#8a6a52]" />
+                        <Plus className="w-5 h-5 text-[#B89A7D]" />
                       )}
-                      <span className="text-[10px] font-medium text-[#8a6a52]">
+                      <span className="text-[10px] font-medium text-[#B89A7D]">
                         {isUploading ? "Uploading..." : "Add Image"}
                       </span>
                       <input
@@ -986,7 +986,7 @@ export default function MenuPage() {
                   <div className="mt-4">
                     <input
                       type="text"
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] text-xs"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] text-xs"
                       placeholder="Paste image URL and press Enter..."
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -1004,55 +1004,55 @@ export default function MenuPage() {
 
                 {/* Nutritional Info */}
                 <div>
-                  <label className="block text-white text-sm font-medium mb-3">Nutritional Information</label>
+                  <label className="block text-[#2C1810] text-sm font-medium mb-3">Nutritional Information</label>
                   <div className="grid grid-cols-5 gap-3">
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Calories</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Calories</label>
                       <input
                         type="number"
                         value={formData.kcal}
                         onChange={(e) => setFormData({ ...formData, kcal: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Protein(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Protein(g)</label>
                       <input
                         type="number"
                         value={formData.protein}
                         onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Fat(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Fat(g)</label>
                       <input
                         type="number"
                         value={formData.fat}
                         onChange={(e) => setFormData({ ...formData, fat: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Carbs(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Carbs(g)</label>
                       <input
                         type="number"
                         value={formData.carbs}
                         onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Fibre(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Fibre(g)</label>
                       <input
                         type="number"
                         value={formData.fibre}
                         onChange={(e) => setFormData({ ...formData, fibre: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
@@ -1073,7 +1073,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Guest Favourite</span>
+                    <span className="text-[#2C1810] text-sm">Guest Favourite</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1088,7 +1088,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Chef Special</span>
+                    <span className="text-[#2C1810] text-sm">Chef Special</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1103,7 +1103,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Trending</span>
+                    <span className="text-[#2C1810] text-sm">Trending</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1118,7 +1118,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Available on Menu</span>
+                    <span className="text-[#2C1810] text-sm">Available on Menu</span>
                   </label>
                 </div>
               </div>
@@ -1128,7 +1128,7 @@ export default function MenuPage() {
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="w-full h-12 bg-[#E8650A] text-white font-semibold rounded-lg hover:bg-[#E8650A]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full h-12 bg-[#3B2314] text-[#E7CFA8] font-semibold rounded-lg hover:bg-[#3B2314]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isSaving
                     ? "Saving..."
@@ -1141,7 +1141,7 @@ export default function MenuPage() {
                     setShowAddForm(false)
                     resetForm()
                   }}
-                  className="w-full h-12 border border-white/20 text-white font-medium rounded-lg hover:bg-white/5 transition-colors"
+                  className="w-full h-12 border border-[#EDE4D5] text-[#2C1810] font-medium rounded-lg hover:bg-[#EDE4D5] transition-colors"
                 >
                   Cancel
                 </button>
@@ -1156,7 +1156,7 @@ export default function MenuPage() {
           <button
             type="button"
             onClick={() => setPreviewMediaUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-[#2C1810] flex items-center justify-center"
             aria-label="Close preview"
           >
             <X className="w-5 h-5" />

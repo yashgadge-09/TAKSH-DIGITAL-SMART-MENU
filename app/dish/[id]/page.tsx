@@ -112,17 +112,17 @@ export default function DishDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0D0B0A] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
-        <p className="ml-3 text-[#E7CFA8]">{t('loading')}</p>
+        <p className="ml-3 text-[#2C1810]">{t('loading')}</p>
       </div>
     );
   }
 
   if (!dish) {
     return (
-      <div className="min-h-screen bg-[#0D0B0A] flex items-center justify-center">
-        <p className="text-[#E7CFA8]">{t('dishNotFound')}</p>
+      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
+        <p className="text-[#2C1810]">{t('dishNotFound')}</p>
       </div>
     );
   }
@@ -159,9 +159,9 @@ export default function DishDetailPage() {
 
 
   return (
-    <div className="max-w-[430px] mx-auto min-h-screen bg-[#0D0B0A]">
+    <div className="max-w-[430px] mx-auto min-h-screen bg-[#F8F1E8]">
       {/* Hero Carousel */}
-      <div className="relative h-96 w-full bg-[#15110F]">
+      <div className="relative h-96 w-full bg-white border border-[#EDE4D5]">
         <Carousel setApi={setApi} className="w-full h-full">
           <CarouselContent className="h-96">
             {dish.images.map((img: string, index: number) => (
@@ -197,7 +197,7 @@ export default function DishDetailPage() {
               <div
                 key={i}
                 className={`w-1.5 h-1.5 rounded-full transition-all ${
-                  currentSlide === i ? "bg-[#E28B4B] w-4" : "bg-white/40"
+                  currentSlide === i ? "bg-[#3B2314] text-[#E7CFA8] w-4" : "bg-white/40"
                 }`}
               />
             ))}
@@ -207,9 +207,9 @@ export default function DishDetailPage() {
         {/* Back Button */}
         <button
           onClick={() => router.push('/menu')}
-          className="absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center hover:bg-black/70 transition-colors"
+          className="absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-[#F8F1E8]/80 flex items-center justify-center hover:bg-white transition-colors"
         >
-          <ArrowLeft className="w-5 h-5 text-white" />
+          <ArrowLeft className="w-5 h-5 text-[#2C1810]" />
         </button>
 
         {/* Favorite */}
@@ -219,7 +219,7 @@ export default function DishDetailPage() {
             className={`w-14 h-14 flex items-center justify-center backdrop-blur-xl border-2 rounded-2xl transition-all duration-500 shadow-2xl ${
               isFavorited 
                 ? "bg-red-500/30 border-red-500/60 shadow-red-500/40 scale-110" 
-                : "bg-white/10 border-white/20 shadow-black/50 hover:bg-white/20"
+                : "bg-[#F8F1E8] border-[#EDE4D5] shadow-[#C4956A]/10 hover:bg-[#EDE4D5]"
             }`}
           >
             <Heart
@@ -236,8 +236,8 @@ export default function DishDetailPage() {
       <div className="max-w-[430px] mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex justify-between items-start mb-4">
-          <h1 className="text-[#E7CFA8] font-bold text-2xl">{dish.name}</h1>
-          <span className="text-[#E28B4B] font-bold text-2xl">₹{dish.price}</span>
+          <h1 className="text-[#2C1810] font-bold text-2xl">{dish.name}</h1>
+          <span className="text-[#C4956A] font-bold text-2xl">₹{dish.price}</span>
         </div>
 
         {/* Highly Reordered */}
@@ -252,18 +252,18 @@ export default function DishDetailPage() {
         {dish.hasSpiceIndicator && (
           <div className="flex items-center gap-2 mb-4 bg-red-500/10 w-fit px-3 py-1 rounded-full border border-red-500/20">
             <span className="text-[#C18F58] text-sm">🌶️</span>
-            <span className="text-[#E28B4B] font-bold text-xs uppercase tracking-widest">
+            <span className="text-[#C4956A] font-bold text-xs uppercase tracking-widest">
               {t('spicy')}
             </span>
           </div>
         )}
 
         {/* How Does It Taste */}
-        <div className="bg-[#15110F] rounded-xl p-5 mb-6 border border-white/5 shadow-inner">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-5 mb-6 border border-[#EDE4D5] shadow-inner">
           <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-2.5">
             {t('howDoesItTaste')}
           </h3>
-          <p className="text-[#E7CFA8] italic text-sm leading-6">
+          <p className="text-[#2C1810] italic text-sm leading-6">
             "{dish.tasteDescription}"
           </p>
         </div>
@@ -275,32 +275,32 @@ export default function DishDetailPage() {
         </div>
 
         {/* Chef's Note */}
-        <div className="bg-[#15110F] rounded-xl p-4 border-l-4 border-[#E28B4B] mb-6">
-          <h2 className="text-[#E7CFA8] font-bold mb-2 flex items-center gap-2">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-4 border-l-4 border-[#E28B4B] mb-6">
+          <h2 className="text-[#2C1810] font-bold mb-2 flex items-center gap-2">
             👨‍🍳 {t('chefNote')}
           </h2>
           <p className="text-[#8E7F71] italic text-sm">{dish.description}</p>
         </div>
 
         {/* Ingredients */}
-        <div className="bg-[#15110F] rounded-xl p-6 mb-6 border border-white/5 shadow-inner">
+        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6 mb-6 border border-[#EDE4D5] shadow-inner">
           <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-3">
             {t('ingredients')}
           </h3>
-          <p className="text-[#E28B4B] text-sm leading-6 font-medium">{dish.ingredients.join(", ")}</p>
+          <p className="text-[#C4956A] text-sm leading-6 font-medium">{dish.ingredients.join(", ")}</p>
         </div>
 
         {recommendations.length > 0 && (
-          <section className="mb-8 rounded-2xl border border-[#E28B4B]/30 bg-[linear-gradient(135deg,rgba(226,139,75,0.14)_0%,rgba(21,17,15,0.95)_45%,rgba(13,11,10,0.96)_100%)] p-4 shadow-[0_0_0_1px_rgba(226,139,75,0.08),0_14px_30px_rgba(0,0,0,0.35)]">
+          <section className="mb-8 rounded-2xl border border-[#E28B4B]/30 bg-white p-4 shadow-[0_0_0_1px_rgba(226,139,75,0.08),0_14px_30px_rgba(0,0,0,0.35)]">
             <div className="flex items-start justify-between gap-4 mb-3">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.24em] text-[#C18F58] mb-1">Curated Picks</p>
-                <h3 className="text-[#F5DFC0] font-extrabold text-lg leading-tight flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#E28B4B]" />
+                <h3 className="text-[#2C1810] font-extrabold text-lg leading-tight flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#C4956A]" />
                   {t('Recommended')}
                 </h3>
               </div>
-              <span className="text-[11px] px-2.5 py-1 rounded-full border border-[#E28B4B]/40 text-[#E7CFA8] bg-[#0D0B0A]/60">
+              <span className="text-[11px] px-2.5 py-1 rounded-full border border-[#E28B4B]/40 text-[#2C1810] bg-[#F8F1E8]/60">
                 {recommendations.length} picks
               </span>
             </div>
@@ -310,7 +310,7 @@ export default function DishDetailPage() {
                 <button
                   key={recommendedDish.id}
                   onClick={() => router.push(`/dish/${recommendedDish.id}`)}
-                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#E28B4B]/25 bg-[#120F0D] hover:border-[#E28B4B] hover:-translate-y-0.5 transition-all text-left"
+                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#E28B4B]/25 bg-white hover:border-[#E28B4B] hover:-translate-y-0.5 transition-all text-left"
                 >
                   <div className="relative">
                     {(String(getRecommendationImage(recommendedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(recommendedDish)).includes('/video/upload/')) ? (
@@ -326,17 +326,17 @@ export default function DishDetailPage() {
                       />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0" />
-                    <span className="absolute top-2 left-2 text-[11px] font-bold rounded-md px-2 py-1 bg-[#0D0B0A]/80 text-[#E7CFA8] border border-white/10">
+                    <span className="absolute top-2 left-2 text-[11px] font-bold rounded-md px-2 py-1 bg-[#F8F1E8]/80 text-[#2C1810] border border-[#EDE4D5]">
                       #{index + 1}
                     </span>
                   </div>
 
                   <div className="p-3">
-                    <p className="text-[#F5DFC0] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
+                    <p className="text-[#2C1810] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
                       {getRecommendationName(recommendedDish)}
                     </p>
                     <div className="mt-2 flex items-center justify-between">
-                      <p className="text-[#E28B4B] font-extrabold text-base">₹{recommendedDish.price}</p>
+                      <p className="text-[#C4956A] font-extrabold text-base">₹{recommendedDish.price}</p>
                       <span className="text-[10px] uppercase tracking-wider text-[#8E7F71]">View</span>
                     </div>
                   </div>
@@ -348,13 +348,13 @@ export default function DishDetailPage() {
 
         {moreLikeThisDishes.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-[#E7CFA8] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
+            <h3 className="text-[#2C1810] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
             <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
               {moreLikeThisDishes.map((relatedDish) => (
                 <button
                   key={relatedDish.id}
                   onClick={() => router.push(`/dish/${relatedDish.id}`)}
-                  className="w-36 flex-shrink-0 bg-[#15110F] rounded-xl overflow-hidden border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors text-left"
+                  className="w-36 flex-shrink-0 bg-white border border-[#EDE4D5] rounded-xl overflow-hidden border border-[#EDE4D5] hover:border-[#E28B4B] transition-colors text-left"
                 >
                   {(String(getRecommendationImage(relatedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(relatedDish)).includes('/video/upload/')) ? (
                     <video src={String(getRecommendationImage(relatedDish))} muted loop autoPlay className="w-full h-24 object-cover" />
@@ -369,8 +369,8 @@ export default function DishDetailPage() {
                     />
                   )}
                   <div className="p-2.5">
-                    <p className="text-[#E7CFA8] text-xs font-semibold truncate">{getRecommendationName(relatedDish)}</p>
-                    <p className="text-[#E28B4B] font-bold text-sm mt-1">₹{relatedDish.price}</p>
+                    <p className="text-[#2C1810] text-xs font-semibold truncate">{getRecommendationName(relatedDish)}</p>
+                    <p className="text-[#C4956A] font-bold text-sm mt-1">₹{relatedDish.price}</p>
                   </div>
                 </button>
               ))}
@@ -387,10 +387,10 @@ export default function DishDetailPage() {
 
       {/* Add To Cart Button - Fixed at bottom */}
       <div className="fixed bottom-0 left-0 right-0 z-20 max-w-[430px] mx-auto">
-        <div className="bg-gradient-to-t from-[#0D0B0A] via-[#0D0B0A] to-transparent pt-8 pb-6 px-4">
+        <div className="bg-gradient-to-t from-[#F8F1E8] via-[#F8F1E8] to-transparent pt-8 pb-6 px-4">
           <button
             onClick={() => handleAddToCart()}
-            className="w-full bg-[#E28B4B] text-[#0D0B0A] font-extrabold py-4.5 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-[#E28B4B]/20 hover:scale-[1.02] active:scale-95 transition-all"
+            className="w-full bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] font-extrabold py-4.5 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-[#E28B4B]/20 hover:scale-[1.02] active:scale-95 transition-all"
           >
             <NotebookPen size={22} strokeWidth={2.5} />
             <span className="text-lg tracking-wide uppercase">{t('placeOrder')}</span>
