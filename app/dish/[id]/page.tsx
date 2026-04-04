@@ -161,7 +161,7 @@ export default function DishDetailPage() {
   return (
     <div className="max-w-[430px] mx-auto min-h-screen bg-[#F8F1E8]">
       {/* Hero Carousel */}
-      <div className="relative h-96 w-full bg-white border-b border-[#EDE4D5] rounded-b-[2.5rem] overflow-hidden shadow-sm">
+      <div className="relative h-96 mx-2 mt-2 bg-white border border-[#EDE4D5] rounded-[2.5rem] overflow-hidden shadow-md">
         <Carousel setApi={setApi} className="w-full h-full">
           <CarouselContent className="h-96">
             {dish.images.map((img: string, index: number) => (

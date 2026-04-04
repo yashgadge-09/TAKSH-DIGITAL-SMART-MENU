@@ -226,10 +226,10 @@ export default function MenuPage() {
       className="cursor-pointer group"
     >
       <div className={`
-        bg-white rounded-2xl border border-[#EDE4D5] 
+        bg-white rounded-[1.75rem] border border-[#EDE4D5] shadow-md
         flex items-center gap-4
         transition-all duration-200
-        hover:border-[#C4956A]/50 hover:shadow-[0_4px_20px_rgba(196,149,106,0.12)]
+        hover:border-[#C4956A]/50 hover:shadow-[0_8px_30px_rgba(196,149,106,0.15)] hover:-translate-y-0.5
         ${compact ? 'p-3' : 'p-4'}
       `}>
         {/* Info */}
