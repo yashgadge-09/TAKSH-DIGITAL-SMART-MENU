@@ -393,14 +393,6 @@ export default function MenuPage() {
                   ))}
                 </div>
 
-                {/* Refresh */}
-                <button
-                  onClick={() => loadData()}
-                  className="p-2 rounded-full hover:bg-white/5 text-[#8E7F71] transition-colors"
-                  title="Refresh Menu"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                </button>
 
                 {/* Cart */}
                 <button
