@@ -213,19 +213,19 @@ export default function DishDetailPage() {
         </button>
 
         {/* Favorite */}
-        <div className="absolute top-6 right-6 z-10">
+        <div className="absolute top-4 right-4 z-10">
           <button
             onClick={() => setIsFavorited(!isFavorited)}
-            className={`w-14 h-14 flex items-center justify-center backdrop-blur-xl border-2 rounded-2xl transition-all duration-500 shadow-2xl ${
+            className={`w-11 h-11 flex items-center justify-center backdrop-blur-md border rounded-2xl transition-all duration-500 shadow-xl ${
               isFavorited 
                 ? "bg-red-500/30 border-red-500/60 shadow-red-500/40 scale-110" 
-                : "bg-[#F8F1E8] border-[#EDE4D5] shadow-[#C4956A]/10 hover:bg-[#EDE4D5]"
+                : "bg-black/30 border-white/20 shadow-black/10 hover:bg-black/40"
             }`}
           >
             <Heart
-              size={32}
+              size={24}
               fill={isFavorited ? "#ef4444" : "none"}
-              stroke={isFavorited ? "#ef4444" : "white"}
+              stroke={isFavorited ? "#ef4444" : "rgba(255,255,255,0.9)"}
               className={`${isFavorited ? "animate-pulse" : ""} transition-transform`}
             />
           </button>
