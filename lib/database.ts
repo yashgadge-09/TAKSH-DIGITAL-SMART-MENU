@@ -89,6 +89,28 @@ function shuffleArray<T>(items: T[]): T[] {
   return next
 }
 
+function shuffleWithinCategoryPreserveCategoryOrder(items: any[]): any[] {
+  const categoryOrder: string[] = []
+  const groupedByCategory = new Map<string, any[]>()
+
+  for (const item of items) {
+    const category = String(item?.category || '')
+    if (!groupedByCategory.has(category)) {
+      groupedByCategory.set(category, [])
+      categoryOrder.push(category)
+    }
+    groupedByCategory.get(category)!.push(item)
+  }
+
+  const output: any[] = []
+  for (const category of categoryOrder) {
+    const categoryItems = groupedByCategory.get(category) || []
+    output.push(...shuffleArray(categoryItems))
+  }
+
+  return output
+}
+
 export async function getRecommendations(
   currentDishId: string,
   currentCategory: string,
@@ -142,7 +164,7 @@ export async function getDishRecommendations(
 
     if (recommendations.length > 0) {
       const prioritizedRecommendations = pickByPriorityTiers(recommendations, targetCount).slice(0, targetCount)
-      return shuffleArray(prioritizedRecommendations)
+      return shuffleWithinCategoryPreserveCategoryOrder(prioritizedRecommendations)
     }
   } catch (error) {
     if (!isPermissionDeniedError(error)) {
