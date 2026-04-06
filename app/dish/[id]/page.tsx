@@ -29,6 +29,10 @@ export default function DishDetailPage() {
 
   const [showAddedToast, setShowAddedToast] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recommendationSectionRef = useRef<HTMLDivElement | null>(null);
+  const [shouldScrollToRecommendations, setShouldScrollToRecommendations] = useState(false);
+  const [highlightRecommendations, setHighlightRecommendations] = useState(false);
   const [api, setApi] = useState<CarouselApi>();
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -45,8 +49,36 @@ export default function DishDetailPage() {
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
       }
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    const canShowRecommendations =
+      Boolean(dish?.id) &&
+      items.some((item) => item.id === dish.id) &&
+      !showAddedToast &&
+      recommendations.length > 0;
+
+    if (!canShowRecommendations || !shouldScrollToRecommendations) return;
+
+    requestAnimationFrame(() => {
+      recommendationSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setHighlightRecommendations(true);
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightRecommendations(false);
+      }, 1200);
+      setShouldScrollToRecommendations(false);
+    });
+  }, [dish, items, showAddedToast, recommendations.length, shouldScrollToRecommendations]);
 
   useEffect(() => {
     let mounted = true;
@@ -155,6 +187,7 @@ export default function DishDetailPage() {
     });
 
     setShowAddedToast(true);
+    setShouldScrollToRecommendations(true);
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
     }
@@ -328,7 +361,12 @@ export default function DishDetailPage() {
         )}
 
         {isCurrentDishInCart && !showAddedToast && recommendations.length > 0 && (
-          <section className="mb-8 rounded-2xl border border-[#C4956A]/35 bg-[linear-gradient(135deg,rgba(196,149,106,0.15)_0%,rgba(255,255,255,0.96)_45%,rgba(248,241,232,0.98)_100%)] p-4 shadow-[0_0_0_1px_rgba(196,149,106,0.08),0_14px_30px_rgba(44,24,16,0.08)]">
+          <section
+            ref={recommendationSectionRef}
+            className={`mb-8 rounded-2xl border border-[#C4956A]/35 bg-[linear-gradient(135deg,rgba(196,149,106,0.15)_0%,rgba(255,255,255,0.96)_45%,rgba(248,241,232,0.98)_100%)] p-4 shadow-[0_0_0_1px_rgba(196,149,106,0.08),0_14px_30px_rgba(44,24,16,0.08)] transition-all duration-500 ${
+              highlightRecommendations ? "ring-2 ring-[#C4956A]/50 shadow-[0_0_0_1px_rgba(196,149,106,0.2),0_18px_34px_rgba(44,24,16,0.14)]" : ""
+            }`}
+          >
             <div className="mb-3">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.24em] text-[#B89A7D] mb-1">Curated Picks</p>
