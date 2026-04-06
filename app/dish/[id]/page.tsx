@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Heart, NotebookPen, Sparkles } from "lucide-react";
 import { getDishById, getDishRecommendations, getMoreLikeThisDishes } from "@/lib/database";
@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/carousel";
 
 export default function DishDetailPage() {
+  const TOAST_DURATION_MS = 950;
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const { addItem } = useCart();
+  const { addItem, items } = useCart();
   const { language: lang, t } = useLanguage();
 
   const [dish, setDish] = useState<any>(null);
@@ -27,6 +28,7 @@ export default function DishDetailPage() {
   const [isFavorited, setIsFavorited] = useState(false);
 
   const [showAddedToast, setShowAddedToast] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [api, setApi] = useState<CarouselApi>();
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -37,6 +39,14 @@ export default function DishDetailPage() {
       setCurrentSlide(api.selectedScrollSnap());
     });
   }, [api]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -145,7 +155,12 @@ export default function DishDetailPage() {
     });
 
     setShowAddedToast(true);
-    setTimeout(() => setShowAddedToast(false), 2000);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setShowAddedToast(false);
+    }, TOAST_DURATION_MS);
   };
 
   const getRecommendationName = (recommendedDish: any) =>
@@ -155,6 +170,12 @@ export default function DishDetailPage() {
     recommendedDish?.image ||
     recommendedDish?.image_url ||
     "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+
+  const recommendationIds = new Set(recommendations.map((item) => item.id));
+  const uniqueMoreLikeThisDishes = moreLikeThisDishes.filter(
+    (item) => !recommendationIds.has(item.id)
+  );
+  const isCurrentDishInCart = Boolean(dish?.id) && items.some((item) => item.id === dish.id);
 
 
 
@@ -272,15 +293,11 @@ export default function DishDetailPage() {
           </div>
         )}
 
-        {/* More Like This (Combining curations to match sketch) */}
-        {(recommendations.length > 0 || moreLikeThisDishes.length > 0) && (
+        {uniqueMoreLikeThisDishes.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-[#2C1810] font-bold text-lg mb-3">More like This</h3>
+            <h3 className="text-[#2C1810] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
-              {[...recommendations, ...moreLikeThisDishes]
-                .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i) // unique
-                .slice(0, 8)
-                .map((relatedDish: any) => (
+              {uniqueMoreLikeThisDishes.slice(0, 10).map((relatedDish: any) => (
                 <button
                   key={relatedDish.id}
                   onClick={() => router.push(`/dish/${relatedDish.id}`)}
@@ -310,6 +327,56 @@ export default function DishDetailPage() {
           </div>
         )}
 
+        {isCurrentDishInCart && !showAddedToast && recommendations.length > 0 && (
+          <section className="mb-8 rounded-2xl border border-[#C4956A]/35 bg-[linear-gradient(135deg,rgba(196,149,106,0.15)_0%,rgba(255,255,255,0.96)_45%,rgba(248,241,232,0.98)_100%)] p-4 shadow-[0_0_0_1px_rgba(196,149,106,0.08),0_14px_30px_rgba(44,24,16,0.08)]">
+            <div className="mb-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.24em] text-[#B89A7D] mb-1">Curated Picks</p>
+                <h3 className="text-[#2C1810] font-extrabold text-lg leading-tight flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#C4956A]" />
+                  {t('completeYourMeal')}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+              {recommendations.map((recommendedDish) => (
+                <button
+                  key={recommendedDish.id}
+                  onClick={() => router.push(`/dish/${recommendedDish.id}`)}
+                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#C4956A]/25 bg-white hover:border-[#C4956A] hover:-translate-y-0.5 transition-all text-left shadow-sm"
+                >
+                  <div className="relative">
+                    {(String(getRecommendationImage(recommendedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(recommendedDish)).includes('/video/upload/')) ? (
+                      <video src={String(getRecommendationImage(recommendedDish))} muted loop autoPlay className="w-full h-28 object-cover" />
+                    ) : (
+                      <img
+                        src={String(getRecommendationImage(recommendedDish))}
+                        alt={getRecommendationName(recommendedDish)}
+                        className="w-full h-28 object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+                        }}
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0" />
+                  </div>
+
+                  <div className="p-3">
+                    <p className="text-[#2C1810] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
+                      {getRecommendationName(recommendedDish)}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-[#C4956A] font-extrabold text-base">₹{recommendedDish.price}</p>
+                      <span className="text-[10px] uppercase tracking-wider text-[#B89A7D]">View</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
       </div>
 
       <div className="h-28"></div> {/* Spacer for fixed button */}
@@ -325,8 +392,14 @@ export default function DishDetailPage() {
 
         {/* Toast */}
         {showAddedToast && (
-          <div className="absolute -top-12 left-4 right-4 bg-green-500/20 text-green-500 border border-green-500/30 px-4 py-3 rounded-xl text-sm font-bold text-center animate-fade-in-out backdrop-blur-sm">
-            Added to cart!
+          <div className="absolute -top-14 left-4 right-4 rounded-2xl border border-emerald-300/40 bg-[linear-gradient(135deg,rgba(16,185,129,0.18)_0%,rgba(255,255,255,0.92)_100%)] text-emerald-800 px-4 py-3 shadow-[0_10px_30px_rgba(16,185,129,0.2)] backdrop-blur-sm animate-fade-in-out">
+            <div className="flex items-center justify-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">✓</span>
+              <div className="text-left">
+                <p className="text-sm font-extrabold leading-tight">Added to cart</p>
+                <p className="text-[11px] font-medium text-emerald-700/90">Suggestions will appear right away</p>
+              </div>
+            </div>
           </div>
         )}
       </div>
