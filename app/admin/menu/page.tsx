@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
 import { Plus, X, Search } from "lucide-react"
@@ -21,7 +21,7 @@ type LanguageTab = "en" | "hi" | "mr"
 
 type MenuItem = any
 
-export default function MenuPage() {
+function MenuPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const selectedCategory = searchParams.get("category")?.trim() || ""
@@ -1181,5 +1181,21 @@ export default function MenuPage() {
         </div>
       )}
     </AdminLayout>
+  )
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense
+      fallback={
+        <AdminLayout>
+          <div className="flex items-center justify-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
+          </div>
+        </AdminLayout>
+      }
+    >
+      <MenuPageContent />
+    </Suspense>
   )
 }

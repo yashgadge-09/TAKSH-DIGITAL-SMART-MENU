@@ -1,0 +1,5 @@
+# Keep repository text files normalized and avoid CRLF warnings on Windows.
+* text=auto
+
+# MCP config should stay LF for stable diffs across platforms.
+.vscode/mcp.json text eol=lf
