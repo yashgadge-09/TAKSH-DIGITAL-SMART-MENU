@@ -238,11 +238,18 @@ export default function MenuPage() {
             {dish.name}
           </h3>
 
-          {dish.tasteDescription && (
-            <p className="text-[#B89A7D] text-sm italic mt-1 line-clamp-1">
-              {dish.tasteDescription}
-            </p>
-          )}
+          <div className="flex items-center gap-2 mt-1">
+            {dish.tasteDescription && (
+              <p className="text-[#B89A7D] text-sm italic line-clamp-1">
+                {dish.tasteDescription}
+              </p>
+            )}
+            {dish.hasSpiceIndicator && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#E8650A] uppercase tracking-wider bg-[#E8650A]/10 px-2.5 py-0.5 rounded-sm shrink-0">
+                🔥 Spicy
+              </span>
+            )}
+          </div>
 
           {!compact && dish.ingredients && dish.ingredients.length > 0 && (
             <p className="text-[#C5B5A3] text-xs mt-1 line-clamp-1">
@@ -250,15 +257,10 @@ export default function MenuPage() {
             </p>
           )}
 
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center mt-2">
             <span className={`text-[#2C1810] font-bold ${compact ? 'text-sm' : 'text-lg'}`}>
               ₹{dish.price}
             </span>
-            {dish.hasSpiceIndicator && (
-              <span className="text-[10px] font-bold text-[#E8650A] uppercase tracking-wider bg-[#E8650A]/10 px-2.5 py-0.5 rounded-sm flex items-center justify-center min-w-16">
-                🔥 Spicy
-              </span>
-            )}
           </div>
         </div>
 
