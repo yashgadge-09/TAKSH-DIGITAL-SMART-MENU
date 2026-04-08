@@ -11,7 +11,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react"
-import { useState, createContext, useContext, type ReactNode } from "react"
+import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 
@@ -135,7 +135,46 @@ export function AdminSidebar() {
 }
 
 export function AdminLayout({ children }: { children: ReactNode }) {
+  const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
+  const [isSessionReady, setIsSessionReady] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    ;(async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!mounted) return
+
+      if (!data.session) {
+        router.replace("/admin")
+        return
+      }
+
+      setIsSessionReady(true)
+    })()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!session) {
+          router.replace("/admin")
+        }
+      }
+    )
+
+    return () => {
+      mounted = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [router])
+
+  if (!isSessionReady) {
+    return (
+      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center text-[#2C1810]">
+        Checking admin session...
+      </div>
+    )
+  }
 
   return (
     <SidebarContext.Provider value={{ collapsed, setCollapsed }}>

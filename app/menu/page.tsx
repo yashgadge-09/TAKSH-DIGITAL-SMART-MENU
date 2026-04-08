@@ -7,7 +7,7 @@ import { useCart } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
-import { getAllDishes } from "@/lib/database";
+import { getAllDishes, trackMenuView } from "@/lib/database";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 
@@ -97,6 +97,18 @@ export default function MenuPage() {
 
   useEffect(() => {
     loadData();
+
+    const now = Date.now();
+    const key = "taksh:last-menu-view-ts";
+    const previous = Number(window.sessionStorage.getItem(key) || 0);
+
+    if (!Number.isFinite(previous) || now - previous > 30000) {
+      window.sessionStorage.setItem(key, String(now));
+      void trackMenuView().catch(() => {
+        // Keep menu UX responsive even if analytics event insert fails.
+      });
+    }
+
     const handleFocus = () => loadData();
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);

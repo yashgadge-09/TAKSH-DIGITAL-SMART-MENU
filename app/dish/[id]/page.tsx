@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Heart, NotebookPen, Sparkles } from "lucide-react";
-import { getDishById, getDishRecommendations, getMoreLikeThisDishes } from "@/lib/database";
+import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, trackFavourite } from "@/lib/database";
+import { getFavouriteSessionKey, getOrCreateSessionId } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import {
@@ -26,6 +27,7 @@ export default function DishDetailPage() {
   const [moreLikeThisDishes, setMoreLikeThisDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [sessionId, setSessionId] = useState("");
 
   const [showAddedToast, setShowAddedToast] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,6 +83,10 @@ export default function DishDetailPage() {
   }, [dish, items, showAddedToast, recommendations.length, shouldScrollToRecommendations]);
 
   useEffect(() => {
+    setSessionId(getOrCreateSessionId());
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     (async () => {
       try {
@@ -121,6 +127,27 @@ export default function DishDetailPage() {
         };
 
         setDish(mappedDish);
+
+        const activeSessionId = getOrCreateSessionId();
+        setSessionId(activeSessionId);
+        const isAlreadyFavourited = window.sessionStorage.getItem(
+          getFavouriteSessionKey(activeSessionId, rawDish.id)
+        ) === "1";
+        setIsFavorited(isAlreadyFavourited);
+
+        const trackingKey = `taksh:last-dish-view-${rawDish.id}`;
+        const now = Date.now();
+        const previousViewTs = Number(window.sessionStorage.getItem(trackingKey) || 0);
+        if (!Number.isFinite(previousViewTs) || now - previousViewTs > 30000) {
+          window.sessionStorage.setItem(trackingKey, String(now));
+          void trackDishView(
+            rawDish.id,
+            rawDish.name_en || rawDish.name?.en || mappedDish.name || "Unknown Dish",
+            rawDish.category || "General"
+          ).catch(() => {
+            // Tracking failures should not block dish detail rendering.
+          });
+        }
 
         const dishRecommendations = await getDishRecommendations(
           rawDish.id,
@@ -210,6 +237,43 @@ export default function DishDetailPage() {
   );
   const isCurrentDishInCart = Boolean(dish?.id) && items.some((item) => item.id === dish.id);
 
+  const handleFavouriteToggle = () => {
+    const nextState = !isFavorited;
+    setIsFavorited(nextState);
+
+    if (!dish) return;
+
+    const activeSessionId = sessionId || getOrCreateSessionId();
+    if (!sessionId) setSessionId(activeSessionId);
+
+    const favouriteKey = getFavouriteSessionKey(activeSessionId, dish.id);
+
+    if (nextState && window.sessionStorage.getItem(favouriteKey) === "1") {
+      return;
+    }
+
+    if (nextState) {
+      window.sessionStorage.setItem(favouriteKey, "1");
+    } else {
+      window.sessionStorage.removeItem(favouriteKey);
+    }
+
+    void trackFavourite(
+      dish.id,
+      dish.name || dish.name_en || "Unknown Dish",
+      activeSessionId,
+      nextState
+    ).catch(() => {
+      // Do not interrupt favorite UX when analytics insert fails.
+      if (nextState) {
+        window.sessionStorage.removeItem(favouriteKey);
+      } else {
+        window.sessionStorage.setItem(favouriteKey, "1");
+      }
+      setIsFavorited(!nextState);
+    });
+  };
+
 
 
   return (
@@ -269,7 +333,7 @@ export default function DishDetailPage() {
         {/* Favorite */}
         <div className="absolute top-4 right-4 z-10">
           <button
-            onClick={() => setIsFavorited(!isFavorited)}
+            onClick={handleFavouriteToggle}
             className={`w-11 h-11 flex items-center justify-center backdrop-blur-md border rounded-2xl transition-all duration-500 shadow-xl ${
               isFavorited 
                 ? "bg-red-500/30 border-red-500/60 shadow-red-500/40 scale-110" 
