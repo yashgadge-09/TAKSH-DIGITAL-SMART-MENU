@@ -226,11 +226,11 @@ export default function MenuPage() {
       className="cursor-pointer group"
     >
       <div className={`
-        bg-white rounded-[1.75rem] border border-[#EDE4D5] shadow-md
+        bg-white rounded-[1.75rem] border border-[#EDE4D5] shadow-md overflow-visible
         flex items-center gap-4
         transition-all duration-200
         hover:border-[#C4956A]/50 hover:shadow-[0_8px_30px_rgba(196,149,106,0.15)] hover:-translate-y-0.5
-        ${compact ? 'p-3' : 'p-4'}
+        ${compact ? 'p-3' : 'p-4 pb-5'}
       `}>
         {/* Info */}
         <div className="flex-1 min-w-0">
@@ -251,11 +251,6 @@ export default function MenuPage() {
             )}
           </div>
 
-          {!compact && dish.ingredients && dish.ingredients.length > 0 && (
-            <p className="text-[#C5B5A3] text-xs mt-1 line-clamp-1">
-              {dish.ingredients.slice(0, 3).join(" · ")}
-            </p>
-          )}
 
           <div className="flex items-center mt-2">
             <span className={`text-[#2C1810] font-bold ${compact ? 'text-sm' : 'text-lg'}`}>
@@ -265,8 +260,8 @@ export default function MenuPage() {
         </div>
 
         {/* Image + Add Button */}
-        <div className="flex flex-col items-center gap-2 flex-shrink-0">
-          <div className={`rounded-2xl overflow-hidden bg-[#1A0D04] ring-1 ring-[#3B2314]/30 shadow-md ${compact ? 'w-14 h-14' : 'w-[72px] h-[72px]'}`}>
+        <div className="flex-shrink-0 relative">
+          <div className={`rounded-2xl overflow-hidden bg-[#1A0D04] ring-1 ring-[#3B2314]/30 shadow-md ${compact ? 'w-14 h-14' : 'w-[84px] h-[84px]'}`}>
             {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
               <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
             ) : (
@@ -280,22 +275,42 @@ export default function MenuPage() {
               />
             )}
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleAddDishToCart({
-                id: dish.id,
-                name: dish.name,
-                price: dish.price,
-                image: dish.image,
-                category: dish.category,
-              });
-            }}
-            className="bg-[#3B2314] text-[#E7CFA8] p-1.5 rounded-lg hover:bg-[#2A1609] transition-colors"
-            title="Add to order"
-          >
-            <NotebookPen size={14} />
-          </button>
+          {!compact && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddDishToCart({
+                  id: dish.id,
+                  name: dish.name,
+                  price: dish.price,
+                  image: dish.image,
+                  category: dish.category,
+                });
+              }}
+              className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-white border border-[#C4956A] text-[#C4956A] text-xs font-bold px-4 py-1 rounded-full shadow-md hover:bg-[#C4956A] hover:text-white transition-all whitespace-nowrap tracking-wide"
+              title="Add to order"
+            >
+              ADD +
+            </button>
+          )}
+          {compact && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddDishToCart({
+                  id: dish.id,
+                  name: dish.name,
+                  price: dish.price,
+                  image: dish.image,
+                  category: dish.category,
+                });
+              }}
+              className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 bg-white border border-[#C4956A] text-[#C4956A] text-[10px] font-bold px-3 py-1 rounded-full shadow-md hover:bg-[#C4956A] hover:text-white transition-all whitespace-nowrap"
+              title="Add to order"
+            >
+              ADD +
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -337,9 +352,9 @@ export default function MenuPage() {
                   category: dish.category,
                 });
               }}
-              className="bg-[#3B2314] text-[#E7CFA8] p-1.5 rounded-lg hover:bg-[#2A1609] transition-colors"
+              className="bg-white border border-[#C4956A] text-[#C4956A] text-[9px] font-bold px-2 py-1 rounded-full shadow-sm hover:bg-[#C4956A] hover:border-[#C4956A] hover:text-white transition-all whitespace-nowrap"
             >
-              <NotebookPen size={12} />
+              ADD +
             </button>
           </div>
         </div>
