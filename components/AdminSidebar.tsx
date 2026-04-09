@@ -14,6 +14,7 @@ import {
 import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
+import { TakshBrand } from "@/components/TakshBrand"
 
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -36,6 +37,7 @@ function SidebarContent() {
   const pathname = usePathname()
   const router = useRouter()
   const { collapsed, setCollapsed } = useContext(SidebarContext)
+  const activeItem = navItems.find((item) => pathname === item.href)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -47,15 +49,15 @@ function SidebarContent() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen bg-[#F8F1E8] border-r border-[#EDE4D5] border-r border-[#EDE4D5] flex flex-col transition-all duration-300 z-40",
+          "fixed left-0 top-0 z-40 flex h-screen flex-col bg-[linear-gradient(180deg,#2F1B11_0%,#24150D_38%,#1A0F09_100%)] transition-all duration-300",
           collapsed ? "w-16" : "w-[220px]"
         )}
       >
         {/* Logo Section */}
-        <div className="p-4 flex items-center gap-3">
+        <div className="flex items-center gap-3 p-4">
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="text-[#8E7F71] hover:text-[#2C1810] transition-colors"
+            className="text-[#B99063] transition-colors hover:text-[#F2C786]"
           >
             {collapsed ? (
               <PanelLeft className="w-5 h-5" />
@@ -64,25 +66,13 @@ function SidebarContent() {
             )}
           </button>
           {!collapsed && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[#3B2314] flex items-center justify-center">
-                <span className="text-[#2C1810] font-bold text-sm">T</span>
-              </div>
-              <div>
-                <span className="text-[#2C1810] font-bold text-lg">TAKSH</span>
-                <span className="text-[#B89A7D] text-sm ml-2">Admin Panel</span>
-              </div>
-            </div>
+            <TakshBrand className="scale-[0.64] origin-left" vibrant />
           )}
+          {collapsed ? <TakshBrand compact className="ml-auto" /> : null}
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4">
-          {!collapsed && (
-            <p className="text-[#B89A7D] text-xs font-medium px-3 mb-3">
-              Control panel
-            </p>
-          )}
           <ul className="space-y-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href
@@ -92,10 +82,10 @@ function SidebarContent() {
                   <Link
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
                       isActive
-                        ? "bg-[#3B2314] text-[#E7CFA8]"
-                        : "text-[#2C1810] hover:bg-[#EDE4D5]",
+                        ? "border border-[#8A5A34] bg-[#3B2416] text-[#F3D4A3]"
+                        : "text-[#C6A175] hover:bg-[#2D1C12] hover:text-[#F1C88F]",
                       collapsed && "justify-center px-2"
                     )}
                   >
@@ -114,14 +104,22 @@ function SidebarContent() {
       {/* Top Header Bar */}
       <header
         className={cn(
-          "fixed top-0 right-0 h-14 bg-white border border-[#EDE4D5] border-b border-[#EDE4D5] flex items-center justify-end px-6 z-30 transition-all duration-300",
+          "fixed top-0 right-0 z-30 flex h-16 items-center justify-between bg-[linear-gradient(180deg,#2F1B11_0%,#24150D_38%,#1A0F09_100%)] px-6 transition-all duration-300",
           collapsed ? "left-16" : "left-[220px]"
         )}
       >
+        <div className="flex items-center gap-4">
+          <div className="hidden items-center gap-2 rounded-lg border border-[#7A4F2F] bg-[#2A1A11] px-3 py-1.5 sm:flex">
+            {activeItem ? <activeItem.icon className="h-4 w-4 text-[#D6A874]" /> : null}
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#E7C699]">
+              {activeItem?.label || "Admin"}
+            </span>
+          </div>
+        </div>
 
         <button
           onClick={handleLogout}
-          className="ml-3 px-4 py-2 bg-[#F8F1E8] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm font-medium hover:bg-[#EDE4D5] transition-colors"
+          className="ml-3 rounded-lg border border-[#8A592F] bg-[#3B2416] px-4 py-2 text-sm font-medium text-[#F0C78D] transition-colors hover:bg-[#4A2D1C]"
         >
           Logout
         </button>
@@ -170,7 +168,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   if (!isSessionReady) {
     return (
-      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center text-[#2C1810]">
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#2A190F_0%,#140C08_100%)] text-[#F1D2A2]">
         Checking admin session...
       </div>
     )
@@ -178,15 +176,15 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarContext.Provider value={{ collapsed, setCollapsed }}>
-      <div className="min-h-screen bg-[#F8F1E8]">
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(247,237,224,1)_0%,rgba(244,229,208,1)_48%,rgba(240,221,196,1)_100%)]">
         <SidebarContent />
         <main
           className={cn(
-            "pt-14 min-h-screen transition-all duration-300",
+            "min-h-screen pt-16 transition-all duration-300",
             collapsed ? "ml-16" : "ml-[220px]"
           )}
         >
-          <div className="p-8">{children}</div>
+          <div className="p-6 md:p-8">{children}</div>
         </main>
       </div>
     </SidebarContext.Provider>

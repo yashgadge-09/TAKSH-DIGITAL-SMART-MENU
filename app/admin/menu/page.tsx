@@ -437,10 +437,12 @@ function MenuPageContent() {
   return (
     <AdminLayout>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-8 overflow-hidden rounded-3xl border border-[#7A4F2F] bg-[linear-gradient(130deg,#2A180F_0%,#1A100A_70%,#130B07_100%)] p-6 shadow-[0_20px_50px_rgba(15,9,5,0.5)] sm:p-7">
+        <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-[#2C1810] font-bold text-3xl mb-2">Menu</h1>
-          <p className="text-[#B89A7D]">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Catalog</p>
+          <h1 className="text-[#F4DEC0] font-bold text-3xl mb-2">Menu</h1>
+          <p className="text-[#C4A078]">
             {selectedCategory
               ? `Viewing ${selectedCategory} dishes.`
               : "View and manage dishes."}
@@ -450,7 +452,7 @@ function MenuPageContent() {
           {selectedCategory && (
             <button
               onClick={() => router.push('/admin/menu')}
-              className="px-4 py-2.5 border border-[#EDE4D5] text-[#2C1810] font-medium rounded-lg hover:bg-[#EDE4D5] transition-colors"
+              className="px-4 py-2.5 rounded-lg border border-[#8A592F] text-[#F2C786] font-medium hover:bg-[#3A2517] transition-colors"
             >
               Clear Filter
             </button>
@@ -460,22 +462,23 @@ function MenuPageContent() {
               resetForm()
               setShowAddForm(true)
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#3B2314] text-[#E7CFA8] font-medium rounded-lg hover:bg-[#3B2314]/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#F0A33D] text-[#2B170D] font-semibold hover:bg-[#F4B55A] transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Dish
           </button>
         </div>
+        </div>
       </div>
 
       {/* Menu Items Table */}
-      <div className="bg-white border border-[#EDE4D5] rounded-xl overflow-hidden">
-        <div className="p-6 border-b border-white/[0.05]">
+      <div className="rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] overflow-hidden shadow-[0_14px_30px_rgba(90,53,25,0.12)]">
+        <div className="p-6 border-b border-[#E8D3BD]">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="text-[#2C1810] font-bold text-lg">
               {selectedCategory ? `${selectedCategory} Items` : "Menu Items"}
             </h2>
-            <span className="text-[#B89A7D] text-sm">
+            <span className="text-[#8E6D4E] text-sm">
               {filteredMenuItems.length} {filteredMenuItems.length === 1 ? "item" : "items"}
               {searchQuery && ` (filtered from ${selectedCategory ? menuItems.filter((item) => item.category === selectedCategory).length : menuItems.length})`}
             </span>
@@ -488,7 +491,7 @@ function MenuPageContent() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search dishes by name..."
-              className="w-full h-11 pl-11 pr-10 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
+              className="w-full h-11 rounded-lg border border-[#D4B391] bg-white pl-11 pr-10 text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
             />
             {searchQuery && (
               <button
@@ -504,22 +507,22 @@ function MenuPageContent() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.05]">
-                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Dish Image</th>
-                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Dish Name</th>
-                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Category</th>
-                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Price</th>
-                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Spice</th>
+              <tr className="border-b border-[#E8D3BD] bg-white/45">
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Dish Image</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Dish Name</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Category</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Price</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Spice</th>
 
-                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Availability</th>
-                <th className="text-left text-[#B89A7D] font-medium text-sm p-4">Actions</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Availability</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredMenuItems.map((item) => (
                 <tr
                   key={item.id}
-                  className={`border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors ${!item.isAvailable ? "opacity-50" : ""}`}
+                  className={`border-b border-[#EEDFCF] hover:bg-white/70 transition-colors ${!item.isAvailable ? "opacity-50" : ""}`}
                 >
                   <td className="p-4">
                     <div className="w-11 h-11 rounded-full overflow-hidden">
@@ -538,9 +541,9 @@ function MenuPageContent() {
                   </td>
                   <td className="p-4">
                     <div className="text-[#2C1810] font-medium text-sm">{item.name.en}</div>
-                    <div className="text-[#B89A7D] text-xs mt-0.5">{item.ingredients.en.join(", ")}</div>
+                    <div className="text-[#8E6D4E] text-xs mt-0.5">{item.ingredients.en.join(", ")}</div>
                   </td>
-                  <td className="p-4 text-[#B89A7D] text-sm">{item.category}</td>
+                  <td className="p-4 text-[#8E6D4E] text-sm">{item.category}</td>
                   <td className="p-4 text-[#2C1810] text-sm">₹{item.price}</td>
                   <td className="p-4 text-sm">
                     {item.spiceLevel > 0 ? (
@@ -548,7 +551,7 @@ function MenuPageContent() {
                         🔥 Spicy
                       </span>
                     ) : (
-                      <span className="text-[#B89A7D]">None</span>
+                      <span className="text-[#8E6D4E]">None</span>
                     )}
                   </td>
 
@@ -565,7 +568,7 @@ function MenuPageContent() {
                             }`}
                         />
                       </button>
-                      <span className="text-[#B89A7D] text-xs">
+                      <span className="text-[#8E6D4E] text-xs">
                         {item.isAvailable ? "Available" : "Hidden"}
                       </span>
                     </div>
@@ -574,7 +577,7 @@ function MenuPageContent() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleEdit(item)}
-                        className="px-3 py-1.5 border border-[#EDE4D5] text-[#2C1810] text-sm rounded-md hover:bg-[#EDE4D5] transition-colors"
+                        className="px-3 py-1.5 rounded-md border border-[#D4B391] text-[#2C1810] text-sm hover:bg-[#F3E2CD] transition-colors"
                       >
                         Edit
                       </button>
@@ -591,7 +594,7 @@ function MenuPageContent() {
               ))}
               {filteredMenuItems.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-[#B89A7D]">
+                  <td colSpan={7} className="p-8 text-center text-[#8E6D4E]">
                     {searchQuery
                       ? "No dishes found for this search in the current category."
                       : "No dishes found for this category."}
@@ -605,9 +608,9 @@ function MenuPageContent() {
 
       {/* Add/Edit Form Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-[#EDE4D5] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border border-[#EDE4D5] p-6 border-b border-white/[0.05] flex items-center justify-between z-10">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] shadow-[0_25px_60px_rgba(0,0,0,0.35)]">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E8D3BD] bg-[#FFF4E8]/95 p-6 backdrop-blur-sm">
               <h2 className="text-[#2C1810] font-bold text-xl">
                 {editingItem ? "Edit Dish" : "Add New Dish"}
               </h2>
@@ -629,8 +632,8 @@ function MenuPageContent() {
                   type="button"
                   onClick={() => setActiveTab("en")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "en"
-                    ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
-                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    ? "bg-[#F0A33D] text-[#2B170D]"
+                    : "bg-[#2A1B11] text-[#C5A077] hover:bg-[#3A2518]"
                     }`}
                 >
                   <span className="text-base">EN</span> English
@@ -639,8 +642,8 @@ function MenuPageContent() {
                   type="button"
                   onClick={() => setActiveTab("hi")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "hi"
-                    ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
-                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    ? "bg-[#F0A33D] text-[#2B170D]"
+                    : "bg-[#2A1B11] text-[#C5A077] hover:bg-[#3A2518]"
                     }`}
                 >
                   <span className="text-base">HI</span> Hindi
@@ -649,8 +652,8 @@ function MenuPageContent() {
                   type="button"
                   onClick={() => setActiveTab("mr")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "mr"
-                    ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
-                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    ? "bg-[#F0A33D] text-[#2B170D]"
+                    : "bg-[#2A1B11] text-[#C5A077] hover:bg-[#3A2518]"
                     }`}
                 >
                   <span className="text-base">MR</span> Marathi
@@ -1128,7 +1131,7 @@ function MenuPageContent() {
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="w-full h-12 bg-[#3B2314] text-[#E7CFA8] font-semibold rounded-lg hover:bg-[#3B2314]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full h-12 rounded-lg bg-[#F0A33D] text-[#2B170D] font-semibold hover:bg-[#F4B55A] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isSaving
                     ? "Saving..."
@@ -1141,7 +1144,7 @@ function MenuPageContent() {
                     setShowAddForm(false)
                     resetForm()
                   }}
-                  className="w-full h-12 border border-[#EDE4D5] text-[#2C1810] font-medium rounded-lg hover:bg-[#EDE4D5] transition-colors"
+                  className="w-full h-12 rounded-lg border border-[#D4B391] text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors"
                 >
                   Cancel
                 </button>
