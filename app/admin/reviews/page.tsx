@@ -63,38 +63,39 @@ export default function ReviewsPage() {
 
   return (
     <AdminLayout>
-      <div className="mb-8">
-        <h1 className="text-[#2C1810] font-bold text-3xl mb-2">Reviews</h1>
-        <p className="text-[#B89A7D]">Manage guest feedback and visibility.</p>
+      <div className="mb-8 overflow-hidden rounded-3xl border border-[#7A4F2F] bg-[linear-gradient(130deg,#2A180F_0%,#1A100A_70%,#130B07_100%)] p-7 shadow-[0_20px_50px_rgba(15,9,5,0.5)]">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Guest Sentiment</p>
+        <h1 className="mb-2 text-3xl font-bold text-[#F4DEC0]">Reviews</h1>
+        <p className="text-[#C4A078]">Manage guest feedback and visibility.</p>
       </div>
 
       {error ? (
-        <div className="bg-white border border-[#EDE4D5] rounded-xl p-4 mb-6 text-[#ef4444]">
+        <div className="mb-6 rounded-xl border border-[#D8917A] bg-[#FFF0EB] p-4 text-[#B24C2D]">
           {error}
         </div>
       ) : null}
 
-      <div className="bg-white border border-[#EDE4D5] rounded-xl overflow-hidden">
-        <div className="p-6 border-b border-white/[0.05]">
+      <div className="overflow-hidden rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] shadow-[0_14px_30px_rgba(90,53,25,0.12)]">
+        <div className="border-b border-[#E9D4BA] p-6">
           <h2 className="text-[#2C1810] font-bold text-lg">All reviews</h2>
         </div>
 
-        <div className="divide-y divide-white/[0.06]">
+        <div className="divide-y divide-[#EAD7C2]">
           {isLoading ? (
-            <div className="p-6 text-[#B89A7D]">Loading...</div>
+            <div className="p-6 text-[#8E6D4E]">Loading...</div>
           ) : reviews.length === 0 ? (
-            <div className="p-6 text-[#B89A7D]">No reviews found.</div>
+            <div className="p-6 text-[#8E6D4E]">No reviews found.</div>
           ) : (
             reviews.map((review) => {
               const isPublic =
                 review.is_public ?? review.isPublic ?? false
               return (
-                <div key={review.id} className="p-6">
+                <div key={review.id} className="bg-white/45 p-6 transition-colors hover:bg-white/70">
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <ReviewStars rating={review.stars ?? 0} />
                     <button
                       onClick={() => handleToggle(review)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/[0.08] border border-white/15 rounded-lg text-[#2C1810] text-sm"
+                      className="flex items-center gap-2 rounded-lg border border-[#D6B797] bg-white px-3 py-1.5 text-sm text-[#2C1810] transition-colors hover:bg-[#F7EAD9]"
                       type="button"
                     >
                       {isPublic ? (

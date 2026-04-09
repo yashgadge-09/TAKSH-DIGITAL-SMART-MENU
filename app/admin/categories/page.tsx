@@ -137,15 +137,16 @@ export default function CategoriesPage() {
   return (
     <AdminLayout>
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-[#2C1810] font-bold text-3xl mb-2">Categories</h1>
-        <p className="text-[#B89A7D]">Organize your menu sections.</p>
+      <div className="mb-8 overflow-hidden rounded-3xl border border-[#7A4F2F] bg-[linear-gradient(130deg,#2A180F_0%,#1A100A_70%,#130B07_100%)] p-7 shadow-[0_20px_50px_rgba(15,9,5,0.5)]">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Menu Structure</p>
+        <h1 className="mb-2 text-3xl font-bold text-[#F4DEC0]">Categories</h1>
+        <p className="text-[#C4A078]">Organize your menu sections.</p>
       </div>
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Categories List */}
-        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+        <div className="rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] p-6 shadow-[0_14px_30px_rgba(90,53,25,0.12)]">
           <div className="flex items-center justify-between mb-4 gap-4">
             <h2 className="text-[#2C1810] font-bold text-lg">Categories</h2>
             <span className="text-[#B89A7D] text-sm">
@@ -161,7 +162,7 @@ export default function CategoriesPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search dishes by name..."
-                className="w-full h-11 pl-11 pr-10 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
+                className="h-11 w-full rounded-lg border border-[#D4B391] bg-white pl-11 pr-10 text-[#2C1810] placeholder:text-[#B89A7D] transition-colors focus:border-[#E8650A] focus:outline-none"
               />
               {searchQuery && (
                 <button
@@ -176,7 +177,7 @@ export default function CategoriesPage() {
             <select
               value={selectedCategoryFilter}
               onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-              className="h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] focus:outline-none focus:border-[#E8650A]"
+              className="h-11 rounded-lg border border-[#D4B391] bg-white px-4 text-[#2C1810] focus:border-[#E8650A] focus:outline-none"
             >
               <option value="all">All categories</option>
               {categories.map((category) => (
@@ -195,7 +196,7 @@ export default function CategoriesPage() {
               return (
                 <li key={category.id}>
                   <div
-                    className="flex items-center justify-between p-3 rounded-lg transition-colors hover:bg-white/[0.03]"
+                    className="flex items-center justify-between rounded-lg border border-transparent p-3 transition-colors hover:border-[#E5CCAE] hover:bg-white/55"
                   >
                     {/* Category Name */}
                     <div
@@ -210,7 +211,7 @@ export default function CategoriesPage() {
 
                     {/* Right side - Item count and actions */}
                     <div className="flex items-center gap-3">
-                      <span className="text-[#B89A7D] text-sm bg-white border border-[#EDE4D5] px-2.5 py-1 rounded-md">
+                      <span className="rounded-md border border-[#DFC5A5] bg-white px-2.5 py-1 text-sm text-[#8E6D4E]">
                         {searchQuery
                           ? `${categoryDishes.length}/${totalDishes.length} items`
                           : `${categoryDishes.length} items`}
@@ -228,11 +229,11 @@ export default function CategoriesPage() {
                   </div>
 
                   {hasActiveDishFilter && categoryDishes.length > 0 && (
-                    <div className="ml-3 mr-3 mb-2 bg-white border border-[#EDE4D5] border border-white/[0.05] rounded-lg overflow-hidden">
+                    <div className="mb-2 ml-3 mr-3 overflow-hidden rounded-lg border border-[#E3C9AA] bg-white">
                       {categoryDishes.map((dish) => (
                         <div
                           key={dish.id}
-                          className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/[0.05] last:border-b-0"
+                          className="flex items-center justify-between gap-3 border-b border-[#F0E0CE] px-3 py-2 last:border-b-0"
                         >
                           <div className="min-w-0">
                             <p className="text-sm text-[#2C1810] truncate">{getDishDisplayName(dish)}</p>
@@ -240,7 +241,7 @@ export default function CategoriesPage() {
                           </div>
                           <button
                             onClick={() => openDishEditor(category.name, dish.id)}
-                            className="px-3 py-1.5 border border-[#EDE4D5] text-[#2C1810] text-xs rounded-md hover:bg-[#EDE4D5] transition-colors"
+                            className="rounded-md border border-[#D4B391] px-3 py-1.5 text-xs text-[#2C1810] transition-colors hover:bg-[#F3E2CD]"
                           >
                             Edit
                           </button>
@@ -260,7 +261,7 @@ export default function CategoriesPage() {
         </div>
 
         {/* Add Category Form */}
-        <div className="bg-white border border-[#EDE4D5] rounded-xl p-6">
+        <div className="rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] p-6 shadow-[0_14px_30px_rgba(90,53,25,0.12)]">
           <h2 className="text-[#2C1810] font-bold text-lg mb-4">Add category</h2>
           <div className="space-y-4">
             <div>
@@ -271,7 +272,7 @@ export default function CategoriesPage() {
                 type="text"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
+                className="h-11 w-full rounded-lg border border-[#D4B391] bg-white px-4 text-[#2C1810] placeholder:text-[#B89A7D] transition-colors focus:border-[#E8650A] focus:outline-none"
                 placeholder="e.g. Snacks"
               />
             </div>
@@ -282,13 +283,13 @@ export default function CategoriesPage() {
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-6 py-2.5 bg-[#3B2314] text-[#E7CFA8] font-medium rounded-lg hover:bg-[#3B2314]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="rounded-lg bg-[#3B2314] px-6 py-2.5 font-medium text-[#E7CFA8] transition-colors hover:bg-[#4A2C1C] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? "Saving..." : "Save"}
               </button>
               <button
                 onClick={handleClear}
-                className="px-6 py-2.5 border border-[#EDE4D5] text-[#2C1810] font-medium rounded-lg hover:bg-[#EDE4D5] transition-colors"
+                className="rounded-lg border border-[#D4B391] px-6 py-2.5 font-medium text-[#2C1810] transition-colors hover:bg-[#F3E2CD]"
               >
                 Clear
               </button>
@@ -307,7 +308,7 @@ export default function CategoriesPage() {
           />
           
           {/* Modal */}
-          <div className="relative bg-white border border-[#EDE4D5] rounded-2xl p-6 max-w-[360px] w-full mx-4">
+          <div className="relative mx-4 w-full max-w-[360px] rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] p-6 shadow-[0_14px_30px_rgba(90,53,25,0.2)]">
             <div className="flex flex-col items-center text-center">
               <div className="mb-4">
                 <Trash2 className="w-10 h-10 text-[#ef4444]" />
@@ -323,14 +324,14 @@ export default function CategoriesPage() {
               <div className="flex gap-3 w-full">
                 <button
                   onClick={closeDeleteModal}
-                  className="flex-1 h-11 border border-white/15 text-[#2C1810] font-medium rounded-xl hover:bg-[#EDE4D5] transition-colors"
+                  className="flex-1 h-11 rounded-xl border border-[#D4B391] font-medium text-[#2C1810] transition-colors hover:bg-[#F3E2CD]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={confirmDelete}
                   disabled={isSaving}
-                  className="flex-1 h-11 bg-[#ef4444] text-[#2C1810] font-bold rounded-xl hover:bg-[#ef4444]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="flex-1 h-11 rounded-xl bg-[#C74E33] font-bold text-[#FFE2D8] transition-colors hover:bg-[#B9442A] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSaving ? "Deleting..." : "Delete"}
                 </button>
