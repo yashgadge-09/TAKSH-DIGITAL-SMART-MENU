@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
@@ -21,11 +21,36 @@ const MAIN_PREVIEW_CATEGORIES = [
   { label: "Chinese", aliases: ["chinese"] },
 ];
 
-export default function MenuPage() {
+function MenuPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { totalItems, addItem, items } = useCart();
-  const [activeCategory, setActiveCategory] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
+  
+  useEffect(() => {
+    const currentCategory = searchParams.get("category") || "All";
+    const currentSearch = searchParams.get("search") || "";
+    
+    if (activeCategory !== currentCategory || searchQuery !== currentSearch) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (activeCategory === "All") {
+        params.delete("category");
+      } else {
+        params.set("category", activeCategory);
+      }
+      
+      if (!searchQuery) {
+        params.delete("search");
+      } else {
+        params.set("search", searchQuery);
+      }
+      
+      const newQueryString = params.toString();
+      router.replace(`${pathname}${newQueryString ? '?' + newQueryString : ''}`, { scroll: false });
+    }
+  }, [activeCategory, searchQuery, pathname, router, searchParams]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
@@ -595,5 +620,17 @@ export default function MenuPage() {
         initialRating={reviewRating}
       />
     </div>
+  );
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C4956A]" />
+      </div>
+    }>
+      <MenuPageContent />
+    </Suspense>
   );
 }
