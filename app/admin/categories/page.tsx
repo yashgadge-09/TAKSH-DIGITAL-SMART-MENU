@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
 import { Trash2, Search, X } from "lucide-react"
 import {
@@ -16,7 +16,10 @@ interface Category {
   name: string
 }
 
-export default function CategoriesPage() {
+function CategoriesPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
   const [categories, setCategories] = useState<Category[]>([])
   const [newCategoryName, setNewCategoryName] = useState("")
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -24,9 +27,27 @@ export default function CategoriesPage() {
   const [dishes, setDishes] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all")
-  const router = useRouter()
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "")
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState(searchParams.get("category") || "all")
+
+  useEffect(() => {
+    const currentSearch = searchParams.get("search") || ""
+    const currentCategory = searchParams.get("category") || "all"
+    
+    if (searchQuery !== currentSearch || selectedCategoryFilter !== currentCategory) {
+      const params = new URLSearchParams(searchParams.toString())
+      
+      if (!searchQuery) params.delete("search")
+      else params.set("search", searchQuery)
+      
+      if (selectedCategoryFilter === "all") params.delete("category")
+      else params.set("category", selectedCategoryFilter)
+      
+      const queryString = params.toString()
+      router.replace(`${pathname}${queryString ? '?' + queryString : ''}`, { scroll: false })
+    }
+  }, [searchQuery, selectedCategoryFilter, pathname, router, searchParams])
+
 
   const loadData = async () => {
     setIsLoading(true)
@@ -371,5 +392,19 @@ export default function CategoriesPage() {
         </div>
       )}
     </AdminLayout>
+  )
+}
+
+export default function CategoriesPage() {
+  return (
+    <Suspense fallback={
+      <AdminLayout>
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
+        </div>
+      </AdminLayout>
+    }>
+      <CategoriesPageContent />
+    </Suspense>
   )
 }

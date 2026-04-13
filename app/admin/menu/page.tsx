@@ -1,10 +1,11 @@
 "use client"
 
 import { Suspense, useEffect, useState } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
-import { Plus, X, Search } from "lucide-react"
+import { Plus, X, Search, Crop as CropIcon } from "lucide-react"
 import Image from "next/image"
+import { ImageCropperModal } from "@/components/ImageCropperModal"
 import {
   addDish,
   deleteDish,
@@ -24,6 +25,7 @@ type MenuItem = any
 function MenuPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const pathname = usePathname()
   const selectedCategory = searchParams.get("category")?.trim() || ""
   const editDishId = searchParams.get("edit")?.trim() || ""
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -35,7 +37,26 @@ function MenuPageContent() {
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [categoriesList, setCategoriesList] = useState<string[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "")
+  const [cropImageUrl, setCropImageUrl] = useState<string | null>(null)
+  const [existingCropIndex, setExistingCropIndex] = useState<number | null>(null)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null)
+  const [errorModalOpen, setErrorModalOpen] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  
+  useEffect(() => {
+    const currentSearch = searchParams.get("search") || ""
+    if (searchQuery !== currentSearch) {
+      const params = new URLSearchParams(searchParams.toString())
+      if (!searchQuery) params.delete("search")
+      else params.set("search", searchQuery)
+      
+      const queryString = params.toString()
+      router.replace(`${pathname}${queryString ? '?' + queryString : ''}`, { scroll: false })
+    }
+  }, [searchQuery, pathname, router, searchParams])
+
   const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
@@ -56,7 +77,7 @@ function MenuPageContent() {
     tasteDescription_mr: "",
     // Shared fields
     price: "",
-    category: "Starter",
+    category: "",
     images: [] as string[],
     spiceIndicator: false,
 
@@ -119,9 +140,14 @@ function MenuPageContent() {
     const dishes = dishesRes || []
     const categoriesRows = categoriesRes || []
 
-    setCategoriesList(
-      categoriesRows.map((c: any) => c.name).filter(Boolean)
-    )
+    const cats = categoriesRows.map((c: any) => c.name).filter(Boolean)
+    setCategoriesList(cats)
+
+    // Set a valid default category if none selected
+    setFormData(prev => ({
+      ...prev,
+      category: prev.category === "" && cats.length > 0 ? (selectedCategory || cats[0]) : prev.category
+    }))
 
     // Map Supabase rows -> UI state shape
     setMenuItems(
@@ -188,7 +214,11 @@ function MenuPageContent() {
       ingredients_mr: "",
       tasteDescription_mr: "",
       price: "",
+<<<<<<< HEAD
       category: resolvedSelectedCategory || "Starter",
+=======
+      category: selectedCategory || categoriesList[0] || "",
+>>>>>>> ui/extra
       images: [],
       spiceIndicator: false,
 
@@ -244,9 +274,38 @@ function MenuPageContent() {
       if (newErrors.name_en || newErrors.description_en || newErrors.ingredients_en) {
         setActiveTab("en")
       }
+      
+      const missingFields = [];
+      if (newErrors.name_en) missingFields.push("Dish Name (English)");
+      if (newErrors.description_en) missingFields.push("Description (English)");
+      if (newErrors.ingredients_en) missingFields.push("Ingredients (English)");
+      if (newErrors.price) missingFields.push("Price");
+      
+      setValidationErrors(missingFields);
+      setErrorModalOpen(true);
+      
       return false
     }
     return true
+  }
+
+  const scrollToError = (errorsList: string[]) => {
+    const fieldMapping: Record<string, string> = {
+      "Dish Name (English)": "field_name_en",
+      "Description (English)": "field_description_en",
+      "Ingredients (English)": "field_ingredients_en",
+      "Price": "field_price"
+    };
+    const firstError = errorsList[0];
+    if (firstError && fieldMapping[firstError]) {
+      setTimeout(() => {
+        const el = document.getElementById(fieldMapping[firstError]);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+      }, 100);
+    }
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -279,7 +338,45 @@ function MenuPageContent() {
     } finally {
       setIsUploading(false)
     }
+
+    e.target.value = ''
   }
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    try {
+      if (existingCropIndex !== null) {
+        setIsUploading(true)
+        const formDataUpload = new FormData()
+        formDataUpload.append("file", croppedBlob, "cropped-image.jpg")
+        
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formDataUpload,
+        })
+        const data = await res.json()
+        
+        if (data.url) {
+          setFormData((prev) => {
+            const newImages = [...prev.images]
+            newImages[existingCropIndex] = data.url
+            return { ...prev, images: newImages }
+          })
+        }
+        
+        handleCropCancel()
+        setIsUploading(false)
+      }
+    } catch (err) {
+      console.error("Error uploading cropped image:", err)
+      setIsUploading(false)
+    }
+  }
+
+  const handleCropCancel = () => {
+    setExistingCropIndex(null)
+    setCropImageUrl(null)
+  }
+
 
   const handleSave = async () => {
     if (!validateForm()) return
@@ -432,15 +529,24 @@ function MenuPageContent() {
     router.replace(next ? `/admin/menu?${next}` : "/admin/menu")
   }, [editDishId, menuItems, searchParams, router])
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (item: MenuItem) => {
+    setItemToDelete(item)
+    setDeleteModalOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return
     setIsSaving(true)
     try {
-      await deleteDish(id)
+      await deleteDish(itemToDelete.id)
       await loadMenu()
+      setDeleteModalOpen(false)
+      setItemToDelete(null)
     } finally {
       setIsSaving(false)
     }
   }
+
 
   const handleToggleAvailability = async (id: string) => {
     const current = menuItems.find((item) => item.id === id)
@@ -558,7 +664,8 @@ function MenuPageContent() {
               {filteredMenuItems.map((item) => (
                 <tr
                   key={item.id}
-                  className={`border-b border-[#EEDFCF] hover:bg-white/70 transition-colors ${!item.isAvailable ? "opacity-50" : ""}`}
+                  onClick={() => handleEdit(item)}
+                  className={`border-b border-[#EEDFCF] hover:bg-white/70 transition-colors cursor-pointer ${!item.isAvailable ? "opacity-50" : ""}`}
                 >
                   <td className="p-4">
                     <div className="w-11 h-11 rounded-full overflow-hidden">
@@ -594,7 +701,10 @@ function MenuPageContent() {
                   <td className="p-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleToggleAvailability(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleAvailability(item.id);
+                        }}
                         disabled={isSaving}
                         className={`relative w-10 h-5 rounded-full transition-colors ${item.isAvailable ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
                           }`}
@@ -612,13 +722,19 @@ function MenuPageContent() {
                   <td className="p-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleEdit(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(item);
+                        }}
                         className="px-3 py-1.5 rounded-md border border-[#D4B391] text-[#2C1810] text-sm hover:bg-[#F3E2CD] transition-colors"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(item);
+                        }}
                         disabled={isSaving}
                         className="text-[#ef4444] text-sm font-medium hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
                       >
@@ -704,6 +820,7 @@ function MenuPageContent() {
                       Dish Name (English) <span className="text-[#ef4444]">*</span>
                     </label>
                     <input
+                      id="field_name_en"
                       type="text"
                       value={formData.name_en}
                       onChange={(e) => {
@@ -724,6 +841,7 @@ function MenuPageContent() {
                       {"Chef's Note / Description (English)"} <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
+                      id="field_description_en"
                       value={formData.description_en}
                       onChange={(e) => {
                         setFormData({ ...formData, description_en: e.target.value })
@@ -744,6 +862,7 @@ function MenuPageContent() {
                       Ingredients (English) <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
+                      id="field_ingredients_en"
                       value={formData.ingredients_en}
                       onChange={(e) => {
                         setFormData({ ...formData, ingredients_en: e.target.value })
@@ -900,6 +1019,7 @@ function MenuPageContent() {
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#B89A7D]">₹</span>
                       <input
+                        id="field_price"
                         type="number"
                         value={formData.price}
                         onChange={(e) => {
@@ -968,7 +1088,7 @@ function MenuPageContent() {
                   <label className="block text-[#B89A7D] text-sm mb-2">Dish Images / GIFs</label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-start">
                     {formData.images.map((img, idx) => (
-                      <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-[#EDE4D5] relative group">
+                      <div key={idx} className={`aspect-square rounded-lg overflow-hidden border-2 relative group ${idx === 0 ? 'border-[#E8650A]' : 'border-[#EDE4D5]'}`}>
                         {isVideoMedia(img) ? (
                           <video src={img} muted loop autoPlay className="w-full h-full object-cover" />
                         ) : (
@@ -984,7 +1104,7 @@ function MenuPageContent() {
                           onClick={() => setPreviewMediaUrl(img)}
                           className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
                         >
-                          <span className="text-xs font-medium text-[#2C1810] border border-white/30 bg-black/30 px-3 py-1.5 rounded-md">
+                          <span className="text-xs font-medium text-white border border-white/40 bg-black/40 px-3 py-1.5 rounded-md shadow-sm">
                             Preview
                           </span>
                         </button>
@@ -995,11 +1115,44 @@ function MenuPageContent() {
                             newImages.splice(idx, 1)
                             setFormData({ ...formData, images: newImages })
                           }}
-                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-[#2C1810] flex items-center justify-center transition-colors"
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-white flex items-center justify-center transition-colors z-10"
                           title="Remove image"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <X className="w-3 h-3" />
                         </button>
+                        {!isVideoMedia(img) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExistingCropIndex(idx);
+                              setCropImageUrl(img);
+                            }}
+                            className="absolute top-10 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-white flex items-center justify-center transition-colors z-10"
+                            title="Crop image"
+                          >
+                            <CropIcon className="w-3 h-3" />
+                          </button>
+                        )}
+                        {idx === 0 ? (
+                          <div className="absolute top-2 left-2 bg-[#E8650A] text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-[0_2px_4px_rgba(0,0,0,0.5)] z-10 pointer-events-none">
+                            MAIN
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newImages = [...formData.images];
+                              const [selected] = newImages.splice(idx, 1);
+                              newImages.unshift(selected);
+                              setFormData({ ...formData, images: newImages });
+                            }}
+                            className="absolute bottom-0 left-0 w-full bg-black/75 text-white text-[10px] uppercase font-bold py-2 hover:bg-[#E8650A] transition-colors z-10"
+                          >
+                            Set as Main
+                          </button>
+                        )}
                       </div>
                     ))}
                     
@@ -1195,10 +1348,10 @@ function MenuPageContent() {
           <button
             type="button"
             onClick={() => setPreviewMediaUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-[#2C1810] flex items-center justify-center"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center transition-colors"
             aria-label="Close preview"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
 
           <div className="relative w-full max-w-3xl max-h-[88vh]">
@@ -1216,6 +1369,74 @@ function MenuPageContent() {
                 className="w-full max-h-[88vh] object-contain rounded-xl"
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {cropImageUrl && (
+        <ImageCropperModal
+          imageSrc={cropImageUrl}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+          aspect={1}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && itemToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#FFF4E8] rounded-2xl w-full max-w-md p-6 border border-[#D4B391] shadow-xl">
+            <h3 className="text-xl font-bold text-[#2C1810] mb-2">Delete Dish</h3>
+            <p className="text-[#8E6D4E] mb-6">
+              Are you sure you want to delete <span className="font-bold">"{itemToDelete.name.en}"</span>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteModalOpen(false)}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-lg border border-[#D4B391] bg-white text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isSaving ? "Deleting..." : "Delete Dish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Validation Error Modal */}
+      {errorModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#FFF4E8] rounded-2xl w-full max-w-md p-6 border border-[#D4B391] shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-red-600">Missing Information</h3>
+              <button onClick={() => setErrorModalOpen(false)} className="text-[#8E6D4E] hover:text-[#2C1810]">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-[#2C1810] font-medium mb-3">Please fill in the following required fields:</p>
+            <ul className="list-disc list-inside text-[#8E6D4E] mb-6 space-y-1">
+              {validationErrors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setErrorModalOpen(false)
+                  scrollToError(validationErrors)
+                }}
+                className="px-5 py-2 rounded-lg bg-[#E8650A] text-white font-bold hover:bg-[#C74E33] transition-colors"
+              >
+                Okay, got it
+              </button>
+            </div>
           </div>
         </div>
       )}

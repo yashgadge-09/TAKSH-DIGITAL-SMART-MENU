@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
@@ -21,11 +21,36 @@ const MAIN_PREVIEW_CATEGORIES = [
   { label: "Chinese", aliases: ["chinese"] },
 ];
 
-export default function MenuPage() {
+function MenuPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { totalItems, addItem, items } = useCart();
-  const [activeCategory, setActiveCategory] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
+  
+  useEffect(() => {
+    const currentCategory = searchParams.get("category") || "All";
+    const currentSearch = searchParams.get("search") || "";
+    
+    if (activeCategory !== currentCategory || searchQuery !== currentSearch) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (activeCategory === "All") {
+        params.delete("category");
+      } else {
+        params.set("category", activeCategory);
+      }
+      
+      if (!searchQuery) {
+        params.delete("search");
+      } else {
+        params.set("search", searchQuery);
+      }
+      
+      const newQueryString = params.toString();
+      router.replace(`${pathname}${newQueryString ? '?' + newQueryString : ''}`, { scroll: false });
+    }
+  }, [activeCategory, searchQuery, pathname, router, searchParams]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
@@ -238,45 +263,39 @@ export default function MenuPage() {
       className="cursor-pointer group"
     >
       <div className={`
-        bg-white rounded-[1.75rem] border border-[#EDE4D5] shadow-md
-        flex items-center gap-4
+        bg-white rounded-[1.75rem] border border-[#EDE4D5] shadow-sm
+        flex items-center justify-between gap-4
         transition-all duration-200
         hover:border-[#C4956A]/50 hover:shadow-[0_8px_30px_rgba(196,149,106,0.15)] hover:-translate-y-0.5
         ${compact ? 'p-3' : 'p-4'}
       `}>
         {/* Info */}
-        <div className="flex-1 min-w-0">
-          <h3 className={`text-[#2C1810] font-bold truncate ${compact ? 'text-sm' : 'text-base'}`}>
+        <div className="flex-1 min-w-0 py-1">
+          <h3 className={`text-[#2C1810] font-bold ${compact ? 'text-base' : 'text-[17px]'} leading-tight`}>
             {dish.name}
           </h3>
 
-          {dish.tasteDescription && (
-            <p className="text-[#B89A7D] text-sm italic mt-1 line-clamp-1">
-              {dish.tasteDescription}
-            </p>
-          )}
-
-          {!compact && dish.ingredients && dish.ingredients.length > 0 && (
-            <p className="text-[#C5B5A3] text-xs mt-1 line-clamp-1">
-              {dish.ingredients.slice(0, 3).join(" · ")}
-            </p>
-          )}
-
-          <div className="flex items-center gap-2 mt-2">
-            <span className={`text-[#2C1810] font-bold ${compact ? 'text-sm' : 'text-lg'}`}>
-              ₹{dish.price}
-            </span>
+          <div className="flex items-center gap-2 mt-1">
+            {dish.tasteDescription && (
+              <p className="text-[#B89A7D] text-[13px] italic line-clamp-1">
+                {dish.tasteDescription}
+              </p>
+            )}
             {dish.hasSpiceIndicator && (
-              <span className="text-[10px] font-bold text-[#E8650A] uppercase tracking-wider bg-[#E8650A]/10 px-2.5 py-0.5 rounded-sm flex items-center justify-center min-w-16">
-                🔥 Spicy
+              <span className="text-[10px] font-bold text-[#E8650A] uppercase tracking-wider bg-[#E8650A]/10 px-2.5 py-0.5 rounded-full flex items-center justify-center whitespace-nowrap">
+                🔥 SPICY
               </span>
             )}
+          </div>
+
+          <div className="mt-3 text-[#2C1810] font-bold text-[19px] leading-none">
+            ₹{dish.price}
           </div>
         </div>
 
         {/* Image + Add Button */}
-        <div className="flex flex-col items-center gap-2 flex-shrink-0">
-          <div className={`rounded-2xl overflow-hidden bg-[#1A0D04] ring-1 ring-[#3B2314]/30 shadow-md ${compact ? 'w-14 h-14' : 'w-[72px] h-[72px]'}`}>
+        <div className="relative flex flex-col items-center flex-shrink-0">
+          <div className={`rounded-2xl overflow-hidden bg-[#1A0D04] ring-1 ring-black/5 shadow-sm ${compact ? 'w-[75px] h-[75px]' : 'w-[100px] h-[100px]'}`}>
             {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
               <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
             ) : (
@@ -301,10 +320,10 @@ export default function MenuPage() {
                 category: dish.category,
               });
             }}
-            className="bg-[#3B2314] text-[#E7CFA8] p-1.5 rounded-lg hover:bg-[#2A1609] transition-colors"
+            className="absolute -bottom-3 border bg-white border-[#C4956A] text-[#C4956A] px-4 py-[3px] rounded-full text-xs font-bold hover:bg-[#C4956A] hover:text-white transition-colors shadow-sm"
             title="Add to order"
           >
-            <NotebookPen size={14} />
+            ADD +
           </button>
         </div>
       </div>
@@ -317,7 +336,7 @@ export default function MenuPage() {
       onClick={() => router.push(`/dish/${dish.id}`)}
       className="flex-shrink-0 w-36 cursor-pointer group"
     >
-      <div className="bg-white rounded-2xl overflow-hidden border border-[#EDE4D5] hover:border-[#C4956A]/50 transition-all hover:shadow-[0_4px_16px_rgba(196,149,106,0.12)]">
+      <div className="bg-white rounded-[1.25rem] overflow-hidden border border-[#EDE4D5] hover:border-[#C4956A]/50 transition-all hover:shadow-[0_4px_16px_rgba(196,149,106,0.12)]">
         <div className="w-full h-28 overflow-hidden bg-[#1A0D04]">
           {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
             <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
@@ -333,9 +352,9 @@ export default function MenuPage() {
           )}
         </div>
         <div className="p-3">
-          <p className="text-[#2C1810] font-bold text-sm truncate">{dish.name}</p>
-          <div className="flex justify-between items-center mt-2">
-            <span className="text-[#2C1810] font-bold text-sm">₹{dish.price}</span>
+          <p className="text-[#2C1810] font-bold text-[15px] truncate leading-tight mb-2">{dish.name}</p>
+          <div className="flex justify-between items-center">
+            <span className="text-[#2C1810] font-bold text-[17px] leading-none">₹{dish.price}</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -347,9 +366,9 @@ export default function MenuPage() {
                   category: dish.category,
                 });
               }}
-              className="bg-[#3B2314] text-[#E7CFA8] p-1.5 rounded-lg hover:bg-[#2A1609] transition-colors"
+              className="border border-[#C4956A] text-[#C4956A] px-[10px] py-[2px] rounded-full text-[11px] font-bold hover:bg-[#C4956A] hover:text-white transition-colors bg-white shadow-sm"
             >
-              <NotebookPen size={12} />
+              ADD +
             </button>
           </div>
         </div>
@@ -601,5 +620,17 @@ export default function MenuPage() {
         initialRating={reviewRating}
       />
     </div>
+  );
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C4956A]" />
+      </div>
+    }>
+      <MenuPageContent />
+    </Suspense>
   );
 }
