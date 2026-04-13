@@ -81,8 +81,38 @@ export default function CategoriesPage() {
     }
   }
 
+  const normalizeCategoryName = (value: unknown) => {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+  }
+
+  const toSingularCategoryKey = (value: unknown) => {
+    return normalizeCategoryName(value)
+      .split(" ")
+      .map((word) => {
+        if (word.length <= 3) return word
+        if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`
+        if (word.endsWith("ss")) return word
+        if (word.endsWith("s")) return word.slice(0, -1)
+        return word
+      })
+      .join(" ")
+  }
+
+  const isSameCategory = (left: unknown, right: unknown) => {
+    const normalizedLeft = normalizeCategoryName(left)
+    const normalizedRight = normalizeCategoryName(right)
+
+    if (!normalizedLeft || !normalizedRight) return false
+    if (normalizedLeft === normalizedRight) return true
+
+    return toSingularCategoryKey(normalizedLeft) === toSingularCategoryKey(normalizedRight)
+  }
+
   const getDishesInCategory = (categoryName: string) => {
-    return dishes.filter((item) => item.category === categoryName)
+    return dishes.filter((item) => isSameCategory(item?.category, categoryName))
   }
 
   const getFilteredDishesInCategory = (categoryName: string) => {

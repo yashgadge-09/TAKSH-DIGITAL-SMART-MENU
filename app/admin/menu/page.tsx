@@ -72,6 +72,42 @@ function MenuPageContent() {
     fibre: "",
   })
 
+  const normalizeCategoryName = (value: unknown) => {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+  }
+
+  const toSingularCategoryKey = (value: unknown) => {
+    return normalizeCategoryName(value)
+      .split(" ")
+      .map((word) => {
+        if (word.length <= 3) return word
+        if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`
+        if (word.endsWith("ss")) return word
+        if (word.endsWith("s")) return word.slice(0, -1)
+        return word
+      })
+      .join(" ")
+  }
+
+  const isSameCategory = (left: unknown, right: unknown) => {
+    const normalizedLeft = normalizeCategoryName(left)
+    const normalizedRight = normalizeCategoryName(right)
+
+    if (!normalizedLeft || !normalizedRight) return false
+    if (normalizedLeft === normalizedRight) return true
+
+    return toSingularCategoryKey(normalizedLeft) === toSingularCategoryKey(normalizedRight)
+  }
+
+  const resolvedSelectedCategory = selectedCategory
+    ? categoriesList.find((cat) => isSameCategory(cat, selectedCategory)) ||
+      menuItems.find((item) => isSameCategory(item?.category, selectedCategory))?.category ||
+      selectedCategory
+    : ""
+
   const loadMenu = async () => {
     setIsLoading(true)
     const timestamp = new Date().getTime()
@@ -152,7 +188,7 @@ function MenuPageContent() {
       ingredients_mr: "",
       tasteDescription_mr: "",
       price: "",
-      category: selectedCategory || "Starter",
+      category: resolvedSelectedCategory || "Starter",
       images: [],
       spiceIndicator: false,
 
@@ -174,7 +210,7 @@ function MenuPageContent() {
 
   const filteredMenuItems = menuItems.filter((item) => {
     const matchesCategory = selectedCategory
-      ? item.category === selectedCategory
+      ? isSameCategory(item.category, selectedCategory)
       : true
 
     if (!matchesCategory) return false
@@ -443,8 +479,8 @@ function MenuPageContent() {
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Catalog</p>
           <h1 className="text-[#F4DEC0] font-bold text-3xl mb-2">Menu</h1>
           <p className="text-[#C4A078]">
-            {selectedCategory
-              ? `Viewing ${selectedCategory} dishes.`
+            {resolvedSelectedCategory
+              ? `Viewing ${resolvedSelectedCategory} dishes.`
               : "View and manage dishes."}
           </p>
         </div>
@@ -476,11 +512,11 @@ function MenuPageContent() {
         <div className="p-6 border-b border-[#E8D3BD]">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="text-[#2C1810] font-bold text-lg">
-              {selectedCategory ? `${selectedCategory} Items` : "Menu Items"}
+              {resolvedSelectedCategory ? `${resolvedSelectedCategory} Items` : "Menu Items"}
             </h2>
             <span className="text-[#8E6D4E] text-sm">
               {filteredMenuItems.length} {filteredMenuItems.length === 1 ? "item" : "items"}
-              {searchQuery && ` (filtered from ${selectedCategory ? menuItems.filter((item) => item.category === selectedCategory).length : menuItems.length})`}
+              {searchQuery && ` (filtered from ${selectedCategory ? menuItems.filter((item) => isSameCategory(item.category, selectedCategory)).length : menuItems.length})`}
             </span>
           </div>
 
