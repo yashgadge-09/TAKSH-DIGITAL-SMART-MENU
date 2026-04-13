@@ -214,11 +214,8 @@ function MenuPageContent() {
       ingredients_mr: "",
       tasteDescription_mr: "",
       price: "",
-<<<<<<< HEAD
-      category: resolvedSelectedCategory || "Starter",
-=======
+
       category: selectedCategory || categoriesList[0] || "",
->>>>>>> ui/extra
       images: [],
       spiceIndicator: false,
 
