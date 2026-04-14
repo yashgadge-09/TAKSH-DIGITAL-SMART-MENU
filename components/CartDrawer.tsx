@@ -3,6 +3,7 @@
 import { useCart } from "@/context/CartContext";
 import { X, Plus, Minus, Trash2 } from "lucide-react";
 import Image from "next/image";
+import { toast } from "sonner";
 
 interface RecommendedDish {
   id: string;
@@ -33,18 +34,18 @@ export function CartDrawer({
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/50 z-40"
+        className="fixed inset-0 bg-[#F8F1E8]/80 z-40"
         onClick={onClose}
       />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[430px] bg-[#0D0B0A] shadow-lg flex flex-col">
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[430px] bg-[#F8F1E8] shadow-lg flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-[rgba(255,255,255,0.06)]">
-          <h2 className="text-[#E7CFA8] font-bold text-lg">Your Cart ({items.length})</h2>
+        <div className="flex justify-between items-center p-6 border-b border-[#EDE4D5]">
+          <h2 className="text-[#2C1810] font-bold text-lg">Your Cart ({items.length})</h2>
           <button
             onClick={onClose}
-            className="text-[#8E7F71] hover:text-[#E7CFA8]"
+            className="text-[#8E7F71] hover:text-[#2C1810]"
           >
             <X size={24} />
           </button>
@@ -60,7 +61,7 @@ export function CartDrawer({
                 {items.map((item) => (
                   <div
                     key={item.id}
-                    className="flex gap-4 pb-4 border-b border-[rgba(255,255,255,0.06)]"
+                    className="flex gap-4 pb-4 border-b border-[#EDE4D5]"
                   >
                     {/* Image */}
                     <div className="flex-shrink-0 relative w-16 h-16 rounded-lg overflow-hidden">
@@ -78,25 +79,25 @@ export function CartDrawer({
 
                     {/* Details */}
                     <div className="flex-1">
-                      <h3 className="text-[#E7CFA8] font-bold text-sm">{item.name}</h3>
-                      <p className="text-[#E28B4B] font-bold mt-1">₹{item.price}</p>
+                      <h3 className="text-[#2C1810] font-bold text-sm">{item.name}</h3>
+                      <p className="text-[#C4956A] font-bold mt-1">₹{item.price}</p>
 
                       {/* Quantity Controls */}
-                      <div className="flex items-center gap-2 mt-2 bg-[#15110F] rounded-lg w-fit px-2 py-1">
+                      <div className="flex items-center gap-2 mt-2 bg-white border border-[#EDE4D5] rounded-lg w-fit px-2 py-1">
                         <button
                           onClick={() =>
                             updateQuantity(item.id, Math.max(1, item.quantity - 1))
                           }
-                          className="text-[#8E7F71] hover:text-[#E7CFA8]"
+                          className="text-[#8E7F71] hover:text-[#2C1810]"
                         >
                           <Minus size={16} />
                         </button>
-                        <span className="text-[#E7CFA8] w-6 text-center text-sm">
+                        <span className="text-[#2C1810] w-6 text-center text-sm">
                           {item.quantity}
                         </span>
                         <button
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="text-[#8E7F71] hover:text-[#E7CFA8]"
+                          className="text-[#8E7F71] hover:text-[#2C1810]"
                         >
                           <Plus size={16} />
                         </button>
@@ -106,7 +107,7 @@ export function CartDrawer({
                     {/* Delete */}
                     <button
                       onClick={() => removeItem(item.id)}
-                      className="text-[#8E7F71] hover:text-[#E28B4B]"
+                      className="text-[#8E7F71] hover:text-[#C4956A]"
                     >
                       <Trash2 size={20} />
                     </button>
@@ -115,21 +116,21 @@ export function CartDrawer({
               </div>
 
               {recommendations.length > 0 && (
-                <div className="mt-5 pt-4 border-t border-[rgba(255,255,255,0.06)]">
-                  <h3 className="text-[#E7CFA8] font-bold text-sm mb-3">You may also like</h3>
+                <div className="mt-5 pt-4 border-t border-[#EDE4D5]">
+                  <h3 className="text-[#2C1810] font-bold text-sm mb-3">You may also like</h3>
                   <div className="space-y-2">
                     {recommendations.map((dish) => (
                       <div
                         key={dish.id}
-                        className="bg-[#15110F] rounded-lg border border-[rgba(255,255,255,0.06)] p-3 flex items-center justify-between gap-3"
+                        className="bg-white border border-[#EDE4D5] rounded-lg border border-[#EDE4D5] p-3 flex items-center justify-between gap-3"
                       >
                         <div className="min-w-0">
-                          <p className="text-[#E7CFA8] text-sm font-medium truncate">{dish.name}</p>
-                          <p className="text-[#E28B4B] text-sm font-bold">₹{dish.price}</p>
+                          <p className="text-[#2C1810] text-sm font-medium truncate">{dish.name}</p>
+                          <p className="text-[#C4956A] text-sm font-bold">₹{dish.price}</p>
                         </div>
                         <button
                           onClick={() => onAddRecommendation?.(dish)}
-                          className="px-3 py-1.5 rounded-md bg-[#E28B4B] text-[#0D0B0A] text-xs font-bold hover:opacity-90 transition-opacity"
+                          className="px-3 py-1.5 rounded-md bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] text-xs font-bold hover:opacity-90 transition-opacity"
                         >
                           Add
                         </button>
@@ -144,23 +145,27 @@ export function CartDrawer({
 
         {/* Footer */}
         {items.length > 0 && (
-          <div className="border-t border-[rgba(255,255,255,0.06)] p-6 space-y-3">
+          <div className="border-t border-[#EDE4D5] p-6 space-y-3">
             {/* Total */}
             <div className="flex justify-between items-center">
               <span className="text-[#8E7F71]">Total</span>
-              <span className="text-[#E7CFA8] font-bold text-xl">₹{totalPrice}</span>
+              <span className="text-[#2C1810] font-bold text-xl">₹{totalPrice}</span>
             </div>
 
             {/* Buttons */}
             <button
               onClick={clearCart}
-              className="w-full border border-[rgba(255,255,255,0.06)] text-[#8E7F71] font-bold py-3 rounded-lg hover:text-[#E7CFA8] transition-colors"
+              className="w-full border border-[#EDE4D5] text-[#8E7F71] font-bold py-3 rounded-lg hover:text-[#2C1810] transition-colors"
             >
               Clear Cart
             </button>
             <button
-              onClick={onClose}
-              className="w-full bg-[#E28B4B] text-[#0D0B0A] font-bold py-3 rounded-lg hover:opacity-90 transition-opacity"
+              onClick={() => {
+                toast("Order in making!", { icon: '👨‍🍳' });
+                clearCart();
+                onClose();
+              }}
+              className="w-full bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] font-bold py-3 rounded-lg hover:opacity-90 transition-opacity"
             >
               Proceed to Checkout
             </button>

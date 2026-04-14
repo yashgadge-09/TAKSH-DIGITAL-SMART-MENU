@@ -55,16 +55,16 @@ export function ReviewModal({ isOpen, onClose, initialRating = 0 }: ReviewModalP
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/50 z-40"
+        className="fixed inset-0 bg-[#F8F1E8]/80 z-40"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0D0B0A] rounded-t-2xl max-w-430px mx-auto animate-in slide-in-from-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#F8F1E8] rounded-t-2xl max-w-430px mx-auto animate-in slide-in-from-bottom">
         <div className="max-w-430px mx-auto w-full">
-          <div className="flex justify-between items-center p-6 border-b border-[rgba(255,255,255,0.06)]">
-            <h2 className="text-[#E7CFA8] font-bold text-lg">Share Your Experience</h2>
-            <button onClick={onClose} className="text-[#8E7F71] hover:text-[#E7CFA8]">
+          <div className="flex justify-between items-center p-6 border-b border-[#EDE4D5]">
+            <h2 className="text-[#2C1810] font-bold text-lg">Share Your Experience</h2>
+            <button onClick={onClose} className="text-[#8E7F71] hover:text-[#2C1810]">
               <X size={24} />
             </button>
           </div>
@@ -92,31 +92,31 @@ export function ReviewModal({ isOpen, onClose, initialRating = 0 }: ReviewModalP
 
                 {/* Rating Label */}
                 {rating > 0 && (
-                  <p className="text-center text-[#E28B4B] font-bold text-lg mb-6">
+                  <p className="text-center text-[#C4956A] font-bold text-lg mb-6">
                     {ratingLabels[rating]}
                   </p>
                 )}
 
                 {/* Name Input */}
                 <div className="mb-4">
-                  <label className="block text-[#E7CFA8] text-sm mb-2">Your name (optional)</label>
+                  <label className="block text-[#2C1810] text-sm mb-2">Your name (optional)</label>
                   <input
                     type="text"
                     placeholder="e.g. Rahul M."
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-[#221C18] text-[#E7CFA8] placeholder-[#8E7F71] rounded-lg px-4 py-3 border border-[rgba(255,255,255,0.06)] focus:outline-none focus:border-[#E28B4B]"
+                    className="w-full bg-[#221C18] text-[#2C1810] placeholder-[#8E7F71] rounded-lg px-4 py-3 border border-[#EDE4D5] focus:outline-none focus:border-[#E28B4B]"
                   />
                 </div>
 
                 {/* Review Textarea */}
                 <div className="mb-4">
-                  <label className="block text-[#E7CFA8] text-sm mb-2">Tell us about your experience</label>
+                  <label className="block text-[#2C1810] text-sm mb-2">Tell us about your experience</label>
                   <textarea
                     placeholder="What did you love? What could be better?"
                     value={review}
                     onChange={(e) => setReview(e.target.value.slice(0, 300))}
-                    className="w-full bg-[#221C18] text-[#E7CFA8] placeholder-[#8E7F71] rounded-lg px-4 py-3 border border-[rgba(255,255,255,0.06)] focus:outline-none focus:border-[#E28B4B] min-h-28 resize-none"
+                    className="w-full bg-[#221C18] text-[#2C1810] placeholder-[#8E7F71] rounded-lg px-4 py-3 border border-[#EDE4D5] focus:outline-none focus:border-[#E28B4B] min-h-28 resize-none"
                   />
                   <div className="text-right text-[#8E7F71] text-xs mt-1">
                     {review.length}/300
@@ -125,7 +125,7 @@ export function ReviewModal({ isOpen, onClose, initialRating = 0 }: ReviewModalP
 
                 {/* What did you order */}
                 <div className="mb-6">
-                  <label className="block text-[#E7CFA8] text-sm mb-3">What did you order?</label>
+                  <label className="block text-[#2C1810] text-sm mb-3">What did you order?</label>
                   <div className="grid grid-cols-3 gap-2">
                     {DISHES.map((dish) => (
                       <button
@@ -133,7 +133,7 @@ export function ReviewModal({ isOpen, onClose, initialRating = 0 }: ReviewModalP
                         onClick={() => handleDishToggle(dish.name)}
                         className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                           selectedDishes.includes(dish.name)
-                            ? "bg-[#E28B4B] text-[#0D0B0A]"
+                            ? "bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8]"
                             : "bg-[#221C18] text-[#8E7F71]"
                         }`}
                       >
@@ -146,7 +146,7 @@ export function ReviewModal({ isOpen, onClose, initialRating = 0 }: ReviewModalP
                 {/* Submit Button */}
                 <button
                   onClick={handleSubmit}
-                  className="w-full bg-[#E28B4B] text-[#0D0B0A] font-bold py-3 rounded-lg mb-3 hover:opacity-90 transition-opacity"
+                  className="w-full bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] font-bold py-3 rounded-lg mb-3 hover:opacity-90 transition-opacity"
                 >
                   Submit Review
                 </button>
@@ -160,7 +160,7 @@ export function ReviewModal({ isOpen, onClose, initialRating = 0 }: ReviewModalP
 
                 {/* Google Button - Show only for 4-5 stars */}
                 {rating >= 4 && (
-                  <button className="w-full border border-[#E28B4B] text-[#E28B4B] font-bold py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-[rgba(226,139,75,0.1)] transition-colors">
+                  <button className="w-full border border-[#E28B4B] text-[#C4956A] font-bold py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-[rgba(226,139,75,0.1)] transition-colors">
                     <svg
                       width="20"
                       height="20"
@@ -180,7 +180,7 @@ export function ReviewModal({ isOpen, onClose, initialRating = 0 }: ReviewModalP
               </>
             ) : (
               <div className="text-center py-12">
-                <p className="text-[#E28B4B] font-bold text-lg mb-4">Thank you for your feedback! 😊</p>
+                <p className="text-[#C4956A] font-bold text-lg mb-4">Thank you for your feedback! 😊</p>
                 <p className="text-[#8E7F71]">Your review helps us improve</p>
               </div>
             )}

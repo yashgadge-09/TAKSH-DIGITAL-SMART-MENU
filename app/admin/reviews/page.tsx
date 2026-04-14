@@ -14,7 +14,7 @@ function ReviewStars({ rating }: { rating: number }) {
           <Star
             key={i}
             className={`w-3.5 h-3.5 ${
-              i < rating ? "fill-[#E28B4B] text-[#E28B4B]" : "text-[#8E7F71]"
+              i < rating ? "fill-[#E28B4B] text-[#C4956A]" : "text-[#8E7F71]"
             }`}
           />
         ))}
@@ -63,38 +63,39 @@ export default function ReviewsPage() {
 
   return (
     <AdminLayout>
-      <div className="mb-8">
-        <h1 className="text-white font-bold text-3xl mb-2">Reviews</h1>
-        <p className="text-[#8a6a52]">Manage guest feedback and visibility.</p>
+      <div className="mb-8 overflow-hidden rounded-3xl border border-[#7A4F2F] bg-[linear-gradient(130deg,#2A180F_0%,#1A100A_70%,#130B07_100%)] p-7 shadow-[0_20px_50px_rgba(15,9,5,0.5)]">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Guest Sentiment</p>
+        <h1 className="mb-2 text-3xl font-bold text-[#F4DEC0]">Reviews</h1>
+        <p className="text-[#C4A078]">Manage guest feedback and visibility.</p>
       </div>
 
       {error ? (
-        <div className="bg-[#151210] rounded-xl p-4 mb-6 text-[#ef4444]">
+        <div className="mb-6 rounded-xl border border-[#D8917A] bg-[#FFF0EB] p-4 text-[#B24C2D]">
           {error}
         </div>
       ) : null}
 
-      <div className="bg-[#151210] rounded-xl overflow-hidden">
-        <div className="p-6 border-b border-white/[0.05]">
-          <h2 className="text-white font-bold text-lg">All reviews</h2>
+      <div className="overflow-hidden rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] shadow-[0_14px_30px_rgba(90,53,25,0.12)]">
+        <div className="border-b border-[#E9D4BA] p-6">
+          <h2 className="text-[#2C1810] font-bold text-lg">All reviews</h2>
         </div>
 
-        <div className="divide-y divide-white/[0.06]">
+        <div className="divide-y divide-[#EAD7C2]">
           {isLoading ? (
-            <div className="p-6 text-[#8a6a52]">Loading...</div>
+            <div className="p-6 text-[#8E6D4E]">Loading...</div>
           ) : reviews.length === 0 ? (
-            <div className="p-6 text-[#8a6a52]">No reviews found.</div>
+            <div className="p-6 text-[#8E6D4E]">No reviews found.</div>
           ) : (
             reviews.map((review) => {
               const isPublic =
                 review.is_public ?? review.isPublic ?? false
               return (
-                <div key={review.id} className="p-6">
+                <div key={review.id} className="bg-white/45 p-6 transition-colors hover:bg-white/70">
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <ReviewStars rating={review.stars ?? 0} />
                     <button
                       onClick={() => handleToggle(review)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/[0.08] border border-white/15 rounded-lg text-white text-sm"
+                      className="flex items-center gap-2 rounded-lg border border-[#D6B797] bg-white px-3 py-1.5 text-sm text-[#2C1810] transition-colors hover:bg-[#F7EAD9]"
                       type="button"
                     >
                       {isPublic ? (
@@ -111,14 +112,14 @@ export default function ReviewsPage() {
                     </button>
                   </div>
 
-                  <p className="text-[#E7CFA8] text-sm italic line-clamp-3 mb-2">
+                  <p className="text-[#2C1810] text-sm italic line-clamp-3 mb-2">
                     {"\""}
                     {review.text}
                     {"\""}
                   </p>
 
                   <div className="flex items-center justify-between text-[#8E7F71] text-xs">
-                    <span className="text-white font-medium">{review.reviewer}</span>
+                    <span className="text-[#2C1810] font-medium">{review.reviewer}</span>
                     <span>
                       {review.created_at
                         ? new Date(review.created_at).toLocaleDateString()
@@ -127,7 +128,7 @@ export default function ReviewsPage() {
                   </div>
 
                   {Array.isArray(review.dishes) && review.dishes.length ? (
-                    <div className="mt-2 text-[#8a6a52] text-xs">
+                    <div className="mt-2 text-[#B89A7D] text-xs">
                       Dishes: {review.dishes.join(", ")}
                     </div>
                   ) : null}

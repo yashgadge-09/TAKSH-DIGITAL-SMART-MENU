@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { AdminLayout } from "@/components/AdminSidebar"
-import { Plus, X, Search } from "lucide-react"
+import { Plus, X, Search, Crop as CropIcon } from "lucide-react"
 import Image from "next/image"
+import { ImageCropperModal } from "@/components/ImageCropperModal"
 import {
   addDish,
   deleteDish,
@@ -21,9 +22,10 @@ type LanguageTab = "en" | "hi" | "mr"
 
 type MenuItem = any
 
-export default function MenuPage() {
+function MenuPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const pathname = usePathname()
   const selectedCategory = searchParams.get("category")?.trim() || ""
   const editDishId = searchParams.get("edit")?.trim() || ""
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -35,7 +37,26 @@ export default function MenuPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [categoriesList, setCategoriesList] = useState<string[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "")
+  const [cropImageUrl, setCropImageUrl] = useState<string | null>(null)
+  const [existingCropIndex, setExistingCropIndex] = useState<number | null>(null)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null)
+  const [errorModalOpen, setErrorModalOpen] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  
+  useEffect(() => {
+    const currentSearch = searchParams.get("search") || ""
+    if (searchQuery !== currentSearch) {
+      const params = new URLSearchParams(searchParams.toString())
+      if (!searchQuery) params.delete("search")
+      else params.set("search", searchQuery)
+      
+      const queryString = params.toString()
+      router.replace(`${pathname}${queryString ? '?' + queryString : ''}`, { scroll: false })
+    }
+  }, [searchQuery, pathname, router, searchParams])
+
   const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
@@ -56,7 +77,7 @@ export default function MenuPage() {
     tasteDescription_mr: "",
     // Shared fields
     price: "",
-    category: "Starter",
+    category: "",
     images: [] as string[],
     spiceIndicator: false,
 
@@ -72,6 +93,42 @@ export default function MenuPage() {
     fibre: "",
   })
 
+  const normalizeCategoryName = (value: unknown) => {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+  }
+
+  const toSingularCategoryKey = (value: unknown) => {
+    return normalizeCategoryName(value)
+      .split(" ")
+      .map((word) => {
+        if (word.length <= 3) return word
+        if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`
+        if (word.endsWith("ss")) return word
+        if (word.endsWith("s")) return word.slice(0, -1)
+        return word
+      })
+      .join(" ")
+  }
+
+  const isSameCategory = (left: unknown, right: unknown) => {
+    const normalizedLeft = normalizeCategoryName(left)
+    const normalizedRight = normalizeCategoryName(right)
+
+    if (!normalizedLeft || !normalizedRight) return false
+    if (normalizedLeft === normalizedRight) return true
+
+    return toSingularCategoryKey(normalizedLeft) === toSingularCategoryKey(normalizedRight)
+  }
+
+  const resolvedSelectedCategory = selectedCategory
+    ? categoriesList.find((cat) => isSameCategory(cat, selectedCategory)) ||
+      menuItems.find((item) => isSameCategory(item?.category, selectedCategory))?.category ||
+      selectedCategory
+    : ""
+
   const loadMenu = async () => {
     setIsLoading(true)
     const timestamp = new Date().getTime()
@@ -83,9 +140,14 @@ export default function MenuPage() {
     const dishes = dishesRes || []
     const categoriesRows = categoriesRes || []
 
-    setCategoriesList(
-      categoriesRows.map((c: any) => c.name).filter(Boolean)
-    )
+    const cats = categoriesRows.map((c: any) => c.name).filter(Boolean)
+    setCategoriesList(cats)
+
+    // Set a valid default category if none selected
+    setFormData(prev => ({
+      ...prev,
+      category: prev.category === "" && cats.length > 0 ? (selectedCategory || cats[0]) : prev.category
+    }))
 
     // Map Supabase rows -> UI state shape
     setMenuItems(
@@ -152,7 +214,8 @@ export default function MenuPage() {
       ingredients_mr: "",
       tasteDescription_mr: "",
       price: "",
-      category: selectedCategory || "Starter",
+
+      category: selectedCategory || categoriesList[0] || "",
       images: [],
       spiceIndicator: false,
 
@@ -174,7 +237,7 @@ export default function MenuPage() {
 
   const filteredMenuItems = menuItems.filter((item) => {
     const matchesCategory = selectedCategory
-      ? item.category === selectedCategory
+      ? isSameCategory(item.category, selectedCategory)
       : true
 
     if (!matchesCategory) return false
@@ -208,9 +271,38 @@ export default function MenuPage() {
       if (newErrors.name_en || newErrors.description_en || newErrors.ingredients_en) {
         setActiveTab("en")
       }
+      
+      const missingFields = [];
+      if (newErrors.name_en) missingFields.push("Dish Name (English)");
+      if (newErrors.description_en) missingFields.push("Description (English)");
+      if (newErrors.ingredients_en) missingFields.push("Ingredients (English)");
+      if (newErrors.price) missingFields.push("Price");
+      
+      setValidationErrors(missingFields);
+      setErrorModalOpen(true);
+      
       return false
     }
     return true
+  }
+
+  const scrollToError = (errorsList: string[]) => {
+    const fieldMapping: Record<string, string> = {
+      "Dish Name (English)": "field_name_en",
+      "Description (English)": "field_description_en",
+      "Ingredients (English)": "field_ingredients_en",
+      "Price": "field_price"
+    };
+    const firstError = errorsList[0];
+    if (firstError && fieldMapping[firstError]) {
+      setTimeout(() => {
+        const el = document.getElementById(fieldMapping[firstError]);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+      }, 100);
+    }
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -243,7 +335,45 @@ export default function MenuPage() {
     } finally {
       setIsUploading(false)
     }
+
+    e.target.value = ''
   }
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    try {
+      if (existingCropIndex !== null) {
+        setIsUploading(true)
+        const formDataUpload = new FormData()
+        formDataUpload.append("file", croppedBlob, "cropped-image.jpg")
+        
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formDataUpload,
+        })
+        const data = await res.json()
+        
+        if (data.url) {
+          setFormData((prev) => {
+            const newImages = [...prev.images]
+            newImages[existingCropIndex] = data.url
+            return { ...prev, images: newImages }
+          })
+        }
+        
+        handleCropCancel()
+        setIsUploading(false)
+      }
+    } catch (err) {
+      console.error("Error uploading cropped image:", err)
+      setIsUploading(false)
+    }
+  }
+
+  const handleCropCancel = () => {
+    setExistingCropIndex(null)
+    setCropImageUrl(null)
+  }
+
 
   const handleSave = async () => {
     if (!validateForm()) return
@@ -396,15 +526,24 @@ export default function MenuPage() {
     router.replace(next ? `/admin/menu?${next}` : "/admin/menu")
   }, [editDishId, menuItems, searchParams, router])
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (item: MenuItem) => {
+    setItemToDelete(item)
+    setDeleteModalOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return
     setIsSaving(true)
     try {
-      await deleteDish(id)
+      await deleteDish(itemToDelete.id)
       await loadMenu()
+      setDeleteModalOpen(false)
+      setItemToDelete(null)
     } finally {
       setIsSaving(false)
     }
   }
+
 
   const handleToggleAvailability = async (id: string) => {
     const current = menuItems.find((item) => item.id === id)
@@ -437,12 +576,14 @@ export default function MenuPage() {
   return (
     <AdminLayout>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-8 overflow-hidden rounded-3xl border border-[#7A4F2F] bg-[linear-gradient(130deg,#2A180F_0%,#1A100A_70%,#130B07_100%)] p-6 shadow-[0_20px_50px_rgba(15,9,5,0.5)] sm:p-7">
+        <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-white font-bold text-3xl mb-2">Menu</h1>
-          <p className="text-[#8a6a52]">
-            {selectedCategory
-              ? `Viewing ${selectedCategory} dishes.`
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Catalog</p>
+          <h1 className="text-[#F4DEC0] font-bold text-3xl mb-2">Menu</h1>
+          <p className="text-[#C4A078]">
+            {resolvedSelectedCategory
+              ? `Viewing ${resolvedSelectedCategory} dishes.`
               : "View and manage dishes."}
           </p>
         </div>
@@ -450,7 +591,7 @@ export default function MenuPage() {
           {selectedCategory && (
             <button
               onClick={() => router.push('/admin/menu')}
-              className="px-4 py-2.5 border border-white/20 text-white font-medium rounded-lg hover:bg-white/5 transition-colors"
+              className="px-4 py-2.5 rounded-lg border border-[#8A592F] text-[#F2C786] font-medium hover:bg-[#3A2517] transition-colors"
             >
               Clear Filter
             </button>
@@ -460,40 +601,41 @@ export default function MenuPage() {
               resetForm()
               setShowAddForm(true)
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#E8650A] text-white font-medium rounded-lg hover:bg-[#E8650A]/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#F0A33D] text-[#2B170D] font-semibold hover:bg-[#F4B55A] transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Dish
           </button>
         </div>
+        </div>
       </div>
 
       {/* Menu Items Table */}
-      <div className="bg-[#151210] rounded-xl overflow-hidden">
-        <div className="p-6 border-b border-white/[0.05]">
+      <div className="rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] overflow-hidden shadow-[0_14px_30px_rgba(90,53,25,0.12)]">
+        <div className="p-6 border-b border-[#E8D3BD]">
           <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="text-white font-bold text-lg">
-              {selectedCategory ? `${selectedCategory} Items` : "Menu Items"}
+            <h2 className="text-[#2C1810] font-bold text-lg">
+              {resolvedSelectedCategory ? `${resolvedSelectedCategory} Items` : "Menu Items"}
             </h2>
-            <span className="text-[#8a6a52] text-sm">
+            <span className="text-[#8E6D4E] text-sm">
               {filteredMenuItems.length} {filteredMenuItems.length === 1 ? "item" : "items"}
-              {searchQuery && ` (filtered from ${selectedCategory ? menuItems.filter((item) => item.category === selectedCategory).length : menuItems.length})`}
+              {searchQuery && ` (filtered from ${selectedCategory ? menuItems.filter((item) => isSameCategory(item.category, selectedCategory)).length : menuItems.length})`}
             </span>
           </div>
 
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a6a52]" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B89A7D]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search dishes by name..."
-              className="w-full h-11 pl-11 pr-10 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] transition-colors"
+              className="w-full h-11 rounded-lg border border-[#D4B391] bg-white pl-11 pr-10 text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] transition-colors"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a6a52] hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#B89A7D] hover:text-[#2C1810] transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -504,22 +646,23 @@ export default function MenuPage() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.05]">
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Dish Image</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Dish Name</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Category</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Price</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Spice</th>
+              <tr className="border-b border-[#E8D3BD] bg-white/45">
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Dish Image</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Dish Name</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Category</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Price</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Spice</th>
 
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Availability</th>
-                <th className="text-left text-[#8a6a52] font-medium text-sm p-4">Actions</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Availability</th>
+                <th className="text-left text-[#8E6D4E] font-medium text-sm p-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredMenuItems.map((item) => (
                 <tr
                   key={item.id}
-                  className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
+                  onClick={() => handleEdit(item)}
+                  className={`border-b border-[#EEDFCF] hover:bg-white/70 transition-colors cursor-pointer ${!item.isAvailable ? "opacity-50" : ""}`}
                 >
                   <td className="p-4">
                     <div className="w-11 h-11 rounded-full overflow-hidden">
@@ -537,25 +680,28 @@ export default function MenuPage() {
                     </div>
                   </td>
                   <td className="p-4">
-                    <div className="text-white font-medium text-sm">{item.name.en}</div>
-                    <div className="text-[#8a6a52] text-xs mt-0.5">{item.ingredients.en.join(", ")}</div>
+                    <div className="text-[#2C1810] font-medium text-sm">{item.name.en}</div>
+                    <div className="text-[#8E6D4E] text-xs mt-0.5">{item.ingredients.en.join(", ")}</div>
                   </td>
-                  <td className="p-4 text-[#8a6a52] text-sm">{item.category}</td>
-                  <td className="p-4 text-white text-sm">₹{item.price}</td>
+                  <td className="p-4 text-[#8E6D4E] text-sm">{item.category}</td>
+                  <td className="p-4 text-[#2C1810] text-sm">₹{item.price}</td>
                   <td className="p-4 text-sm">
                     {item.spiceLevel > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-[#E8650A]">
-                        🌶️ Spicy
+                      <span className="inline-flex items-center gap-1 text-[#C4956A]">
+                        🔥 Spicy
                       </span>
                     ) : (
-                      <span className="text-[#8a6a52]">None</span>
+                      <span className="text-[#8E6D4E]">None</span>
                     )}
                   </td>
 
                   <td className="p-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleToggleAvailability(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleAvailability(item.id);
+                        }}
                         disabled={isSaving}
                         className={`relative w-10 h-5 rounded-full transition-colors ${item.isAvailable ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
                           }`}
@@ -565,7 +711,7 @@ export default function MenuPage() {
                             }`}
                         />
                       </button>
-                      <span className="text-[#8a6a52] text-xs">
+                      <span className="text-[#8E6D4E] text-xs">
                         {item.isAvailable ? "Available" : "Hidden"}
                       </span>
                     </div>
@@ -573,13 +719,19 @@ export default function MenuPage() {
                   <td className="p-4">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleEdit(item)}
-                        className="px-3 py-1.5 border border-white/20 text-white text-sm rounded-md hover:bg-white/5 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(item);
+                        }}
+                        className="px-3 py-1.5 rounded-md border border-[#D4B391] text-[#2C1810] text-sm hover:bg-[#F3E2CD] transition-colors"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(item);
+                        }}
                         disabled={isSaving}
                         className="text-[#ef4444] text-sm font-medium hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
                       >
@@ -591,7 +743,7 @@ export default function MenuPage() {
               ))}
               {filteredMenuItems.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-[#8a6a52]">
+                  <td colSpan={7} className="p-8 text-center text-[#8E6D4E]">
                     {searchQuery
                       ? "No dishes found for this search in the current category."
                       : "No dishes found for this category."}
@@ -605,10 +757,10 @@ export default function MenuPage() {
 
       {/* Add/Edit Form Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#151210] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-[#151210] p-6 border-b border-white/[0.05] flex items-center justify-between z-10">
-              <h2 className="text-white font-bold text-xl">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] shadow-[0_25px_60px_rgba(0,0,0,0.35)]">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E8D3BD] bg-[#FFF4E8]/95 p-6 backdrop-blur-sm">
+              <h2 className="text-[#2C1810] font-bold text-xl">
                 {editingItem ? "Edit Dish" : "Add New Dish"}
               </h2>
               <button
@@ -616,7 +768,7 @@ export default function MenuPage() {
                   setShowAddForm(false)
                   resetForm()
                 }}
-                className="text-[#8a6a52] hover:text-white transition-colors"
+                className="text-[#B89A7D] hover:text-[#2C1810] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -629,8 +781,8 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => setActiveTab("en")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "en"
-                    ? "bg-[#E28B4B] text-[#0D0B0A]"
-                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    ? "bg-[#F0A33D] text-[#2B170D]"
+                    : "bg-[#2A1B11] text-[#C5A077] hover:bg-[#3A2518]"
                     }`}
                 >
                   <span className="text-base">EN</span> English
@@ -639,8 +791,8 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => setActiveTab("hi")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "hi"
-                    ? "bg-[#E28B4B] text-[#0D0B0A]"
-                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    ? "bg-[#F0A33D] text-[#2B170D]"
+                    : "bg-[#2A1B11] text-[#C5A077] hover:bg-[#3A2518]"
                     }`}
                 >
                   <span className="text-base">HI</span> Hindi
@@ -649,8 +801,8 @@ export default function MenuPage() {
                   type="button"
                   onClick={() => setActiveTab("mr")}
                   className={`h-11 flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "mr"
-                    ? "bg-[#E28B4B] text-[#0D0B0A]"
-                    : "bg-[#221C18] text-[#8E7F71] hover:bg-[#2a2320]"
+                    ? "bg-[#F0A33D] text-[#2B170D]"
+                    : "bg-[#2A1B11] text-[#C5A077] hover:bg-[#3A2518]"
                     }`}
                 >
                   <span className="text-base">MR</span> Marathi
@@ -661,17 +813,18 @@ export default function MenuPage() {
               {activeTab === "en" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Dish Name (English) <span className="text-[#ef4444]">*</span>
                     </label>
                     <input
+                      id="field_name_en"
                       type="text"
                       value={formData.name_en}
                       onChange={(e) => {
                         setFormData({ ...formData, name_en: e.target.value })
                         setErrors({ ...errors, name_en: false })
                       }}
-                      className={`w-full h-11 px-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${errors.name_en ? "border-[#ef4444]" : "border-white/10"
+                      className={`w-full h-11 px-4 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] ${errors.name_en ? "border-[#ef4444]" : "border-[#EDE4D5]"
                         }`}
                       placeholder="e.g. Paneer Tikka"
                     />
@@ -681,17 +834,18 @@ export default function MenuPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       {"Chef's Note / Description (English)"} <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
+                      id="field_description_en"
                       value={formData.description_en}
                       onChange={(e) => {
                         setFormData({ ...formData, description_en: e.target.value })
                         setErrors({ ...errors, description_en: false })
                       }}
                       rows={4}
-                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${errors.description_en ? "border-[#ef4444]" : "border-white/10"
+                      className={`w-full px-4 py-3 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none ${errors.description_en ? "border-[#ef4444]" : "border-[#EDE4D5]"
                         }`}
                       placeholder="Describe the dish in English..."
                     />
@@ -701,35 +855,36 @@ export default function MenuPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Ingredients (English) <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
+                      id="field_ingredients_en"
                       value={formData.ingredients_en}
                       onChange={(e) => {
                         setFormData({ ...formData, ingredients_en: e.target.value })
                         setErrors({ ...errors, ingredients_en: false })
                       }}
                       rows={3}
-                      className={`w-full px-4 py-3 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none ${errors.ingredients_en ? "border-[#ef4444]" : "border-white/10"
+                      className={`w-full px-4 py-3 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none ${errors.ingredients_en ? "border-[#ef4444]" : "border-[#EDE4D5]"
                         }`}
                       placeholder="Paneer, Bell Peppers, Yogurt, Spices"
                     />
-                    <p className="text-[#8a6a52]/60 text-xs mt-1">comma separated</p>
+                    <p className="text-[#B89A7D]/60 text-xs mt-1">comma separated</p>
                     {errors.ingredients_en && (
                       <p className="text-[#ef4444] text-xs mt-1">This field is required</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Taste Description (English)
                     </label>
                     <input
                       type="text"
                       value={formData.tasteDescription_en}
                       onChange={(e) => setFormData({ ...formData, tasteDescription_en: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. Smoky & Tangy"
                     />
                   </div>
@@ -744,48 +899,48 @@ export default function MenuPage() {
                   </p>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Dish Name (Hindi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Dish Name (Hindi)</label>
                     <input
                       type="text"
                       value={formData.name_hi}
                       onChange={(e) => setFormData({ ...formData, name_hi: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. पनीर टिक्का"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       {"Chef's Note / Description (Hindi)"}
                     </label>
                     <textarea
                       value={formData.description_hi}
                       onChange={(e) => setFormData({ ...formData, description_hi: e.target.value })}
                       rows={4}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="हिंदी में विवरण लिखें..."
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Ingredients (Hindi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Ingredients (Hindi)</label>
                     <textarea
                       value={formData.ingredients_hi}
                       onChange={(e) => setFormData({ ...formData, ingredients_hi: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="पनीर, शिमला मिर्च, दही, मसाले"
                     />
-                    <p className="text-[#8a6a52]/60 text-xs mt-1">अल्पविराम से अलग करें</p>
+                    <p className="text-[#B89A7D]/60 text-xs mt-1">अल्पविराम से अलग करें</p>
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Taste Description (Hindi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Taste Description (Hindi)</label>
                     <input
                       type="text"
                       value={formData.tasteDescription_hi}
                       onChange={(e) => setFormData({ ...formData, tasteDescription_hi: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. धुएंदार और तीखा"
                     />
                   </div>
@@ -800,48 +955,48 @@ export default function MenuPage() {
                   </p>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Dish Name (Marathi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Dish Name (Marathi)</label>
                     <input
                       type="text"
                       value={formData.name_mr}
                       onChange={(e) => setFormData({ ...formData, name_mr: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. पनीर टिक्का"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       {"Chef's Note / Description (Marathi)"}
                     </label>
                     <textarea
                       value={formData.description_mr}
                       onChange={(e) => setFormData({ ...formData, description_mr: e.target.value })}
                       rows={4}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="मराठीत वर्णन लिहा..."
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Ingredients (Marathi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Ingredients (Marathi)</label>
                     <textarea
                       value={formData.ingredients_mr}
                       onChange={(e) => setFormData({ ...formData, ingredients_mr: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-3 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] resize-none"
+                      className="w-full px-4 py-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] resize-none"
                       placeholder="पनीर, सिमला मिरची, दही, मसाले"
                     />
-                    <p className="text-[#8a6a52]/60 text-xs mt-1">स्वल्पविरामाने वेगळे करा</p>
+                    <p className="text-[#B89A7D]/60 text-xs mt-1">स्वल्पविरामाने वेगळे करा</p>
                   </div>
 
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Taste Description (Marathi)</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Taste Description (Marathi)</label>
                     <input
                       type="text"
                       value={formData.tasteDescription_mr}
                       onChange={(e) => setFormData({ ...formData, tasteDescription_mr: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                       placeholder="e.g. धुराळलेला आणि तिखट"
                     />
                   </div>
@@ -850,24 +1005,25 @@ export default function MenuPage() {
 
               {/* Shared Fields - Always Visible */}
               <div className="border-t border-white/[0.05] pt-6 space-y-6">
-                <h3 className="text-white font-medium text-sm">Common Details</h3>
+                <h3 className="text-[#2C1810] font-medium text-sm">Common Details</h3>
 
                 {/* Price and Category */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">
+                    <label className="block text-[#B89A7D] text-sm mb-2">
                       Price <span className="text-[#ef4444]">*</span>
                     </label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a6a52]">₹</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#B89A7D]">₹</span>
                       <input
+                        id="field_price"
                         type="number"
                         value={formData.price}
                         onChange={(e) => {
                           setFormData({ ...formData, price: e.target.value })
                           setErrors({ ...errors, price: false })
                         }}
-                        className={`w-full h-11 pl-8 pr-4 bg-[#1C1510] border rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] ${errors.price ? "border-[#ef4444]" : "border-white/10"
+                        className={`w-full h-11 pl-8 pr-4 bg-white border border-[#EDE4D5] border rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] ${errors.price ? "border-[#ef4444]" : "border-[#EDE4D5]"
                           }`}
                         placeholder="280"
                       />
@@ -877,11 +1033,11 @@ export default function MenuPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-[#8a6a52] text-sm mb-2">Category</label>
+                    <label className="block text-[#B89A7D] text-sm mb-2">Category</label>
                     <select
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#E8650A]"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] focus:outline-none focus:border-[#E8650A]"
                     >
                       {categoriesList.map((cat) => (
                         <option key={cat} value={cat}>
@@ -894,31 +1050,31 @@ export default function MenuPage() {
 
                 {/* Spice Indicator */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-3">Spice Indicator</label>
+                  <label className="block text-[#B89A7D] text-sm mb-3">Spice Indicator</label>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, spiceIndicator: !formData.spiceIndicator })}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${formData.spiceIndicator
-                        ? "bg-[#E8650A] text-white"
-                        : "bg-[#1C1510] border border-white/10 text-[#8a6a52] hover:border-white/20"
+                        ? "bg-[#3B2314] text-[#E7CFA8]"
+                        : "bg-white border border-[#EDE4D5] border border-[#EDE4D5] text-[#B89A7D] hover:border-[#EDE4D5]"
                         }`}
                     >
-                      {formData.spiceIndicator ? "🌶️ Spicy Indicator ON" : "No Spice Indicator"}
+                      {formData.spiceIndicator ? "🔥 Spice Indicator ON" : "No Spice Indicator"}
                     </button>
-                    <p className="text-[#8a6a52]/60 text-xs">Toggle if this dish should show a spicy indicator/chili icon.</p>
+                    <p className="text-[#B89A7D]/60 text-xs">Toggle if this dish should show a spicy indicator/chili icon.</p>
                   </div>
                 </div>
 
 
                 {/* Servings */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-2">Serves how many people</label>
+                  <label className="block text-[#B89A7D] text-sm mb-2">Serves how many people</label>
                   <input
                     type="number"
                     value={formData.servings}
                     onChange={(e) => setFormData({ ...formData, servings: e.target.value })}
-                    className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A]"
+                    className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A]"
                     placeholder="2"
                     min="1"
                   />
@@ -926,10 +1082,10 @@ export default function MenuPage() {
 
                 {/* Multiple Image Upload */}
                 <div>
-                  <label className="block text-[#8a6a52] text-sm mb-2">Dish Images / GIFs</label>
+                  <label className="block text-[#B89A7D] text-sm mb-2">Dish Images / GIFs</label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-start">
                     {formData.images.map((img, idx) => (
-                      <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-white/10 relative group">
+                      <div key={idx} className={`aspect-square rounded-lg overflow-hidden border-2 relative group ${idx === 0 ? 'border-[#E8650A]' : 'border-[#EDE4D5]'}`}>
                         {isVideoMedia(img) ? (
                           <video src={img} muted loop autoPlay className="w-full h-full object-cover" />
                         ) : (
@@ -945,7 +1101,7 @@ export default function MenuPage() {
                           onClick={() => setPreviewMediaUrl(img)}
                           className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
                         >
-                          <span className="text-xs font-medium text-white border border-white/30 bg-black/30 px-3 py-1.5 rounded-md">
+                          <span className="text-xs font-medium text-white border border-white/40 bg-black/40 px-3 py-1.5 rounded-md shadow-sm">
                             Preview
                           </span>
                         </button>
@@ -956,21 +1112,54 @@ export default function MenuPage() {
                             newImages.splice(idx, 1)
                             setFormData({ ...formData, images: newImages })
                           }}
-                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-white flex items-center justify-center transition-colors"
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-white flex items-center justify-center transition-colors z-10"
                           title="Remove image"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <X className="w-3 h-3" />
                         </button>
+                        {!isVideoMedia(img) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExistingCropIndex(idx);
+                              setCropImageUrl(img);
+                            }}
+                            className="absolute top-10 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-black/85 text-white flex items-center justify-center transition-colors z-10"
+                            title="Crop image"
+                          >
+                            <CropIcon className="w-3 h-3" />
+                          </button>
+                        )}
+                        {idx === 0 ? (
+                          <div className="absolute top-2 left-2 bg-[#E8650A] text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-[0_2px_4px_rgba(0,0,0,0.5)] z-10 pointer-events-none">
+                            MAIN
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newImages = [...formData.images];
+                              const [selected] = newImages.splice(idx, 1);
+                              newImages.unshift(selected);
+                              setFormData({ ...formData, images: newImages });
+                            }}
+                            className="absolute bottom-0 left-0 w-full bg-black/75 text-white text-[10px] uppercase font-bold py-2 hover:bg-[#E8650A] transition-colors z-10"
+                          >
+                            Set as Main
+                          </button>
+                        )}
                       </div>
                     ))}
                     
-                    <label className={`aspect-square flex flex-col items-center justify-center gap-2 bg-[#1C1510] border border-dashed border-white/10 rounded-lg text-white cursor-pointer hover:border-[#E8650A] transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}>
+                    <label className={`aspect-square flex flex-col items-center justify-center gap-2 bg-white border border-[#EDE4D5] border border-dashed border-[#EDE4D5] rounded-lg text-[#2C1810] cursor-pointer hover:border-[#E8650A] transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}>
                       {isUploading ? (
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#E8650A]" />
                       ) : (
-                        <Plus className="w-5 h-5 text-[#8a6a52]" />
+                        <Plus className="w-5 h-5 text-[#B89A7D]" />
                       )}
-                      <span className="text-[10px] font-medium text-[#8a6a52]">
+                      <span className="text-[10px] font-medium text-[#B89A7D]">
                         {isUploading ? "Uploading..." : "Add Image"}
                       </span>
                       <input
@@ -986,7 +1175,7 @@ export default function MenuPage() {
                   <div className="mt-4">
                     <input
                       type="text"
-                      className="w-full h-11 px-4 bg-[#1C1510] border border-white/10 rounded-lg text-white placeholder:text-[#8a6a52] focus:outline-none focus:border-[#E8650A] text-xs"
+                      className="w-full h-11 px-4 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] placeholder:text-[#B89A7D] focus:outline-none focus:border-[#E8650A] text-xs"
                       placeholder="Paste image URL and press Enter..."
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -1004,55 +1193,55 @@ export default function MenuPage() {
 
                 {/* Nutritional Info */}
                 <div>
-                  <label className="block text-white text-sm font-medium mb-3">Nutritional Information</label>
+                  <label className="block text-[#2C1810] text-sm font-medium mb-3">Nutritional Information</label>
                   <div className="grid grid-cols-5 gap-3">
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Calories</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Calories</label>
                       <input
                         type="number"
                         value={formData.kcal}
                         onChange={(e) => setFormData({ ...formData, kcal: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Protein(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Protein(g)</label>
                       <input
                         type="number"
                         value={formData.protein}
                         onChange={(e) => setFormData({ ...formData, protein: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Fat(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Fat(g)</label>
                       <input
                         type="number"
                         value={formData.fat}
                         onChange={(e) => setFormData({ ...formData, fat: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Carbs(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Carbs(g)</label>
                       <input
                         type="number"
                         value={formData.carbs}
                         onChange={(e) => setFormData({ ...formData, carbs: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#8a6a52] text-xs mb-1">Fibre(g)</label>
+                      <label className="block text-[#B89A7D] text-xs mb-1">Fibre(g)</label>
                       <input
                         type="number"
                         value={formData.fibre}
                         onChange={(e) => setFormData({ ...formData, fibre: e.target.value })}
-                        className="w-full h-10 px-3 bg-[#1C1510] border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-[#E8650A]"
+                        className="w-full h-10 px-3 bg-white border border-[#EDE4D5] border border-[#EDE4D5] rounded-lg text-[#2C1810] text-sm focus:outline-none focus:border-[#E8650A]"
                         placeholder="0"
                       />
                     </div>
@@ -1073,7 +1262,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Guest Favourite</span>
+                    <span className="text-[#2C1810] text-sm">Guest Favourite</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1088,7 +1277,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Chef Special</span>
+                    <span className="text-[#2C1810] text-sm">Chef Special</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1103,7 +1292,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Trending</span>
+                    <span className="text-[#2C1810] text-sm">Trending</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1118,7 +1307,7 @@ export default function MenuPage() {
                           }`}
                       />
                     </button>
-                    <span className="text-white text-sm">Available on Menu</span>
+                    <span className="text-[#2C1810] text-sm">Available on Menu</span>
                   </label>
                 </div>
               </div>
@@ -1128,7 +1317,7 @@ export default function MenuPage() {
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="w-full h-12 bg-[#E8650A] text-white font-semibold rounded-lg hover:bg-[#E8650A]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full h-12 rounded-lg bg-[#F0A33D] text-[#2B170D] font-semibold hover:bg-[#F4B55A] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isSaving
                     ? "Saving..."
@@ -1141,7 +1330,7 @@ export default function MenuPage() {
                     setShowAddForm(false)
                     resetForm()
                   }}
-                  className="w-full h-12 border border-white/20 text-white font-medium rounded-lg hover:bg-white/5 transition-colors"
+                  className="w-full h-12 rounded-lg border border-[#D4B391] text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors"
                 >
                   Cancel
                 </button>
@@ -1156,10 +1345,10 @@ export default function MenuPage() {
           <button
             type="button"
             onClick={() => setPreviewMediaUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center transition-colors"
             aria-label="Close preview"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
 
           <div className="relative w-full max-w-3xl max-h-[88vh]">
@@ -1180,6 +1369,90 @@ export default function MenuPage() {
           </div>
         </div>
       )}
+
+      {cropImageUrl && (
+        <ImageCropperModal
+          imageSrc={cropImageUrl}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+          aspect={1}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && itemToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#FFF4E8] rounded-2xl w-full max-w-md p-6 border border-[#D4B391] shadow-xl">
+            <h3 className="text-xl font-bold text-[#2C1810] mb-2">Delete Dish</h3>
+            <p className="text-[#8E6D4E] mb-6">
+              Are you sure you want to delete <span className="font-bold">"{itemToDelete.name.en}"</span>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteModalOpen(false)}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-lg border border-[#D4B391] bg-white text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isSaving ? "Deleting..." : "Delete Dish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Validation Error Modal */}
+      {errorModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#FFF4E8] rounded-2xl w-full max-w-md p-6 border border-[#D4B391] shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-red-600">Missing Information</h3>
+              <button onClick={() => setErrorModalOpen(false)} className="text-[#8E6D4E] hover:text-[#2C1810]">
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-[#2C1810] font-medium mb-3">Please fill in the following required fields:</p>
+            <ul className="list-disc list-inside text-[#8E6D4E] mb-6 space-y-1">
+              {validationErrors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setErrorModalOpen(false)
+                  scrollToError(validationErrors)
+                }}
+                className="px-5 py-2 rounded-lg bg-[#E8650A] text-white font-bold hover:bg-[#C74E33] transition-colors"
+              >
+                Okay, got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
+  )
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense
+      fallback={
+        <AdminLayout>
+          <div className="flex items-center justify-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
+          </div>
+        </AdminLayout>
+      }
+    >
+      <MenuPageContent />
+    </Suspense>
   )
 }

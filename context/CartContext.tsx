@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback } from "react";
+import { trackCartEvent } from "@/lib/database";
 
 export interface CartItem {
   id: string;
@@ -28,6 +29,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback(
     (dish: { id: string; name: string; price: number; image: string; category: string }) => {
+      void trackCartEvent(
+        dish.id,
+        dish.name,
+        dish.category || "General",
+        Number(dish.price) || 0
+      ).catch(() => {
+        // Preserve cart behavior even if analytics tracking fails.
+      });
+
       setItems((prevItems) => {
         const existingItem = prevItems.find((item) => item.id === dish.id);
         if (existingItem) {
