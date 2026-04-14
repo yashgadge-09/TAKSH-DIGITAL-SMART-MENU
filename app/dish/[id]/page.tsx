@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Heart, NotebookPen, Sparkles } from "lucide-react";
-import { getDishById, getDishRecommendations, getMoreLikeThisDishes } from "@/lib/database";
+import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, trackFavourite } from "@/lib/database";
+import { getFavouriteSessionKey, getOrCreateSessionId } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import {
@@ -14,10 +15,11 @@ import {
 } from "@/components/ui/carousel";
 
 export default function DishDetailPage() {
+  const TOAST_DURATION_MS = 950;
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const { addItem } = useCart();
+  const { addItem, items } = useCart();
   const { language: lang, t } = useLanguage();
 
   const [dish, setDish] = useState<any>(null);
@@ -25,8 +27,14 @@ export default function DishDetailPage() {
   const [moreLikeThisDishes, setMoreLikeThisDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [sessionId, setSessionId] = useState("");
 
   const [showAddedToast, setShowAddedToast] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recommendationSectionRef = useRef<HTMLDivElement | null>(null);
+  const [shouldScrollToRecommendations, setShouldScrollToRecommendations] = useState(false);
+  const [highlightRecommendations, setHighlightRecommendations] = useState(false);
   const [api, setApi] = useState<CarouselApi>();
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -37,6 +45,46 @@ export default function DishDetailPage() {
       setCurrentSlide(api.selectedScrollSnap());
     });
   }, [api]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const canShowRecommendations =
+      Boolean(dish?.id) &&
+      items.some((item) => item.id === dish.id) &&
+      !showAddedToast &&
+      recommendations.length > 0;
+
+    if (!canShowRecommendations || !shouldScrollToRecommendations) return;
+
+    requestAnimationFrame(() => {
+      recommendationSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setHighlightRecommendations(true);
+      if (highlightTimerRef.current) {
+        clearTimeout(highlightTimerRef.current);
+      }
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightRecommendations(false);
+      }, 1200);
+      setShouldScrollToRecommendations(false);
+    });
+  }, [dish, items, showAddedToast, recommendations.length, shouldScrollToRecommendations]);
+
+  useEffect(() => {
+    setSessionId(getOrCreateSessionId());
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -80,6 +128,27 @@ export default function DishDetailPage() {
 
         setDish(mappedDish);
 
+        const activeSessionId = getOrCreateSessionId();
+        setSessionId(activeSessionId);
+        const isAlreadyFavourited = window.sessionStorage.getItem(
+          getFavouriteSessionKey(activeSessionId, rawDish.id)
+        ) === "1";
+        setIsFavorited(isAlreadyFavourited);
+
+        const trackingKey = `taksh:last-dish-view-${rawDish.id}`;
+        const now = Date.now();
+        const previousViewTs = Number(window.sessionStorage.getItem(trackingKey) || 0);
+        if (!Number.isFinite(previousViewTs) || now - previousViewTs > 30000) {
+          window.sessionStorage.setItem(trackingKey, String(now));
+          void trackDishView(
+            rawDish.id,
+            rawDish.name_en || rawDish.name?.en || mappedDish.name || "Unknown Dish",
+            rawDish.category || "General"
+          ).catch(() => {
+            // Tracking failures should not block dish detail rendering.
+          });
+        }
+
         const dishRecommendations = await getDishRecommendations(
           rawDish.id,
           rawDish.category || "",
@@ -112,17 +181,17 @@ export default function DishDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0D0B0A] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
-        <p className="ml-3 text-[#E7CFA8]">{t('loading')}</p>
+        <p className="ml-3 text-[#2C1810]">{t('loading')}</p>
       </div>
     );
   }
 
   if (!dish) {
     return (
-      <div className="min-h-screen bg-[#0D0B0A] flex items-center justify-center">
-        <p className="text-[#E7CFA8]">{t('dishNotFound')}</p>
+      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
+        <p className="text-[#2C1810]">{t('dishNotFound')}</p>
       </div>
     );
   }
@@ -145,7 +214,13 @@ export default function DishDetailPage() {
     });
 
     setShowAddedToast(true);
-    setTimeout(() => setShowAddedToast(false), 2000);
+    setShouldScrollToRecommendations(true);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setShowAddedToast(false);
+    }, TOAST_DURATION_MS);
   };
 
   const getRecommendationName = (recommendedDish: any) =>
@@ -156,12 +231,55 @@ export default function DishDetailPage() {
     recommendedDish?.image_url ||
     "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
 
+  const recommendationIds = new Set(recommendations.map((item) => item.id));
+  const uniqueMoreLikeThisDishes = moreLikeThisDishes.filter(
+    (item) => !recommendationIds.has(item.id)
+  );
+  const isCurrentDishInCart = Boolean(dish?.id) && items.some((item) => item.id === dish.id);
+
+  const handleFavouriteToggle = () => {
+    const nextState = !isFavorited;
+    setIsFavorited(nextState);
+
+    if (!dish) return;
+
+    const activeSessionId = sessionId || getOrCreateSessionId();
+    if (!sessionId) setSessionId(activeSessionId);
+
+    const favouriteKey = getFavouriteSessionKey(activeSessionId, dish.id);
+
+    if (nextState && window.sessionStorage.getItem(favouriteKey) === "1") {
+      return;
+    }
+
+    if (nextState) {
+      window.sessionStorage.setItem(favouriteKey, "1");
+    } else {
+      window.sessionStorage.removeItem(favouriteKey);
+    }
+
+    void trackFavourite(
+      dish.id,
+      dish.name || dish.name_en || "Unknown Dish",
+      activeSessionId,
+      nextState
+    ).catch(() => {
+      // Do not interrupt favorite UX when analytics insert fails.
+      if (nextState) {
+        window.sessionStorage.removeItem(favouriteKey);
+      } else {
+        window.sessionStorage.setItem(favouriteKey, "1");
+      }
+      setIsFavorited(!nextState);
+    });
+  };
+
 
 
   return (
-    <div className="max-w-[430px] mx-auto min-h-screen bg-[#0D0B0A]">
+    <div className="max-w-[430px] mx-auto min-h-screen bg-[#F8F1E8]">
       {/* Hero Carousel */}
-      <div className="relative h-96 w-full bg-[#15110F]">
+      <div className="relative h-96 mx-2 mt-2 bg-white border border-[#EDE4D5] rounded-[2.5rem] overflow-hidden shadow-md">
         <Carousel setApi={setApi} className="w-full h-full">
           <CarouselContent className="h-96">
             {dish.images.map((img: string, index: number) => (
@@ -197,7 +315,7 @@ export default function DishDetailPage() {
               <div
                 key={i}
                 className={`w-1.5 h-1.5 rounded-full transition-all ${
-                  currentSlide === i ? "bg-[#E28B4B] w-4" : "bg-white/40"
+                  currentSlide === i ? "bg-[#3B2314] text-[#E7CFA8] w-4" : "bg-white/40"
                 }`}
               />
             ))}
@@ -207,25 +325,25 @@ export default function DishDetailPage() {
         {/* Back Button */}
         <button
           onClick={() => router.push('/menu')}
-          className="absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center hover:bg-black/70 transition-colors"
+          className="absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-[#F8F1E8]/80 flex items-center justify-center hover:bg-white transition-colors"
         >
-          <ArrowLeft className="w-5 h-5 text-white" />
+          <ArrowLeft className="w-5 h-5 text-[#2C1810]" />
         </button>
 
         {/* Favorite */}
-        <div className="absolute top-6 right-6 z-10">
+        <div className="absolute top-4 right-4 z-10">
           <button
-            onClick={() => setIsFavorited(!isFavorited)}
-            className={`w-14 h-14 flex items-center justify-center backdrop-blur-xl border-2 rounded-2xl transition-all duration-500 shadow-2xl ${
+            onClick={handleFavouriteToggle}
+            className={`w-11 h-11 flex items-center justify-center backdrop-blur-md border rounded-2xl transition-all duration-500 shadow-xl ${
               isFavorited 
                 ? "bg-red-500/30 border-red-500/60 shadow-red-500/40 scale-110" 
-                : "bg-white/10 border-white/20 shadow-black/50 hover:bg-white/20"
+                : "bg-black/30 border-white/20 shadow-black/10 hover:bg-black/40"
             }`}
           >
             <Heart
-              size={32}
+              size={24}
               fill={isFavorited ? "#ef4444" : "none"}
-              stroke={isFavorited ? "#ef4444" : "white"}
+              stroke={isFavorited ? "#ef4444" : "rgba(255,255,255,0.9)"}
               className={`${isFavorited ? "animate-pulse" : ""} transition-transform`}
             />
           </button>
@@ -233,84 +351,102 @@ export default function DishDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-[430px] mx-auto px-4 py-6">
+      <div className="max-w-[430px] mx-auto px-5 py-6">
         {/* Header */}
-        <div className="flex justify-between items-start mb-4">
-          <h1 className="text-[#E7CFA8] font-bold text-2xl">{dish.name}</h1>
-          <span className="text-[#E28B4B] font-bold text-2xl">₹{dish.price}</span>
+        <div className="flex justify-between items-start mb-3">
+          <h1 className="text-[#2C1810] font-bold text-3xl">{dish.name}</h1>
+          <span className="text-[#C4956A] font-bold text-2xl">₹{dish.price}</span>
         </div>
 
-        {/* Highly Reordered */}
-        {dish.isGuestFavorite && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-[#22c55e] mb-4">
-            <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block"></span>
-            {t('highlyReordered')}
-          </span>
-        )}
-
-        {/* Spice Indicator */}
-        {dish.hasSpiceIndicator && (
-          <div className="flex items-center gap-2 mb-4 bg-red-500/10 w-fit px-3 py-1 rounded-full border border-red-500/20">
-            <span className="text-[#C18F58] text-sm">🌶️</span>
-            <span className="text-[#E28B4B] font-bold text-xs uppercase tracking-widest">
-              {t('spicy')}
-            </span>
+        {/* Flavor & Spice Line */}
+        {(dish.tasteDescription || dish.hasSpiceIndicator) && (
+          <div className="flex items-start gap-2 text-[#8E7F71] text-sm mb-2 font-medium">
+            <span className="text-base text-[#C18F58]">{dish.hasSpiceIndicator ? '🔥' : '✨'}</span>
+            <span className="leading-snug">{dish.tasteDescription || t('spicy')}</span>
           </div>
         )}
 
-        {/* How Does It Taste */}
-        <div className="bg-[#15110F] rounded-xl p-5 mb-6 border border-white/5 shadow-inner">
-          <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-2.5">
-            {t('howDoesItTaste')}
-          </h3>
-          <p className="text-[#E7CFA8] italic text-sm leading-6">
-            "{dish.tasteDescription}"
-          </p>
-        </div>
-
         {/* Servings */}
-        <div className="flex items-center gap-2 text-[#8E7F71] text-sm mb-6">
-          <span>👥</span>
-          <span>{t('serves')} {dish.servings} {t('people')}</span>
-        </div>
+        {dish.servings && (
+          <div className="flex items-center gap-2 text-[#8E7F71] text-sm mb-6 font-medium">
+            <span className="text-base">👥</span>
+            <span>{t('serves')} {dish.servings} {t('people')}</span>
+          </div>
+        )}
 
         {/* Chef's Note */}
-        <div className="bg-[#15110F] rounded-xl p-4 border-l-4 border-[#E28B4B] mb-6">
-          <h2 className="text-[#E7CFA8] font-bold mb-2 flex items-center gap-2">
-            👨‍🍳 {t('chefNote')}
-          </h2>
-          <p className="text-[#8E7F71] italic text-sm">{dish.description}</p>
-        </div>
+        {dish.description && (
+          <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-4 shadow-sm">
+            <h2 className="text-[#2C1810] font-bold mb-1.5 text-base">👨‍🍳 Chef's Note</h2>
+            <p className="text-[#8E7F71] text-sm leading-relaxed italic">{dish.description}</p>
+          </div>
+        )}
 
         {/* Ingredients */}
-        <div className="bg-[#15110F] rounded-xl p-6 mb-6 border border-white/5 shadow-inner">
-          <h3 className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em] mb-3">
-            {t('ingredients')}
-          </h3>
-          <p className="text-[#E28B4B] text-sm leading-6 font-medium">{dish.ingredients.join(", ")}</p>
-        </div>
+        {dish.ingredients && dish.ingredients.length > 0 && (
+          <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-8 shadow-sm">
+            <h3 className="text-[#2C1810] font-bold mb-1.5 text-base">Ingredients</h3>
+            <p className="text-[#C4956A] text-sm leading-relaxed font-medium">{dish.ingredients.join(", ")}</p>
+          </div>
+        )}
 
-        {recommendations.length > 0 && (
-          <section className="mb-8 rounded-2xl border border-[#E28B4B]/30 bg-[linear-gradient(135deg,rgba(226,139,75,0.14)_0%,rgba(21,17,15,0.95)_45%,rgba(13,11,10,0.96)_100%)] p-4 shadow-[0_0_0_1px_rgba(226,139,75,0.08),0_14px_30px_rgba(0,0,0,0.35)]">
-            <div className="flex items-start justify-between gap-4 mb-3">
+        {uniqueMoreLikeThisDishes.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-[#2C1810] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+              {uniqueMoreLikeThisDishes.slice(0, 10).map((relatedDish: any) => (
+                <button
+                  key={relatedDish.id}
+                  onClick={() => router.push(`/dish/${relatedDish.id}`)}
+                  className="w-[120px] shrink-0 bg-white border border-[#EDE4D5] hover:border-[#E28B4B] rounded-[1.75rem] overflow-hidden text-left transition-colors shadow-sm"
+                >
+                  <div className="h-[90px] w-full border-b border-[#EDE4D5]">
+                    {(String(getRecommendationImage(relatedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(relatedDish)).includes('/video/upload/')) ? (
+                      <video src={String(getRecommendationImage(relatedDish))} muted loop autoPlay className="w-full h-full object-cover" />
+                    ) : (
+                      <img
+                        src={String(getRecommendationImage(relatedDish))}
+                        alt={getRecommendationName(relatedDish)}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <p className="text-[#2C1810] text-[13px] font-bold truncate leading-tight mb-1">{getRecommendationName(relatedDish)}</p>
+                    <p className="text-[#C4956A] font-bold text-xs">₹{relatedDish.price}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isCurrentDishInCart && !showAddedToast && recommendations.length > 0 && (
+          <section
+            ref={recommendationSectionRef}
+            className={`mb-8 rounded-2xl border border-[#C4956A]/35 bg-[linear-gradient(135deg,rgba(196,149,106,0.15)_0%,rgba(255,255,255,0.96)_45%,rgba(248,241,232,0.98)_100%)] p-4 shadow-[0_0_0_1px_rgba(196,149,106,0.08),0_14px_30px_rgba(44,24,16,0.08)] transition-all duration-500 ${
+              highlightRecommendations ? "ring-2 ring-[#C4956A]/50 shadow-[0_0_0_1px_rgba(196,149,106,0.2),0_18px_34px_rgba(44,24,16,0.14)]" : ""
+            }`}
+          >
+            <div className="mb-3">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.24em] text-[#C18F58] mb-1">Curated Picks</p>
-                <h3 className="text-[#F5DFC0] font-extrabold text-lg leading-tight flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#E28B4B]" />
-                  {t('Recommended')}
+                <p className="text-[10px] uppercase tracking-[0.24em] text-[#B89A7D] mb-1">Curated Picks</p>
+                <h3 className="text-[#2C1810] font-extrabold text-lg leading-tight flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#C4956A]" />
+                  {t('completeYourMeal')}
                 </h3>
               </div>
-              <span className="text-[11px] px-2.5 py-1 rounded-full border border-[#E28B4B]/40 text-[#E7CFA8] bg-[#0D0B0A]/60">
-                {recommendations.length} picks
-              </span>
             </div>
 
             <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-              {recommendations.map((recommendedDish, index) => (
+              {recommendations.map((recommendedDish) => (
                 <button
                   key={recommendedDish.id}
                   onClick={() => router.push(`/dish/${recommendedDish.id}`)}
-                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#E28B4B]/25 bg-[#120F0D] hover:border-[#E28B4B] hover:-translate-y-0.5 transition-all text-left"
+                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#C4956A]/25 bg-white hover:border-[#C4956A] hover:-translate-y-0.5 transition-all text-left shadow-sm"
                 >
                   <div className="relative">
                     {(String(getRecommendationImage(recommendedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(recommendedDish)).includes('/video/upload/')) ? (
@@ -325,19 +461,16 @@ export default function DishDetailPage() {
                         }}
                       />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0" />
-                    <span className="absolute top-2 left-2 text-[11px] font-bold rounded-md px-2 py-1 bg-[#0D0B0A]/80 text-[#E7CFA8] border border-white/10">
-                      #{index + 1}
-                    </span>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0" />
                   </div>
 
                   <div className="p-3">
-                    <p className="text-[#F5DFC0] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
+                    <p className="text-[#2C1810] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
                       {getRecommendationName(recommendedDish)}
                     </p>
                     <div className="mt-2 flex items-center justify-between">
-                      <p className="text-[#E28B4B] font-extrabold text-base">₹{recommendedDish.price}</p>
-                      <span className="text-[10px] uppercase tracking-wider text-[#8E7F71]">View</span>
+                      <p className="text-[#C4956A] font-extrabold text-base">₹{recommendedDish.price}</p>
+                      <span className="text-[10px] uppercase tracking-wider text-[#B89A7D]">View</span>
                     </div>
                   </div>
                 </button>
@@ -346,63 +479,31 @@ export default function DishDetailPage() {
           </section>
         )}
 
-        {moreLikeThisDishes.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-[#E7CFA8] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
-            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-              {moreLikeThisDishes.map((relatedDish) => (
-                <button
-                  key={relatedDish.id}
-                  onClick={() => router.push(`/dish/${relatedDish.id}`)}
-                  className="w-36 flex-shrink-0 bg-[#15110F] rounded-xl overflow-hidden border border-[rgba(255,255,255,0.06)] hover:border-[#E28B4B] transition-colors text-left"
-                >
-                  {(String(getRecommendationImage(relatedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(relatedDish)).includes('/video/upload/')) ? (
-                    <video src={String(getRecommendationImage(relatedDish))} muted loop autoPlay className="w-full h-24 object-cover" />
-                  ) : (
-                    <img
-                      src={String(getRecommendationImage(relatedDish))}
-                      alt={getRecommendationName(relatedDish)}
-                      className="w-full h-24 object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                      }}
-                    />
-                  )}
-                  <div className="p-2.5">
-                    <p className="text-[#E7CFA8] text-xs font-semibold truncate">{getRecommendationName(relatedDish)}</p>
-                    <p className="text-[#E28B4B] font-bold text-sm mt-1">₹{relatedDish.price}</p>
-                  </div>
-                </button>
-              ))}
+      </div>
+
+      <div className="h-28"></div> {/* Spacer for fixed button */}
+
+      {/* Add To Cart Button - Fixed at bottom */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 max-w-[430px] mx-auto bg-gradient-to-t from-[#F8F1E8] via-[#F8F1E8] to-transparent pt-8 pb-8 px-5">
+        <button
+          onClick={() => handleAddToCart()}
+          className="w-full bg-[#3B2314] text-[#E7CFA8] font-bold py-4 rounded-full flex items-center justify-center gap-3 shadow-xl hover:scale-[1.02] active:scale-95 transition-all outline outline-offset-2 outline-[#3B2314]/50"
+        >
+          <span className="text-[17px] tracking-widest uppercase">ADD TO CART</span>
+        </button>
+
+        {/* Toast */}
+        {showAddedToast && (
+          <div className="absolute -top-14 left-4 right-4 rounded-2xl border border-emerald-300/40 bg-[linear-gradient(135deg,rgba(16,185,129,0.18)_0%,rgba(255,255,255,0.92)_100%)] text-emerald-800 px-4 py-3 shadow-[0_10px_30px_rgba(16,185,129,0.2)] backdrop-blur-sm animate-fade-in-out">
+            <div className="flex items-center justify-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">✓</span>
+              <div className="text-left">
+                <p className="text-sm font-extrabold leading-tight">Added to cart</p>
+                <p className="text-[11px] font-medium text-emerald-700/90">Suggestions will appear right away</p>
+              </div>
             </div>
           </div>
         )}
-
-
-
-
-      </div>
-
-      <div className="h-24"></div> {/* Spacer for fixed button */}
-
-      {/* Add To Cart Button - Fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 max-w-[430px] mx-auto">
-        <div className="bg-gradient-to-t from-[#0D0B0A] via-[#0D0B0A] to-transparent pt-8 pb-6 px-4">
-          <button
-            onClick={() => handleAddToCart()}
-            className="w-full bg-[#E28B4B] text-[#0D0B0A] font-extrabold py-4.5 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-[#E28B4B]/20 hover:scale-[1.02] active:scale-95 transition-all"
-          >
-            <NotebookPen size={22} strokeWidth={2.5} />
-            <span className="text-lg tracking-wide uppercase">{t('placeOrder')}</span>
-          </button>
-
-          {/* Toast */}
-          {showAddedToast && (
-            <div className="absolute -top-12 left-4 right-4 bg-green-500/20 text-green-500 border border-green-500/30 px-4 py-3 rounded-xl text-sm font-bold text-center animate-fade-in-out backdrop-blur-sm">
-              Added to cart!
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
