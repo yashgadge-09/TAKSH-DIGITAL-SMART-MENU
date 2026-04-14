@@ -825,6 +825,7 @@ export async function getAnalyticsData(days = 7) {
     ratingDistribution,
     recentReviews,
     topRatedDishes,
+    totalScans: menuViewsLast7.data?.length || 0,
     windowDays: safeDays,
     queryWarning,
   }
