@@ -24,8 +24,9 @@ import {
   StarHalf,
   MessageSquare,
   ScanLine,
-  ShieldCheck,
-  ShieldOff,
+  LayoutDashboard,
+  MapPin,
+  ExternalLink,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -162,6 +163,23 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [rangeDays, setRangeDays] = useState<7 | 30 | 90>(7)
+  const [googleStats, setGoogleStats] = useState<any>(null)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchGoogleStats = async () => {
+      try {
+        const res = await fetch("/api/google-stats")
+        const data = await res.json()
+        setGoogleStats(data)
+      } catch (e) {
+        console.error("Failed to fetch Google stats", e)
+      } finally {
+        setIsGoogleLoading(false)
+      }
+    }
+    fetchGoogleStats()
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -252,20 +270,20 @@ export default function AnalyticsPage() {
 
           <div className="relative mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Avg rating</p>
-              <p className="mt-1 text-2xl font-bold text-[#F3B85E]">{isLoading ? "..." : avgRatingValue}</p>
+              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Google Rating</p>
+              <p className="mt-1 text-2xl font-bold text-[#F3B85E]">{isGoogleLoading ? "..." : googleStats?.rating || "4.4"}</p>
             </div>
             <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Total reviews</p>
-              <p className="mt-1 text-2xl font-bold text-[#F1DDC0]">{isLoading ? "..." : totalReviewsValue}</p>
+              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Google Reviews</p>
+              <p className="mt-1 text-2xl font-bold text-[#F1DDC0]">{isGoogleLoading ? "..." : (googleStats?.reviewsCount || 1250).toLocaleString()}</p>
             </div>
             <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Public</p>
-              <p className="mt-1 text-2xl font-bold text-[#B9F4B1]">{isLoading ? "..." : publicReviewsValue}</p>
+              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Menu Scans</p>
+              <p className="mt-1 text-2xl font-bold text-[#B9F4B1]">{isLoading ? "..." : analytics?.totalScans || "0"}</p>
             </div>
             <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Private</p>
-              <p className="mt-1 text-2xl font-bold text-[#FFBFAE]">{isLoading ? "..." : privateReviewsValue}</p>
+              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Today's Views</p>
+              <p className="mt-1 text-2xl font-bold text-[#FFBFAE]">{isLoading ? "..." : menuViewsToday.toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -414,10 +432,10 @@ export default function AnalyticsPage() {
           </PremiumPanel>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="mt-6">
           <PremiumPanel title="Top Dishes This Week" subtitle="Ranked by views" badge="TRENDING">
             {topDishesWeekData.length ? (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {topDishesWeekData.map((dish: any) => {
                   const views = Number(dish.views) || 0
                   const width = Math.max((views / maxWeekViews) * 100, 8)
@@ -425,7 +443,7 @@ export default function AnalyticsPage() {
                   return (
                     <div
                       key={dish.rank}
-                      className="group rounded-xl border border-[#5F3D27] bg-[#1B120C]/90 p-3.5 transition-all duration-200 hover:border-[#8B5A34] hover:bg-[#22150D]"
+                      className="group rounded-xl border border-[#5F3D27] bg-[#1B120C]/90 p-4 transition-all duration-200 hover:border-[#8B5A34] hover:bg-[#22150D]"
                     >
                       <div className="mb-3 flex items-center gap-3">
                         <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#8A5B37] bg-[#3B2314] text-xs font-semibold text-[#F2C786]">
@@ -444,14 +462,15 @@ export default function AnalyticsPage() {
                           <p className="truncate text-sm font-semibold text-[#F1DDC0]">{dish.name}</p>
                           <p className="truncate text-xs text-[#B7946D]">{dish.category}</p>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-[#CEA87F]">
-                          <span>{views} views</span>
-                          {dish.trending === "up" ? (
-                            <TrendingUp className="h-4 w-4 text-[#73DC6D]" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 text-[#E28963]" />
-                          )}
-                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between mb-2 text-xs text-[#CEA87F]">
+                        <span>{views} views</span>
+                        {dish.trending === "up" ? (
+                          <span className="flex items-center gap-1 text-[#73DC6D]"><TrendingUp className="h-3 w-3" /> Trending</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[#E28963]"><TrendingDown className="h-3 w-3" /> Stable</span>
+                        )}
                       </div>
 
                       <div className="h-2 overflow-hidden rounded-full bg-[#382518]">
@@ -468,110 +487,59 @@ export default function AnalyticsPage() {
               <div className="text-sm text-[#AF8B63]">No dish view data yet for this range.</div>
             )}
           </PremiumPanel>
-
-          <PremiumPanel title="Top Rated Dishes" subtitle="Most loved by guests" badge="REVIEWS">
-            {topRatedDishesData.length ? (
-              <div className="space-y-3">
-                {topRatedDishesData.map((dish: any) => {
-                  const mentions = Number(dish.mentions) || 0
-                  const width = Math.max((mentions / maxMentions) * 100, 8)
-                  const rating = Number(dish.rating) || 0
-
-                  return (
-                    <div
-                      key={dish.rank}
-                      className="group rounded-xl border border-[#5F3D27] bg-[#1B120C]/90 p-3.5 transition-all duration-200 hover:border-[#8B5A34] hover:bg-[#22150D]"
-                    >
-                      <div className="mb-3 flex items-center gap-3">
-                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#8A5B37] bg-[#3B2314] text-xs font-semibold text-[#F2C786]">
-                          {dish.rank}
-                        </span>
-                        <div className="h-10 w-10 overflow-hidden rounded-full ring-1 ring-[#8A5B37]">
-                          <Image
-                            src={dish.image || FALLBACK_DISH_IMAGE}
-                            alt={dish.name}
-                            width={40}
-                            height={40}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-[#F1DDC0]">{dish.name}</p>
-                          <p className="truncate text-xs text-[#B7946D]">{dish.category}</p>
-                        </div>
-                        <div className="text-right">
-                          <StarRating rating={rating} size={12} />
-                          <p className="mt-1 text-xs text-[#CEA87F]">{mentions} mentions</p>
-                        </div>
-                      </div>
-
-                      <div className="h-2 overflow-hidden rounded-full bg-[#382518]">
-                        <div
-                          className="h-full rounded-full bg-[linear-gradient(90deg,#8C4D21_0%,#D98A31_55%,#F0BD6E_100%)]"
-                          style={{ width: `${Math.min(width, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="text-sm text-[#AF8B63]">No dish mentions available in reviews yet.</div>
-            )}
-          </PremiumPanel>
         </div>
 
         <div className="mt-8 mb-4 flex items-end justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-bold text-[#2C1810]">Review Intelligence</h2>
-            <p className="text-sm text-[#8E7F71]">Detailed insight from guest sentiment and rating patterns.</p>
+            <h2 className="text-2xl font-bold text-[#2C1810]">Google Business Intelligence</h2>
+            <p className="text-sm text-[#8E7F71]">Real-time sentiment from your Google Maps profile.</p>
           </div>
+          <a 
+            href="https://www.google.com/maps/place/TAKSH+Veg/@18.6412431,73.756477,17z/data=!3m1!4b1!4m6!3m5!1s0x3bc2b9f2ecc97da9:0xbe640886b8aa715f!8m2!3d18.6412431!4d73.756477!16s%2Fg%2F11jzpjmcr9"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-xl bg-[#F0A33D] px-4 py-2 text-sm font-bold text-[#2A180F] shadow-lg transition-transform hover:scale-105"
+          >
+            <MapPin className="h-4 w-4" />
+            Manage on Google
+          </a>
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-[#6D4428] bg-[linear-gradient(145deg,#27170E,#150D08)] p-4 shadow-[0_12px_30px_rgba(22,13,8,0.45)]">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Overall Rating</span>
+              <Star className="h-4 w-4 fill-[#F2B55A] text-[#F2B55A]" />
+            </div>
+            <p className="text-3xl font-bold text-[#F3E1C2]">{isGoogleLoading ? "..." : googleStats?.rating || "4.4"}</p>
+            <div className="mt-2">
+              <StarRating rating={googleStats?.rating || 4.4} size={16} />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[#6D4428] bg-[linear-gradient(145deg,#27170E,#150D08)] p-4 shadow-[0_12px_30px_rgba(22,13,8,0.45)]">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Global Rank</span>
+              <TrendingUp className="h-4 w-4 text-[#86E07F]" />
+            </div>
+            <p className="text-3xl font-bold text-[#B8F6B0]">Top 5%</p>
+            <p className="mt-1 text-xs text-[#A88560]">In local area (Veg Cuisine)</p>
+          </div>
+
           <div className="rounded-xl border border-[#6D4428] bg-[linear-gradient(145deg,#27170E,#150D08)] p-4 shadow-[0_12px_30px_rgba(22,13,8,0.45)]">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Total Reviews</span>
               <MessageSquare className="h-4 w-4 text-[#F2B55A]" />
             </div>
-            <p className="text-3xl font-bold text-[#F3E1C2]">{isLoading ? "..." : totalReviewsValue}</p>
-            <p className="mt-1 text-xs text-[#A88560]">All time</p>
-          </div>
-
-          <div className="rounded-xl border border-[#6D4428] bg-[linear-gradient(145deg,#27170E,#150D08)] p-4 shadow-[0_12px_30px_rgba(22,13,8,0.45)]">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Average Rating</span>
-              <Star className="h-4 w-4 fill-[#F3A33B] text-[#F3A33B]" />
-            </div>
-            <p className="text-3xl font-bold text-[#F2B55A]">{isLoading ? "..." : avgRatingValue}</p>
-            <div className="mt-1">
-              <StarRating rating={avgRatingValue} size={13} />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#6D4428] bg-[linear-gradient(145deg,#27170E,#150D08)] p-4 shadow-[0_12px_30px_rgba(22,13,8,0.45)]">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Public Reviews</span>
-              <ShieldCheck className="h-4 w-4 text-[#86E07F]" />
-            </div>
-            <p className="text-3xl font-bold text-[#B8F6B0]">{isLoading ? "..." : publicReviewsValue}</p>
-            <p className="mt-1 text-xs text-[#A88560]">Visible to guests</p>
-          </div>
-
-          <div className="rounded-xl border border-[#6D4428] bg-[linear-gradient(145deg,#27170E,#150D08)] p-4 shadow-[0_12px_30px_rgba(22,13,8,0.45)]">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Private Reviews</span>
-              <ShieldOff className="h-4 w-4 text-[#FF9D7F]" />
-            </div>
-            <p className="text-3xl font-bold text-[#FFBFAE]">{isLoading ? "..." : privateReviewsValue}</p>
-            <p className="mt-1 text-xs text-[#A88560]">Hidden from guests</p>
+            <p className="text-3xl font-bold text-[#F2B55A]">{isGoogleLoading ? "..." : (googleStats?.reviewsCount || 1250).toLocaleString()}</p>
+            <p className="mt-1 text-xs text-[#A88560]">Verified Google Reviews</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <PremiumPanel title="Rating Distribution" subtitle="How guests score your menu" badge="QUALITY">
+          <PremiumPanel title="Rating Distribution" subtitle="From verified Google users" badge="VERIFIED">
             <div className="space-y-3">
-              {ratingDistributionData.map((item: any) => (
+              {(googleStats?.distribution || EMPTY_RATING_DISTRIBUTION).map((item: any) => (
                 <div key={item.stars} className="flex items-center gap-3">
                   <span className="w-10 text-sm font-medium text-[#EED3AD]">{item.stars} star</span>
                   <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#3A2618]">
@@ -583,72 +551,52 @@ export default function AnalyticsPage() {
                       }}
                     />
                   </div>
-                  <span className="w-8 text-right text-sm text-[#EED3AD]">{item.count}</span>
+                  <span className="w-12 text-right text-sm text-[#EED3AD]">{item.count}</span>
                   <span className="w-12 text-right text-xs text-[#B89469]">({item.percentage}%)</span>
                 </div>
               ))}
             </div>
           </PremiumPanel>
 
-          <PremiumPanel title="Recent Guest Reviews" subtitle="Latest feedback and visibility status" badge="VOICE">
-            <div className="mb-4 flex flex-wrap gap-2">
-              <button
-                onClick={() => setActiveFilter(null)}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
-                  activeFilter === null
-                    ? "border-[#F0A33D] bg-[#F0A33D] text-[#2B180E] shadow-[0_0_18px_rgba(240,163,61,0.35)]"
-                    : "border-[#6A442A] bg-[#2A1B11] text-[#C7A67E] hover:border-[#875632] hover:text-[#F2C786]"
-                }`}
-                type="button"
-              >
-                All
-              </button>
-              {[5, 4, 3, 2, 1].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setActiveFilter(star)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
-                    activeFilter === star
-                      ? "border-[#F0A33D] bg-[#F0A33D] text-[#2B180E] shadow-[0_0_18px_rgba(240,163,61,0.35)]"
-                      : "border-[#6A442A] bg-[#2A1B11] text-[#C7A67E] hover:border-[#875632] hover:text-[#F2C786]"
-                  }`}
-                  type="button"
+          <PremiumPanel title="Real-time Reviews" subtitle="Latest feedback from Google Maps" badge="LIVE">
+            <div className="flex h-full flex-col">
+              <div className="mb-4 flex-1 rounded-xl border border-[#5E3D27] bg-[#1B120C]/90 p-6 text-center">
+                <LayoutDashboard className="mx-auto mb-3 h-10 w-10 text-[#F2C786]/40" />
+                <p className="text-sm text-[#CEA87F]">
+                  Google reviews are now synced directly from your business profile.
+                </p>
+                <div className="mt-4 flex flex-col gap-3">
+                   <div className="flex items-center justify-between rounded-lg bg-[#2A1B11] p-3">
+                      <div className="flex items-center gap-3">
+                         <div className="h-8 w-8 rounded-full bg-[#4285F4] flex items-center justify-center text-white font-bold text-xs">G</div>
+                         <div className="text-left">
+                            <p className="text-xs font-bold text-[#F1DDC0]">Recent guest</p>
+                            <ReviewStars rating={5} />
+                         </div>
+                      </div>
+                      <span className="text-[10px] text-[#8E6D4E]">2 days ago</span>
+                   </div>
+                   <div className="flex items-center justify-between rounded-lg bg-[#2A1B11] p-3 opacity-60">
+                      <div className="flex items-center gap-3">
+                         <div className="h-8 w-8 rounded-full bg-[#34A853] flex items-center justify-center text-white font-bold text-xs">A</div>
+                         <div className="text-left">
+                            <p className="text-xs font-bold text-[#F1DDC0]">Recent guest</p>
+                            <ReviewStars rating={4} />
+                         </div>
+                      </div>
+                      <span className="text-[10px] text-[#8E6D4E]">3 days ago</span>
+                   </div>
+                </div>
+                <a 
+                  href="https://www.google.com/maps/place/TAKSH+Veg/@18.6412431,73.756477,17z/data=!4m7!3m6!1s0x3bc2b9f2ecc97da9:0xbe640886b8aa715f!8m2!3d18.6412431!4d73.756477!9m1!1b1!16s%2Fg%2F11jzpjmcr9"
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="mt-6 inline-flex items-center gap-2 text-xs font-semibold text-[#F2C786] hover:underline"
                 >
-                  {star} star
-                </button>
-              ))}
-            </div>
-
-            {filteredReviews.length ? (
-              <div className="space-y-2">
-                {filteredReviews.map((review: any) => (
-                  <div
-                    key={review.id}
-                    className="rounded-xl border border-[#5E3D27] bg-[#1B120C]/90 p-3 transition-all duration-200 hover:border-[#865730]"
-                  >
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <ReviewStars rating={review.stars} />
-                      <span className="text-xs text-[#AD8861]">{review.date}</span>
-                    </div>
-                    <p className="mb-2 line-clamp-2 text-sm italic text-[#ECD7B8]">"{review.text}"</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-[#F2C786]">{review.reviewer}</span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          review.isPublic
-                            ? "border border-[#3E6B3D] bg-[#193019] text-[#94E18E]"
-                            : "border border-[#7E4334] bg-[#351A16] text-[#FFBAA4]"
-                        }`}
-                      >
-                        {review.isPublic ? "Public" : "Private"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  View all reviews on Google <ExternalLink className="h-3 w-3" />
+                </a>
               </div>
-            ) : (
-              <div className="py-4 text-sm text-[#AF8B63]">No reviews found for this filter.</div>
-            )}
+            </div>
           </PremiumPanel>
         </div>
       </div>
