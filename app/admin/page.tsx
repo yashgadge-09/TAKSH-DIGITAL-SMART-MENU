@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { TakshBrand } from "@/components/TakshBrand"
 
@@ -75,20 +74,14 @@ export default function AdminLoginPage() {
             />
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="pt-2">
             <button
               type="submit"
-              className="h-12 flex-1 rounded-lg bg-[#F0A33D] font-semibold text-[#2B170D] transition-colors hover:bg-[#F4B55A]"
+              className="h-12 w-full rounded-lg bg-[#F0A33D] font-semibold text-[#2B170D] transition-colors hover:bg-[#F4B55A]"
               disabled={isLoading}
             >
               {isLoading ? "Signing in..." : "Sign in"}
             </button>
-            <Link
-              href="/admin/preview"
-              className="flex h-12 items-center justify-center rounded-lg border border-[#7F5331] bg-[#2E1B11] px-6 font-medium text-[#F2C786] transition-colors hover:bg-[#3A2416]"
-            >
-              Menu
-            </Link>
           </div>
         </form>
 
