@@ -18,6 +18,7 @@ export function OrderSummarySheet({
   const { items, totalPrice, clearCart } = useCart();
   const [isLocked, setIsLocked] = useState(false);
   const [orderTime, setOrderTime] = useState("");
+  const [isFreezing, setIsFreezing] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -35,7 +36,11 @@ export function OrderSummarySheet({
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    setIsLocked(true);
+    setIsFreezing(true);
+    setTimeout(() => {
+      setIsFreezing(false);
+      setIsLocked(true);
+    }, 1500); // Screen freezes for 1.5 seconds
   };
 
   const handleClear = () => {
@@ -45,6 +50,9 @@ export function OrderSummarySheet({
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-[#F8F1E8]">
+      {/* Invisible overlay to "freeze" clicks during the short delay */}
+      {isFreezing && <div className="absolute inset-0 z-[110] cursor-wait" />}
+
       {/* Background Paper Texture (subtle) */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
 
@@ -100,16 +108,6 @@ export function OrderSummarySheet({
               Show this screen to the waiter to place your order
             </p>
           </div>
-
-          {/* Confirmation Overlay */}
-          {isLocked && (
-            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center animate-in fade-in duration-500">
-              <div className="bg-[#3B2314] text-[#E7CFA8] px-8 py-4 rounded-2xl flex flex-col items-center gap-2 shadow-2xl scale-110 border border-[#E7CFA8]/30">
-                <CheckCircle2 size={32} className="animate-bounce" />
-                <span className="font-extrabold text-xl uppercase tracking-[0.2em]">Order Locked</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -119,21 +117,30 @@ export function OrderSummarySheet({
           <div className="max-w-[430px] mx-auto grid grid-cols-2 gap-4">
             <button
               onClick={onEdit}
-              className="flex items-center justify-center gap-2 bg-white border-2 border-[#3B2314] text-[#3B2314] py-4 rounded-2xl font-bold transition-all active:scale-95 shadow-sm hover:bg-[#3B2314] hover:text-white group"
+              disabled={isFreezing}
+              className={`flex items-center justify-center gap-2 bg-white border-2 border-[#3B2314] text-[#3B2314] py-4 rounded-2xl font-bold transition-all shadow-sm ${
+                isFreezing ? 'opacity-50 cursor-not-allowed' : 'active:scale-95 hover:bg-[#3B2314] hover:text-white group'
+              }`}
             >
-              <Edit2 size={18} className="group-hover:rotate-12 transition-transform" />
+              <Edit2 size={18} className={isFreezing ? '' : "group-hover:rotate-12 transition-transform"} />
               <span>Edit Order</span>
             </button>
             <button
               onClick={handleConfirm}
-              className="flex items-center justify-center gap-2 bg-[#3B2314] text-[#E7CFA8] py-4 rounded-2xl font-bold transition-all active:scale-95 shadow-lg hover:bg-[#2A1609]"
+              disabled={isFreezing}
+              className={`flex items-center justify-center gap-2 bg-[#3B2314] text-[#E7CFA8] py-4 rounded-2xl font-bold transition-all shadow-lg ${
+                isFreezing ? 'opacity-70 cursor-wait animate-pulse' : 'active:scale-95 hover:bg-[#2A1609]'
+              }`}
             >
               <CheckCircle2 size={18} />
-              <span>Confirm Order</span>
+              <span>{isFreezing ? 'Confirming...' : 'Confirm Order'}</span>
             </button>
             <button
               onClick={handleClear}
-              className="col-span-2 flex items-center justify-center gap-2 text-[#8E7F71] py-2 font-bold hover:text-red-500 transition-colors uppercase tracking-widest text-[10px]"
+              disabled={isFreezing}
+              className={`col-span-2 flex items-center justify-center gap-2 text-[#8E7F71] py-2 font-bold transition-colors uppercase tracking-widest text-[10px] ${
+                isFreezing ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-500'
+              }`}
             >
               <Trash2 size={14} />
               <span>Clear Order</span>
