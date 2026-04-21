@@ -18,6 +18,7 @@ interface CartDrawerProps {
   onClose: () => void;
   recommendations?: RecommendedDish[];
   onAddRecommendation?: (dish: RecommendedDish) => void;
+  onShowOrder?: () => void;
 }
 
 export function CartDrawer({
@@ -25,6 +26,7 @@ export function CartDrawer({
   onClose,
   recommendations = [],
   onAddRecommendation,
+  onShowOrder,
 }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, clearCart, totalPrice } = useCart();
 
@@ -161,13 +163,11 @@ export function CartDrawer({
             </button>
             <button
               onClick={() => {
-                toast("Order in making!", { icon: '👨‍🍳' });
-                clearCart();
-                onClose();
+                onShowOrder?.();
               }}
               className="w-full bg-[#3B2314] text-[#E7CFA8] text-[#E7CFA8] font-bold py-3 rounded-lg hover:opacity-90 transition-opacity"
             >
-              Proceed to Checkout
+              Make your order list
             </button>
           </div>
         )}

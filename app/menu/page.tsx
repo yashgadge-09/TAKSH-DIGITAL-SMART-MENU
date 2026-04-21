@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
+import { OrderSummarySheet } from "@/components/OrderSummarySheet";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
 import { getAllDishes, trackMenuView } from "@/lib/database";
@@ -28,11 +29,11 @@ function MenuPageContent() {
   const { totalItems, addItem, items } = useCart();
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
-  
+
   useEffect(() => {
     const currentCategory = searchParams.get("category") || "All";
     const currentSearch = searchParams.get("search") || "";
-    
+
     if (activeCategory !== currentCategory || searchQuery !== currentSearch) {
       const params = new URLSearchParams(searchParams.toString());
       if (activeCategory === "All") {
@@ -40,18 +41,19 @@ function MenuPageContent() {
       } else {
         params.set("category", activeCategory);
       }
-      
+
       if (!searchQuery) {
         params.delete("search");
       } else {
         params.set("search", searchQuery);
       }
-      
+
       const newQueryString = params.toString();
       router.replace(`${pathname}${newQueryString ? '?' + newQueryString : ''}`, { scroll: false });
     }
   }, [activeCategory, searchQuery, pathname, router, searchParams]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [lastAddedCategory, setLastAddedCategory] = useState<string | null>(null);
@@ -413,11 +415,10 @@ function MenuPageContent() {
                     <button
                       key={l}
                       onClick={() => setLang(l)}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide transition-all ${
-                        lang === l
-                          ? "bg-[#C4956A] text-[#1A0D04]"
-                          : "text-[#8E7F71] hover:text-[#C4956A]"
-                      }`}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide transition-all ${lang === l
+                        ? "bg-[#C4956A] text-[#1A0D04]"
+                        : "text-[#8E7F71] hover:text-[#C4956A]"
+                        }`}
                     >
                       {l}
                     </button>
@@ -463,11 +464,10 @@ function MenuPageContent() {
             >
               <button
                 onClick={() => handleCategoryChange("All")}
-                className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${
-                  activeCategory === "All"
-                    ? "text-[#3B2314] border-[#3B2314] font-bold"
-                    : "text-[#A09080] border-transparent hover:text-[#3B2314]"
-                }`}
+                className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${activeCategory === "All"
+                  ? "text-[#3B2314] border-[#3B2314] font-bold"
+                  : "text-[#A09080] border-transparent hover:text-[#3B2314]"
+                  }`}
               >
                 {t('all') || 'All'}
               </button>
@@ -475,11 +475,10 @@ function MenuPageContent() {
                 <button
                   key={tab}
                   onClick={() => handleCategoryChange(tab)}
-                  className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${
-                    activeCategory === tab
-                      ? "text-[#3B2314] border-[#3B2314] font-bold"
-                      : "text-[#A09080] border-transparent hover:text-[#3B2314]"
-                  }`}
+                  className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${activeCategory === tab
+                    ? "text-[#3B2314] border-[#3B2314] font-bold"
+                    : "text-[#A09080] border-transparent hover:text-[#3B2314]"
+                    }`}
                 >
                   {tab}
                 </button>
@@ -611,6 +610,20 @@ function MenuPageContent() {
         onClose={() => setIsCartOpen(false)}
         recommendations={sameCategoryRecommendations}
         onAddRecommendation={(dish) => handleAddDishToCart(dish)}
+        onShowOrder={() => {
+          setIsCartOpen(false);
+          setIsOrderSummaryOpen(true);
+        }}
+      />
+
+      {/* Order Summary Sheet */}
+      <OrderSummarySheet
+        isOpen={isOrderSummaryOpen}
+        onClose={() => setIsOrderSummaryOpen(false)}
+        onEdit={() => {
+          setIsOrderSummaryOpen(false);
+          setIsCartOpen(true);
+        }}
       />
 
       {/* Review Modal */}
