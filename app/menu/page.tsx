@@ -8,7 +8,7 @@ import { CartDrawer } from "@/components/CartDrawer";
 import { OrderSummarySheet } from "@/components/OrderSummarySheet";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
-import { getAllDishes, trackMenuView } from "@/lib/database";
+import { getAllDishes, getCategories, trackMenuView } from "@/lib/database";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 
@@ -16,7 +16,7 @@ const PREVIEW_LIMIT = 6;
 
 const MAIN_PREVIEW_CATEGORIES = [
   { label: "Breakfast", aliases: ["breakfast"] },
-  { label: "Tandoor Starters", aliases: ["tandoor starters", "tandoori starters", "tandoor starter", "tandoori starter"] },
+  { label: "Tandoor Starters", aliases: ["tandoors", "tandoor starters", "tandoori starters", "tandoor starter", "tandoori starter"] },
   { label: "Main Course", aliases: ["main course", "maincourse"] },
   { label: "South Indian", aliases: ["south indian", "southindian"] },
   { label: "Chinese", aliases: ["chinese"] },
@@ -58,6 +58,8 @@ function MenuPageContent() {
   const [reviewRating, setReviewRating] = useState(0);
   const [lastAddedCategory, setLastAddedCategory] = useState<string | null>(null);
   const categoriesRef = useRef<HTMLDivElement>(null);
+  const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const pendingScrollCategoryRef = useRef<string | null>(null);
 
   const [dishes, setDishes] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -68,7 +70,10 @@ function MenuPageContent() {
     try {
       setIsLoading(true);
       const timestamp = new Date().getTime();
-      const data = await getAllDishes(timestamp);
+      const [data, categoryData] = await Promise.all([
+        getAllDishes(timestamp),
+        getCategories().catch(() => []),
+      ]);
 
       const mappedDishes = (data || []).map((dish: any) => ({
         ...dish,
@@ -110,11 +115,21 @@ function MenuPageContent() {
 
       setDishes(mappedDishes);
 
-      const cats = new Set<string>();
-      mappedDishes.forEach((d: any) => {
-        if (d.category) cats.add(d.category);
-      });
-      setCategories(Array.from(cats));
+      const categoryNames = Array.isArray(categoryData)
+        ? categoryData
+          .map((category: any) => String(category?.name || "").trim())
+          .filter(Boolean)
+        : [];
+
+      if (categoryNames.length > 0) {
+        setCategories(categoryNames);
+      } else {
+        const cats = new Set<string>();
+        mappedDishes.forEach((d: any) => {
+          if (d.category) cats.add(d.category);
+        });
+        setCategories(Array.from(cats));
+      }
     } catch (err) {
       console.error("Failed to load dishes", err);
     } finally {
@@ -144,7 +159,36 @@ function MenuPageContent() {
   const normalizeCategory = (category: string | null | undefined) =>
     (category || "").toLowerCase().replace(/\s+/g, " ").trim();
 
-  const menuTabs = [...categories].sort((a, b) => a.localeCompare(b));
+  const toSingularCategoryKey = (value: string | null | undefined) =>
+    normalizeCategory(value)
+      .split(" ")
+      .map((word) => {
+        if (word.length <= 3) return word;
+        if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`;
+        if (word.endsWith("ss")) return word;
+        if (word.endsWith("s")) return word.slice(0, -1);
+        return word;
+      })
+      .join(" ");
+
+  const isSameCategory = (left: string | null | undefined, right: string | null | undefined) => {
+    const normalizedLeft = normalizeCategory(left);
+    const normalizedRight = normalizeCategory(right);
+
+    if (!normalizedLeft || !normalizedRight) return false;
+    if (normalizedLeft === normalizedRight) return true;
+
+    return toSingularCategoryKey(normalizedLeft) === toSingularCategoryKey(normalizedRight);
+  };
+
+  const getCategorySectionId = (category: string) =>
+    `category-${category
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")}`;
+
+  const menuTabs = [...categories];
 
   const resolveCategoryFromAliases = (aliases: string[]) => {
     return categories.find((category) => {
@@ -169,7 +213,7 @@ function MenuPageContent() {
     const name = (d.nameRaw[lang] || "").toLowerCase();
     const desc = (d.descriptionRaw[lang] || "").toLowerCase();
     const matchesSearch = name.includes(searchQuery.toLowerCase()) || desc.includes(searchQuery.toLowerCase());
-    const matchesCategory = activeCategory === "All" || d.category === activeCategory;
+    const matchesCategory = activeCategory === "All" || isSameCategory(d.category, activeCategory);
     return matchesSearch && matchesCategory;
   }).map(d => ({
     ...d,
@@ -220,7 +264,7 @@ function MenuPageContent() {
 
   const sameCategoryRecommendations = recommendationCategory
     ? dishes
-      .filter((dish) => normalizeCategory(dish.category) === recommendationCategory)
+      .filter((dish) => isSameCategory(dish.category, recommendationCategory))
       .filter((dish) => !cartIds.has(dish.id))
       .sort((a, b) => {
         const score = (d: any) =>
@@ -240,17 +284,50 @@ function MenuPageContent() {
     : [];
 
   const handleCategoryChange = (category: string) => {
+    const scrollTarget = document.getElementById(getCategorySectionId(category));
+
+    // If we're browsing the all-sections view and target exists, jump there directly.
+    if (activeCategory === "All" && !searchQuery && category !== "All" && scrollTarget) {
+      scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    pendingScrollCategoryRef.current = category === "All" ? null : category;
     setActiveCategory(category);
     setSearchQuery("");
-    window.scrollTo({ top: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  useEffect(() => {
+    const activeTabButton = categoryButtonRefs.current[activeCategory];
+    if (!activeTabButton) return;
+
+    activeTabButton.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [activeCategory]);
+
+  useEffect(() => {
+    const pendingCategory = pendingScrollCategoryRef.current;
+    if (!pendingCategory || activeCategory !== pendingCategory) return;
+
+    const target = document.getElementById(getCategorySectionId(pendingCategory));
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    pendingScrollCategoryRef.current = null;
+  }, [activeCategory, filteredDishes.length]);
 
   const groupedDishes: Record<string, any[]> = {};
   filteredDishes.forEach((dish) => {
-    if (!groupedDishes[dish.category]) {
-      groupedDishes[dish.category] = [];
+    const canonicalCategory = menuTabs.find((tab) => isSameCategory(tab, dish.category)) || dish.category;
+    if (!groupedDishes[canonicalCategory]) {
+      groupedDishes[canonicalCategory] = [];
     }
-    groupedDishes[dish.category].push(dish);
+    groupedDishes[canonicalCategory].push(dish);
   });
 
   const handleReviewClick = (rating: number) => {
@@ -464,6 +541,9 @@ function MenuPageContent() {
             >
               <button
                 onClick={() => handleCategoryChange("All")}
+                ref={(el) => {
+                  categoryButtonRefs.current["All"] = el;
+                }}
                 className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${activeCategory === "All"
                   ? "text-[#3B2314] border-[#3B2314] font-bold"
                   : "text-[#A09080] border-transparent hover:text-[#3B2314]"
@@ -475,6 +555,9 @@ function MenuPageContent() {
                 <button
                   key={tab}
                   onClick={() => handleCategoryChange(tab)}
+                  ref={(el) => {
+                    categoryButtonRefs.current[tab] = el;
+                  }}
                   className={`pb-1 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${activeCategory === tab
                     ? "text-[#3B2314] border-[#3B2314] font-bold"
                     : "text-[#A09080] border-transparent hover:text-[#3B2314]"
@@ -553,9 +636,9 @@ function MenuPageContent() {
             const previewDishes = categoryDishes.slice(0, PREVIEW_LIMIT);
 
             return (
-              <div key={tab.label} className="mb-8">
+              <div key={tab.label} className="mb-8" id={getCategorySectionId(tab.categoryValue)}>
                 <h2 className="text-[#2C1810] font-bold text-xl mb-4" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-                  {tab.label}
+                  {tab.categoryValue}
                 </h2>
                 <div className="space-y-3">
                   {previewDishes.map((dish) => (
@@ -576,7 +659,7 @@ function MenuPageContent() {
           })
         ) : (
           Object.entries(groupedDishes).map(([category, categoryDishes]) => (
-            <div key={category} className="mb-8">
+            <div key={category} className="mb-8" id={getCategorySectionId(category)}>
               <h2 className="text-[#2C1810] font-bold text-xl mb-4" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
                 {category}
               </h2>

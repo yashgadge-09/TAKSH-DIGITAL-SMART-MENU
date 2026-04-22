@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Heart, NotebookPen, Sparkles } from "lucide-react";
 import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, trackFavourite } from "@/lib/database";
@@ -20,9 +20,9 @@ export default function DishDetailPage() {
   const router = useRouter();
   const id = params.id as string;
   const { addItem, items } = useCart();
-  const { language: lang, t } = useLanguage();
+  const { language: lang, setLanguage: setLang, t } = useLanguage();
 
-  const [dish, setDish] = useState<any>(null);
+  const [rawDish, setRawDish] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [moreLikeThisDishes, setMoreLikeThisDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,6 +37,60 @@ export default function DishDetailPage() {
   const [highlightRecommendations, setHighlightRecommendations] = useState(false);
   const [api, setApi] = useState<CarouselApi>();
   const [currentSlide, setCurrentSlide] = useState(0);
+
+  const dish = useMemo(() => {
+    if (!rawDish) return null;
+
+    return {
+      ...rawDish,
+      name: rawDish[`name_${lang}`] || (rawDish.name?.[lang] ?? rawDish.name_en ?? rawDish.name?.en ?? ""),
+      description:
+        rawDish[`description_${lang}`] ||
+        (rawDish.description?.[lang] ?? rawDish.description_en ?? rawDish.description?.en ?? ""),
+      ingredients: Array.isArray(rawDish[`ingredients_${lang}`])
+        ? rawDish[`ingredients_${lang}`]
+        : (rawDish.ingredients?.[lang] ?? rawDish.ingredients_en ?? rawDish.ingredients?.en ?? []),
+      tasteDescription:
+        rawDish[`taste_${lang}`] ||
+        rawDish[`tasteDescription_${lang}`] ||
+        (rawDish.taste_description?.[lang] ?? rawDish.tasteDescription?.[lang] ?? rawDish.taste_en ?? rawDish.tasteDescription?.en ?? ""),
+      images: (() => {
+        if (Array.isArray(rawDish.image_url) && rawDish.image_url.length > 0) return rawDish.image_url;
+        if (typeof rawDish.image_url === "string" && rawDish.image_url.startsWith("[")) {
+          try {
+            const parsed = JSON.parse(rawDish.image_url);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          } catch (e) {
+            return [rawDish.image_url];
+          }
+        }
+
+        const fallbackImage =
+          rawDish.image_url ||
+          rawDish.image ||
+          "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+
+        return Array.isArray(fallbackImage)
+          ? (fallbackImage.length > 0
+            ? fallbackImage
+            : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"])
+          : [fallbackImage];
+      })(),
+      spiceLevel: Number(rawDish.spice_level ?? 0),
+      hasSpiceIndicator: Number(rawDish.spice_level ?? 0) > 0,
+      isChefSpecial: rawDish.is_chef_special ?? false,
+      isGuestFavorite: rawDish.is_guest_favorite ?? false,
+      isTrending: rawDish.is_trending ?? false,
+      healthBenefits: rawDish.healthBenefits || [],
+      nutrition: {
+        kcal: rawDish.kcal ?? (rawDish.nutrition?.kcal ?? 0),
+        protein: rawDish.protein ?? (rawDish.nutrition?.protein ?? 0),
+        fat: rawDish.fat ?? (rawDish.nutrition?.fat ?? 0),
+        carbs: rawDish.carbs ?? (rawDish.nutrition?.carbs ?? 0),
+        fibre: rawDish.fibre ?? (rawDish.nutrition?.fibre ?? 0),
+      },
+    };
+  }, [rawDish, lang]);
 
   useEffect(() => {
     if (!api) return;
@@ -91,81 +145,49 @@ export default function DishDetailPage() {
     (async () => {
       try {
         const timestamp = new Date().getTime();
-        const rawDish = await getDishById(id, timestamp);
-        if (!mounted || !rawDish) return;
+        const fetchedDish = await getDishById(id, timestamp);
+        if (!mounted || !fetchedDish) return;
 
-        const mappedDish = {
-          ...rawDish,
-          name: rawDish[`name_${lang}`] || (rawDish.name?.[lang] ?? rawDish.name_en ?? rawDish.name?.en ?? ""),
-          description: rawDish[`description_${lang}`] || (rawDish.description?.[lang] ?? rawDish.description_en ?? rawDish.description?.en ?? ""),
-          ingredients: Array.isArray(rawDish[`ingredients_${lang}`]) ? rawDish[`ingredients_${lang}`] : (rawDish.ingredients?.[lang] ?? rawDish.ingredients_en ?? rawDish.ingredients?.en ?? []),
-          tasteDescription: rawDish[`taste_${lang}`] || rawDish[`tasteDescription_${lang}`] || (rawDish.taste_description?.[lang] ?? rawDish.tasteDescription?.[lang] ?? rawDish.taste_en ?? rawDish.tasteDescription?.en ?? ""),
-          images: (() => {
-            if (Array.isArray(rawDish.image_url) && rawDish.image_url.length > 0) return rawDish.image_url;
-            if (typeof rawDish.image_url === 'string' && rawDish.image_url.startsWith('[')) {
-              try { 
-                const parsed = JSON.parse(rawDish.image_url);
-                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-              } catch (e) { return [rawDish.image_url]; }
-            }
-            const fallbackImage = rawDish.image_url || rawDish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
-            return Array.isArray(fallbackImage) ? (fallbackImage.length > 0 ? fallbackImage : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"]) : [fallbackImage];
-          })(),
-          spiceLevel: Number(rawDish.spice_level ?? 0),
-          hasSpiceIndicator: Number(rawDish.spice_level ?? 0) > 0,
-          isChefSpecial: rawDish.is_chef_special ?? false,
-          isGuestFavorite: rawDish.is_guest_favorite ?? false,
-          isTrending: rawDish.is_trending ?? false,
-          healthBenefits: rawDish.healthBenefits || [],
-          nutrition: {
-            kcal: rawDish.kcal ?? (rawDish.nutrition?.kcal ?? 0),
-            protein: rawDish.protein ?? (rawDish.nutrition?.protein ?? 0),
-            fat: rawDish.fat ?? (rawDish.nutrition?.fat ?? 0),
-            carbs: rawDish.carbs ?? (rawDish.nutrition?.carbs ?? 0),
-            fibre: rawDish.fibre ?? (rawDish.nutrition?.fibre ?? 0)
-          }
-        };
-
-        setDish(mappedDish);
+        setRawDish(fetchedDish);
 
         const activeSessionId = getOrCreateSessionId();
         setSessionId(activeSessionId);
         const isAlreadyFavourited = window.sessionStorage.getItem(
-          getFavouriteSessionKey(activeSessionId, rawDish.id)
+          getFavouriteSessionKey(activeSessionId, fetchedDish.id)
         ) === "1";
         setIsFavorited(isAlreadyFavourited);
 
-        const trackingKey = `taksh:last-dish-view-${rawDish.id}`;
+        const trackingKey = `taksh:last-dish-view-${fetchedDish.id}`;
         const now = Date.now();
         const previousViewTs = Number(window.sessionStorage.getItem(trackingKey) || 0);
         if (!Number.isFinite(previousViewTs) || now - previousViewTs > 30000) {
           window.sessionStorage.setItem(trackingKey, String(now));
           void trackDishView(
-            rawDish.id,
-            rawDish.name_en || rawDish.name?.en || mappedDish.name || "Unknown Dish",
-            rawDish.category || "General"
+            fetchedDish.id,
+            fetchedDish.name_en || fetchedDish.name?.en || "Unknown Dish",
+            fetchedDish.category || "General"
           ).catch(() => {
             // Tracking failures should not block dish detail rendering.
           });
         }
 
         const dishRecommendations = await getDishRecommendations(
-          rawDish.id,
-          rawDish.category || "",
+          fetchedDish.id,
+          fetchedDish.category || "",
           4,
           10
         );
 
         const sameCategoryDishes = await getMoreLikeThisDishes(
-          rawDish.id,
-          rawDish.category || "",
+          fetchedDish.id,
+          fetchedDish.category || "",
           10
         );
 
         if (mounted) {
           setRecommendations(
             (dishRecommendations || [])
-              .filter((recommendedDish: any) => recommendedDish.id !== rawDish.id)
+              .filter((recommendedDish: any) => recommendedDish.id !== fetchedDish.id)
               .slice(0, 10)
           );
           setMoreLikeThisDishes((sameCategoryDishes || []).slice(0, 10));
@@ -224,7 +246,11 @@ export default function DishDetailPage() {
   };
 
   const getRecommendationName = (recommendedDish: any) =>
-    recommendedDish?.[`name_${lang}`] || recommendedDish?.name_en || "";
+    recommendedDish?.[`name_${lang}`] ||
+    recommendedDish?.name?.[lang] ||
+    recommendedDish?.name_en ||
+    recommendedDish?.name ||
+    "";
 
   const getRecommendationImage = (recommendedDish: any) =>
     recommendedDish?.image ||
@@ -330,8 +356,23 @@ export default function DishDetailPage() {
           <ArrowLeft className="w-5 h-5 text-[#2C1810]" />
         </button>
 
-        {/* Favorite */}
-        <div className="absolute top-4 right-4 z-10">
+        {/* Language + Favorite */}
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+          <div className="flex items-center rounded-full border border-[#C4956A]/50 bg-[#1A0D04]/75 p-0.5 backdrop-blur-md shadow-[0_8px_20px_rgba(26,13,4,0.45)]">
+            {(['en', 'hi', 'mr'] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide transition-all ${lang === l
+                  ? "bg-[#E28B4B] text-[#1A0D04] shadow-[0_4px_12px_rgba(226,139,75,0.45)]"
+                  : "text-[#F6E2C8] hover:text-white hover:bg-[#3B2314]/80"
+                  }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={handleFavouriteToggle}
             className={`w-11 h-11 flex items-center justify-center backdrop-blur-md border rounded-2xl transition-all duration-500 shadow-xl ${
@@ -377,7 +418,7 @@ export default function DishDetailPage() {
         {/* Chef's Note */}
         {dish.description && (
           <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-4 shadow-sm">
-            <h2 className="text-[#2C1810] font-bold mb-1.5 text-base">👨‍🍳 Chef's Note</h2>
+            <h2 className="text-[#2C1810] font-bold mb-1.5 text-base">👨‍🍳 {t('chefNote')}</h2>
             <p className="text-[#8E7F71] text-sm leading-relaxed italic">{dish.description}</p>
           </div>
         )}
@@ -385,7 +426,7 @@ export default function DishDetailPage() {
         {/* Ingredients */}
         {dish.ingredients && dish.ingredients.length > 0 && (
           <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-8 shadow-sm">
-            <h3 className="text-[#2C1810] font-bold mb-1.5 text-base">Ingredients</h3>
+            <h3 className="text-[#2C1810] font-bold mb-1.5 text-base">{t('ingredients')}</h3>
             <p className="text-[#C4956A] text-sm leading-relaxed font-medium">{dish.ingredients.join(", ")}</p>
           </div>
         )}
@@ -489,7 +530,7 @@ export default function DishDetailPage() {
           onClick={() => handleAddToCart()}
           className="w-full bg-[#3B2314] text-[#E7CFA8] font-bold py-4 rounded-full flex items-center justify-center gap-3 shadow-xl hover:scale-[1.02] active:scale-95 transition-all outline outline-offset-2 outline-[#3B2314]/50"
         >
-          <span className="text-[17px] tracking-widest uppercase">ADD TO CART</span>
+          <span className="text-[17px] tracking-widest uppercase">{t('placeOrder')}</span>
         </button>
 
         {/* Toast */}
