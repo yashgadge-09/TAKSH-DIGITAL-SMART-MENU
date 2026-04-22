@@ -350,7 +350,7 @@ export default function DishDetailPage() {
 
         {/* Back Button */}
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push('/menu')}
           className="absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-[#F8F1E8]/80 flex items-center justify-center hover:bg-white transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-[#2C1810]" />
