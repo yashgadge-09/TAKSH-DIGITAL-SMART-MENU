@@ -1,22 +1,24 @@
 "use client";
 
 import { useCart } from "@/context/CartContext";
-import { X, CheckCircle2, RotateCcw, Edit2, Trash2 } from "lucide-react";
+import type { CartItem } from "@/context/CartContext";
+import { CheckCircle2, Edit2, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface OrderSummarySheetProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onConfirmOrder?: (orderedItems: CartItem[]) => void;
 }
 
 export function OrderSummarySheet({
   isOpen,
   onClose,
   onEdit,
+  onConfirmOrder,
 }: OrderSummarySheetProps) {
   const { items, totalPrice, clearCart } = useCart();
-  const [isLocked, setIsLocked] = useState(false);
   const [orderTime, setOrderTime] = useState("");
   const [isFreezing, setIsFreezing] = useState(false);
 
@@ -36,10 +38,14 @@ export function OrderSummarySheet({
   if (!isOpen) return null;
 
   const handleConfirm = () => {
+    const orderedSnapshot = items.map((item) => ({ ...item }));
+
     setIsFreezing(true);
     setTimeout(() => {
+      onConfirmOrder?.(orderedSnapshot);
+      clearCart();
       setIsFreezing(false);
-      setIsLocked(true);
+      onClose();
     }, 1500); // Screen freezes for 1.5 seconds
   };
 
@@ -113,53 +119,38 @@ export function OrderSummarySheet({
 
       {/* Bottom Actions */}
       <div className="p-6 bg-[#F8F1E8] border-t border-[#E8DDD0] shadow-[0_-10px_30px_rgba(44,24,16,0.05)]">
-        {!isLocked ? (
-          <div className="max-w-[430px] mx-auto grid grid-cols-2 gap-4">
-            <button
-              onClick={onEdit}
-              disabled={isFreezing}
-              className={`flex items-center justify-center gap-2 bg-white border-2 border-[#3B2314] text-[#3B2314] py-4 rounded-2xl font-bold transition-all shadow-sm ${
-                isFreezing ? 'opacity-50 cursor-not-allowed' : 'active:scale-95 hover:bg-[#3B2314] hover:text-white group'
-              }`}
-            >
-              <Edit2 size={18} className={isFreezing ? '' : "group-hover:rotate-12 transition-transform"} />
-              <span>Edit Order</span>
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={isFreezing}
-              className={`flex items-center justify-center gap-2 bg-[#3B2314] text-[#E7CFA8] py-4 rounded-2xl font-bold transition-all shadow-lg ${
-                isFreezing ? 'opacity-70 cursor-wait animate-pulse' : 'active:scale-95 hover:bg-[#2A1609]'
-              }`}
-            >
-              <CheckCircle2 size={18} />
-              <span>{isFreezing ? 'Confirming...' : 'Confirm Order'}</span>
-            </button>
-            <button
-              onClick={handleClear}
-              disabled={isFreezing}
-              className={`col-span-2 flex items-center justify-center gap-2 text-[#8E7F71] py-2 font-bold transition-colors uppercase tracking-widest text-[10px] ${
-                isFreezing ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-500'
-              }`}
-            >
-              <Trash2 size={14} />
-              <span>Clear Order</span>
-            </button>
-          </div>
-        ) : (
-          <div className="max-w-[430px] mx-auto">
-            <button
-              onClick={() => {
-                setIsLocked(false);
-                onClose();
-              }}
-              className="w-full flex items-center justify-center gap-2 bg-white border-2 border-[#3B2314] text-[#3B2314] py-4 rounded-2xl font-extrabold transition-all active:scale-95 shadow-md"
-            >
-              <RotateCcw size={18} />
-              <span>Back to Menu</span>
-            </button>
-          </div>
-        )}
+        <div className="max-w-[430px] mx-auto grid grid-cols-2 gap-4">
+          <button
+            onClick={onEdit}
+            disabled={isFreezing}
+            className={`flex items-center justify-center gap-2 bg-white border-2 border-[#3B2314] text-[#3B2314] py-4 rounded-2xl font-bold transition-all shadow-sm ${
+              isFreezing ? 'opacity-50 cursor-not-allowed' : 'active:scale-95 hover:bg-[#3B2314] hover:text-white group'
+            }`}
+          >
+            <Edit2 size={18} className={isFreezing ? '' : "group-hover:rotate-12 transition-transform"} />
+            <span>Edit Order</span>
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={isFreezing}
+            className={`flex items-center justify-center gap-2 bg-[#3B2314] text-[#E7CFA8] py-4 rounded-2xl font-bold transition-all shadow-lg ${
+              isFreezing ? 'opacity-70 cursor-wait animate-pulse' : 'active:scale-95 hover:bg-[#2A1609]'
+            }`}
+          >
+            <CheckCircle2 size={18} />
+            <span>{isFreezing ? 'Confirming...' : 'Confirm Order'}</span>
+          </button>
+          <button
+            onClick={handleClear}
+            disabled={isFreezing}
+            className={`col-span-2 flex items-center justify-center gap-2 text-[#8E7F71] py-2 font-bold transition-colors uppercase tracking-widest text-[10px] ${
+              isFreezing ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-500'
+            }`}
+          >
+            <Trash2 size={14} />
+            <span>Clear Order</span>
+          </button>
+        </div>
       </div>
     </div>
   );

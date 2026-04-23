@@ -447,6 +447,192 @@ export async function trackFavourite(
   }
 }
 
+export async function getMostLovedDishIds(days = 7, limit = 10) {
+  const safeDays = Math.max(1, Math.min(30, Math.floor(Number(days) || 7)))
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 10)))
+  const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000).toISOString()
+
+  let rows: any[] = []
+  let error: any = null
+
+  const primary = await supabase
+    .from('favourites')
+    .select('dish_id, is_active, updated_at, created_at')
+    .gte('updated_at', since)
+    .eq('is_active', true)
+
+  rows = primary.data || []
+  error = primary.error
+
+  // Backward compatibility for environments before active-state migration.
+  if (error?.code === '42703') {
+    const fallback = await supabase
+      .from('favourites')
+      .select('dish_id, created_at')
+      .gte('created_at', since)
+
+    rows = fallback.data || []
+    error = fallback.error
+  }
+
+  if (error) throw error
+
+  const scoreByDishId = new Map<string, { count: number; lastTouchedAt: string }>()
+
+  rows.forEach((row: any) => {
+    const dishId = String(row?.dish_id || '').trim()
+    if (!dishId) return
+    if (row?.is_active === false) return
+
+    const touchedAt = String(row?.updated_at || row?.created_at || '')
+    const existing = scoreByDishId.get(dishId)
+
+    if (!existing) {
+      scoreByDishId.set(dishId, { count: 1, lastTouchedAt: touchedAt })
+      return
+    }
+
+    scoreByDishId.set(dishId, {
+      count: existing.count + 1,
+      lastTouchedAt: touchedAt > existing.lastTouchedAt ? touchedAt : existing.lastTouchedAt,
+    })
+  })
+
+  return Array.from(scoreByDishId.entries())
+    .sort((a, b) => {
+      const countDiff = b[1].count - a[1].count
+      if (countDiff !== 0) return countDiff
+      return b[1].lastTouchedAt.localeCompare(a[1].lastTouchedAt)
+    })
+    .slice(0, safeLimit)
+    .map(([dishId]) => dishId)
+}
+
+export async function trackLikedDishesFromOrder(
+  dishes: Array<{ id: string; name: string }>,
+  sessionId: string
+) {
+  const normalizedSessionId = String(sessionId || '').trim()
+  if (!normalizedSessionId) return
+
+  const uniqueDishes = new Map<string, { id: string; name: string }>()
+
+  dishes.forEach((dish) => {
+    const id = String(dish?.id || '').trim()
+    const name = String(dish?.name || '').trim()
+    if (!id || !name) return
+    if (!uniqueDishes.has(id)) {
+      uniqueDishes.set(id, { id, name })
+    }
+  })
+
+  if (uniqueDishes.size === 0) return
+
+  await Promise.all(
+    Array.from(uniqueDishes.values()).map((dish) =>
+      trackFavourite(dish.id, dish.name, normalizedSessionId, true)
+    )
+  )
+}
+
+export async function submitDishRatingsFromOrder(
+  ratings: Array<{ id: string; name: string; rating: number }>,
+  sessionId: string
+) {
+  const normalizedSessionId = String(sessionId || '').trim()
+  if (!normalizedSessionId) return
+
+  const sanitizedRatings = new Map<string, { id: string; name: string; rating: number }>()
+
+  ratings.forEach((entry) => {
+    const id = String(entry?.id || '').trim()
+    const name = String(entry?.name || '').trim()
+    const numericRating = Math.floor(Number(entry?.rating || 0))
+
+    if (!id || !name) return
+    if (numericRating < 1 || numericRating > 5) return
+
+    sanitizedRatings.set(id, { id, name, rating: numericRating })
+  })
+
+  if (sanitizedRatings.size === 0) return
+
+  const now = new Date().toISOString()
+  const payload = Array.from(sanitizedRatings.values()).map((entry) => ({
+    dish_id: entry.id,
+    dish_name: entry.name,
+    session_id: normalizedSessionId,
+    rating: entry.rating,
+    created_at: now,
+    updated_at: now,
+  }))
+
+  const { error } = await supabase
+    .from('dish_ratings')
+    .insert(payload)
+
+  if (error) throw error
+}
+
+export async function getMostLovedDishRatings(limit = 10) {
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 10)))
+
+  const { data, error } = await supabase
+    .from('dish_ratings')
+    .select('dish_id, rating, updated_at')
+
+  if (error) {
+    // Gracefully degrade if migration is not applied yet.
+    if (error.code === '42P01') return []
+    throw error
+  }
+
+  const aggregate = new Map<string, { total: number; count: number; lastRatedAt: string }>()
+
+  ;(data || []).forEach((row: any) => {
+    const dishId = String(row?.dish_id || '').trim()
+    const rating = Number(row?.rating || 0)
+    const updatedAt = String(row?.updated_at || '')
+
+    if (!dishId) return
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) return
+
+    const existing = aggregate.get(dishId)
+    if (!existing) {
+      aggregate.set(dishId, {
+        total: rating,
+        count: 1,
+        lastRatedAt: updatedAt,
+      })
+      return
+    }
+
+    aggregate.set(dishId, {
+      total: existing.total + rating,
+      count: existing.count + 1,
+      lastRatedAt: updatedAt > existing.lastRatedAt ? updatedAt : existing.lastRatedAt,
+    })
+  })
+
+  return Array.from(aggregate.entries())
+    .map(([dishId, value]) => ({
+      dishId,
+      averageRating: value.count > 0 ? value.total / value.count : 0,
+      ratingsCount: value.count,
+      lastRatedAt: value.lastRatedAt,
+    }))
+    .sort((a, b) => {
+      const avgDiff = b.averageRating - a.averageRating
+      if (avgDiff !== 0) return avgDiff
+
+      const countDiff = b.ratingsCount - a.ratingsCount
+      if (countDiff !== 0) return countDiff
+
+      return b.lastRatedAt.localeCompare(a.lastRatedAt)
+    })
+    .slice(0, safeLimit)
+}
+
 function buildDayBuckets(days: number) {
   const buckets: Array<{
     key: string
