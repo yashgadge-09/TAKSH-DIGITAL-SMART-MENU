@@ -2,13 +2,15 @@
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight } from "lucide-react";
-import { useCart } from "@/context/CartContext";
+import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight, Star } from "lucide-react";
+import { useCart, type CartItem } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { OrderSummarySheet } from "@/components/OrderSummarySheet";
+import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
-import { getAllDishes, getCategories, trackMenuView } from "@/lib/database";
+import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView } from "@/lib/database";
+import { getOrCreateSessionId } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 
@@ -21,6 +23,12 @@ const MAIN_PREVIEW_CATEGORIES = [
   { label: "South Indian", aliases: ["south indian", "southindian"] },
   { label: "Chinese", aliases: ["chinese"] },
 ];
+
+type MostLovedRatingRow = {
+  dishId: string;
+  averageRating: number;
+  ratingsCount: number;
+};
 
 function MenuPageContent() {
   const router = useRouter();
@@ -57,6 +65,10 @@ function MenuPageContent() {
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [lastAddedCategory, setLastAddedCategory] = useState<string | null>(null);
+  const [mostLovedRatings, setMostLovedRatings] = useState<MostLovedRatingRow[]>([]);
+  const [lastConfirmedOrderItems, setLastConfirmedOrderItems] = useState<CartItem[]>([]);
+  const [isOrderRatingOpen, setIsOrderRatingOpen] = useState(false);
+  const [isSavingDishRatings, setIsSavingDishRatings] = useState(false);
   const categoriesRef = useRef<HTMLDivElement>(null);
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const pendingScrollCategoryRef = useRef<string | null>(null);
@@ -70,9 +82,10 @@ function MenuPageContent() {
     try {
       setIsLoading(true);
       const timestamp = new Date().getTime();
-      const [data, categoryData] = await Promise.all([
+      const [data, categoryData, liveMostLovedRatings] = await Promise.all([
         getAllDishes(timestamp),
         getCategories().catch(() => []),
+        getMostLovedDishRatings(10).catch(() => []),
       ]);
 
       const mappedDishes = (data || []).map((dish: any) => ({
@@ -114,6 +127,7 @@ function MenuPageContent() {
       }));
 
       setDishes(mappedDishes);
+      setMostLovedRatings(Array.isArray(liveMostLovedRatings) ? liveMostLovedRatings : []);
 
       const categoryNames = Array.isArray(categoryData)
         ? categoryData
@@ -223,13 +237,28 @@ function MenuPageContent() {
     ingredients: d.ingredientsRaw[lang]
   }));
 
-  const getGuestFavorites = () => dishes.filter(d => d.isGuestFavorite).map(d => ({
-    ...d,
-    name: d.nameRaw[lang],
-    description: d.descriptionRaw[lang],
-    tasteDescription: d.tasteRaw[lang],
-    ingredients: d.ingredientsRaw[lang]
-  }));
+  const getGuestFavorites = () => {
+    if (mostLovedRatings.length === 0) return [];
+
+    const dishesById = new Map(dishes.map((dish) => [String(dish.id), dish]));
+
+    return mostLovedRatings
+      .map((rankedDish) => {
+        const dish = dishesById.get(String(rankedDish.dishId));
+        if (!dish) return null;
+
+        return {
+          ...dish,
+          averageRating: rankedDish.averageRating,
+          ratingsCount: rankedDish.ratingsCount,
+          name: dish.nameRaw[lang],
+          description: dish.descriptionRaw[lang],
+          tasteDescription: dish.tasteRaw[lang],
+          ingredients: dish.ingredientsRaw[lang],
+        };
+      })
+      .filter((dish): dish is any => Boolean(dish));
+  };
   const getChefSpecials = () => dishes.filter(d => d.isChefSpecial).map(d => ({
     ...d,
     name: d.nameRaw[lang],
@@ -335,6 +364,42 @@ function MenuPageContent() {
     setIsReviewOpen(true);
   };
 
+  const handleOrderConfirmed = (orderedItems: CartItem[]) => {
+    const sanitizedItems = orderedItems.filter((item) => item?.id && item?.name);
+    if (sanitizedItems.length === 0) return;
+
+    setLastConfirmedOrderItems(sanitizedItems);
+    setIsOrderRatingOpen(true);
+  };
+
+  const closeOrderRatingModal = () => {
+    setIsOrderRatingOpen(false);
+    setLastConfirmedOrderItems([]);
+  };
+
+  const handleDishRatingsSubmit = async (
+    ratedItems: Array<{ id: string; name: string; rating: number }>
+  ) => {
+    if (ratedItems.length === 0) return;
+
+    setIsSavingDishRatings(true);
+    try {
+      const sessionId = getOrCreateSessionId();
+      await submitDishRatingsFromOrder(ratedItems, sessionId);
+
+      const updatedMostLovedRatings = await getMostLovedDishRatings(10).catch(() => []);
+      setMostLovedRatings(Array.isArray(updatedMostLovedRatings) ? updatedMostLovedRatings : []);
+
+      toast("Thanks for rating your dishes!", { icon: "⭐" });
+      closeOrderRatingModal();
+    } catch (error) {
+      console.error("Failed to save dish ratings", error);
+      toast("Couldn't save ratings right now. Please try again.");
+    } finally {
+      setIsSavingDishRatings(false);
+    }
+  };
+
   /* ─── Dish Card Component ─── */
   const DishCard = ({ dish, compact = false }: { dish: any; compact?: boolean }) => (
     <div
@@ -410,7 +475,7 @@ function MenuPageContent() {
   );
 
   /* ─── Horizontal Scroll Card ─── */
-  const ScrollCard = ({ dish }: { dish: any }) => (
+  const ScrollCard = ({ dish, showRating = false }: { dish: any; showRating?: boolean }) => (
     <div
       onClick={() => router.push(`/dish/${dish.id}`)}
       className="flex-shrink-0 w-36 cursor-pointer group"
@@ -450,6 +515,19 @@ function MenuPageContent() {
               ADD +
             </button>
           </div>
+          {showRating && Number.isFinite(Number(dish.averageRating)) && (
+            <div className="mt-2 flex items-center justify-between rounded-full border border-[#EFD7BF] bg-[#FFF5E8] px-2 py-1">
+              <div className="flex items-center gap-1">
+                <Star size={12} className="text-[#E28B4B]" fill="#E28B4B" />
+                <span className="text-[11px] font-bold text-[#A4632F]">
+                  {Number(dish.averageRating).toFixed(1)}
+                </span>
+              </div>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#8E6D4E]">
+                {Number(dish.ratingsCount) || 0} ratings
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -592,7 +670,7 @@ function MenuPageContent() {
                 </div>
                 <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
                   {getGuestFavorites().map((dish) => (
-                    <ScrollCard key={dish.id} dish={dish} />
+                    <ScrollCard key={dish.id} dish={dish} showRating />
                   ))}
                 </div>
               </div>
@@ -707,6 +785,15 @@ function MenuPageContent() {
           setIsOrderSummaryOpen(false);
           setIsCartOpen(true);
         }}
+        onConfirmOrder={handleOrderConfirmed}
+      />
+
+      <OrderLikeModal
+        isOpen={isOrderRatingOpen}
+        orderedItems={lastConfirmedOrderItems}
+        isSubmitting={isSavingDishRatings}
+        onSkip={closeOrderRatingModal}
+        onSubmit={handleDishRatingsSubmit}
       />
 
       {/* Review Modal */}
