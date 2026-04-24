@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight } from "lucide-react";
+import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight, Star } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { OrderSummarySheet } from "@/components/OrderSummarySheet";
@@ -65,6 +65,24 @@ function MenuPageContent() {
   const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { language: lang, setLanguage: setLang, t } = useLanguage();
+
+  const [isReviewSectionVisible, setIsReviewSectionVisible] = useState(false);
+  const reviewSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsReviewSectionVisible(entry.isIntersecting);
+      },
+      { root: null, threshold: 0.01 }
+    );
+
+    if (reviewSectionRef.current) {
+      observer.observe(reviewSectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   const loadData = async () => {
     try {
@@ -212,8 +230,9 @@ function MenuPageContent() {
   const filteredDishes = dishes.filter((d) => {
     const name = (d.nameRaw[lang] || "").toLowerCase();
     const desc = (d.descriptionRaw[lang] || "").toLowerCase();
-    const matchesSearch = name.includes(searchQuery.toLowerCase()) || desc.includes(searchQuery.toLowerCase());
-    const matchesCategory = activeCategory === "All" || isSameCategory(d.category, activeCategory);
+    const searchLower = searchQuery.toLowerCase().trim();
+    const matchesSearch = !searchLower || name.includes(searchLower) || desc.includes(searchLower);
+    const matchesCategory = searchLower ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
     return matchesSearch && matchesCategory;
   }).map(d => ({
     ...d,
@@ -683,8 +702,33 @@ function MenuPageContent() {
       </div>
 
       {/* Rate Us */}
-      <div className="max-w-[430px] mx-auto px-5 pb-8">
+      <div id="review-section" ref={reviewSectionRef} className="max-w-[430px] mx-auto px-5 pb-8">
         <RateUsCard />
+      </div>
+
+      {/* Sticky Bottom Review Bar */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 mx-auto max-w-[430px] z-[9999] bg-gradient-to-r from-[#2C1A0E] via-[#54301A] to-[#2C1A0E] border-t-[1.5px] border-[#F5A623] cursor-pointer animate-bar-pulse rounded-t-[1.5rem] shadow-[0_-10px_30px_rgba(245,166,35,0.15)] transition-all duration-200 ease-in-out ${isReviewSectionVisible ? "translate-y-[150%] opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+          }`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        onClick={() => {
+          document.getElementById('review-section')?.scrollIntoView({ behavior: 'smooth' });
+        }}
+      >
+        <style>{`
+          @keyframes barPulse {
+            0%, 100% { box-shadow: 0 -4px 20px rgba(245, 166, 35, 0.15); }
+            50% { box-shadow: 0 -4px 35px rgba(245, 166, 35, 0.4); }
+          }
+          .animate-bar-pulse {
+            animation: barPulse 3s ease-in-out infinite;
+          }
+        `}</style>
+        <div className="h-[56px] w-full flex items-center justify-center gap-2.5">
+          <Star className="text-[#F5A623]" fill="#F5A623" size={20} />
+          <span className="text-[#FDF2E3] text-[15px] font-bold tracking-wide text-shadow-sm">Rate Your Dining Experience</span>
+          <ChevronRight className="text-[#F5A623]" size={20} />
+        </div>
       </div>
 
       {/* Cart Drawer */}
