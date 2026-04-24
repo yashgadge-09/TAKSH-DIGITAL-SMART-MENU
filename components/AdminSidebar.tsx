@@ -30,7 +30,7 @@ const SidebarContext = createContext<{
   setCollapsed: (collapsed: boolean) => void
 }>({
   collapsed: false,
-  setCollapsed: () => {},
+  setCollapsed: () => { },
 })
 
 function SidebarContent() {
@@ -140,17 +140,17 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    ;(async () => {
-      const { data } = await supabase.auth.getSession()
-      if (!mounted) return
+      ; (async () => {
+        const { data } = await supabase.auth.getSession()
+        if (!mounted) return
 
-      if (!data.session) {
-        router.replace("/admin")
-        return
-      }
+        if (!data.session) {
+          router.replace("/admin")
+          return
+        }
 
-      setIsSessionReady(true)
-    })()
+        setIsSessionReady(true)
+      })()
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
