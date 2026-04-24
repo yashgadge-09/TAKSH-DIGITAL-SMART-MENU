@@ -11,11 +11,20 @@ function generateSessionId() {
 export function getOrCreateSessionId() {
   if (typeof window === "undefined") return ""
 
-  const existing = window.sessionStorage.getItem(SESSION_ID_KEY)
-  if (existing) return existing
+  const localStorage = window.localStorage
+  const sessionStorage = window.sessionStorage
+  const localExisting = localStorage.getItem(SESSION_ID_KEY)
+  if (localExisting) return localExisting
+
+  const sessionExisting = sessionStorage.getItem(SESSION_ID_KEY)
+  if (sessionExisting) {
+    localStorage.setItem(SESSION_ID_KEY, sessionExisting)
+    sessionStorage.removeItem(SESSION_ID_KEY)
+    return sessionExisting
+  }
 
   const next = generateSessionId()
-  window.sessionStorage.setItem(SESSION_ID_KEY, next)
+  localStorage.setItem(SESSION_ID_KEY, next)
   return next
 }
 
