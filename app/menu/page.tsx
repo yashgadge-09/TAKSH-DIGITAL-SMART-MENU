@@ -10,9 +10,11 @@ import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
 import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView } from "@/lib/database";
+import { scheduleNotification } from "@/lib/push";
 import { getOrCreateSessionId } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
+import { usePushNotification } from "@/hooks/usePushNotification";
 
 const PREVIEW_LIMIT = 6;
 
@@ -35,6 +37,7 @@ function MenuPageContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { totalItems, addItem, items } = useCart();
+  usePushNotification();
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
 
@@ -370,6 +373,18 @@ function MenuPageContent() {
 
     setLastConfirmedOrderItems(sanitizedItems);
     setIsOrderRatingOpen(true);
+
+    const sessionId = getOrCreateSessionId();
+    void scheduleNotification(
+      sessionId,
+      sanitizedItems.map((item) => ({
+        id: item.id,
+        name_en: item.name,
+        image_url: item.image,
+      }))
+    ).catch((error) => {
+      console.error("Failed to schedule feedback notification", error);
+    });
   };
 
   const closeOrderRatingModal = () => {
