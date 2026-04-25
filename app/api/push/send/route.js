@@ -59,16 +59,16 @@ export async function POST(request) {
       payload = {
         title: "Order Confirmed ✅ - Taksh Pure Veg",
         body: "Your meal is being freshly prepared! 🍽️\nHow's your experience on our app so far?",
-        icon: "/logo.png",
-        badge: "/badge.png",
+        icon: "/icon.svg",
+        badge: "/icon-light-32x32.png",
         url: "/menu",
       };
     } else {
       payload = {
         title: "Taksh Pure Veg 🍽️",
         body: "How was your meal today? Tell us about your favourite dish!",
-        icon: "/logo.png",
-        badge: "/badge.png",
+        icon: "/icon.svg",
+        badge: "/icon-light-32x32.png",
         url: "/menu",
       };
     }

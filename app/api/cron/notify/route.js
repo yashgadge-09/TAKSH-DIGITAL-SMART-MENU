@@ -82,8 +82,8 @@ export async function GET(request) {
       body: jobType === "feedback"
         ? "How was your meal today? Tell us about your favourite dish!"
         : "Your meal is being freshly prepared! 🍽️\nHow's your experience on our app so far?",
-      icon: "/logo.png",
-      badge: "/badge.png",
+      icon: "/icon.svg",
+      badge: "/icon-light-32x32.png",
       url: jobType === "feedback" ? `/review/${job.id}` : `/menu`,
     };
 
