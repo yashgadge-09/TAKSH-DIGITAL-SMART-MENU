@@ -17,10 +17,11 @@ export async function POST(request) {
   const body = await request.json().catch(() => null);
   const sessionId = String(body?.session_id || "").trim();
   const dishes = Array.isArray(body?.dishes) ? body.dishes : [];
-  const delayMinutesRaw = Number(body?.delay_minutes ?? 40);
+  const delayMinutesRaw = Number(body?.delay_minutes ?? 30);
+  const notificationType = String(body?.type || "feedback").trim();
   const delayMinutes = Number.isFinite(delayMinutesRaw)
     ? Math.max(1, Math.min(24 * 60, Math.floor(delayMinutesRaw)))
-    : 40;
+    : 30;
 
   if (!sessionId || dishes.length === 0) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
@@ -44,16 +45,31 @@ export async function POST(request) {
     auth: { persistSession: false },
   });
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("notification_queue")
     .insert({
       session_id: sessionId,
       dishes: sanitizedDishes,
       send_at: sendAt,
       status: "pending",
+      type: notificationType,
     })
     .select("id")
     .single();
+
+  // Backward-compatible path for DBs where notification_queue.type does not exist yet.
+  if (error?.message?.includes("Could not find the 'type' column")) {
+    ({ data, error } = await supabase
+      .from("notification_queue")
+      .insert({
+        session_id: sessionId,
+        dishes: sanitizedDishes,
+        send_at: sendAt,
+        status: "pending",
+      })
+      .select("id")
+      .single());
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

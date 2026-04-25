@@ -24,9 +24,35 @@ export async function POST(request) {
     auth: { persistSession: false },
   });
 
-  const { error } = await supabase
+  const { error: upsertError } = await supabase
     .from("push_subscriptions")
     .upsert({ session_id, subscription }, { onConflict: "session_id" });
+
+  if (!upsertError) {
+    return NextResponse.json({ success: true });
+  }
+
+  // Backward-compatible path for DBs missing a unique constraint on session_id.
+  const { data: existingRows, error: findError } = await supabase
+    .from("push_subscriptions")
+    .select("session_id")
+    .eq("session_id", session_id)
+    .limit(1);
+
+  if (findError) {
+    return NextResponse.json({ error: findError.message }, { status: 500 });
+  }
+
+  const hasExisting = Array.isArray(existingRows) && existingRows.length > 0;
+
+  const { error } = hasExisting
+    ? await supabase
+        .from("push_subscriptions")
+        .update({ subscription })
+        .eq("session_id", session_id)
+    : await supabase
+        .from("push_subscriptions")
+        .insert({ session_id, subscription });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
