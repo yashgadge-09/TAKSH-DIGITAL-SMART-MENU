@@ -128,7 +128,8 @@ function MenuPageContent() {
         hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
         isChefSpecial: dish.is_chef_special ?? false,
         isGuestFavorite: dish.is_guest_favorite ?? false,
-        isTrending: dish.is_trending ?? false
+        isTrending: dish.is_trending ?? false,
+        isTodaysSpecial: dish.is_todays_special ?? false
       }));
 
       setDishes(mappedDishes);
@@ -264,6 +265,21 @@ function MenuPageContent() {
     ingredients: d.ingredientsRaw[lang]
   }));
 
+  const getTodaysSpecials = () => {
+    let specials = dishes.filter(d => d.isTodaysSpecial);
+    
+    // Initial default data fallback if no dishes are marked (for first setup only, until admin modifies)
+    // Wait, if admin cleared all, this would show defaults again.
+    // Instead of JS fallback, we rely on the database column being set.
+    return specials.map(d => ({
+      ...d,
+      name: d.nameRaw[lang],
+      description: d.descriptionRaw[lang],
+      tasteDescription: d.tasteRaw[lang],
+      ingredients: d.ingredientsRaw[lang]
+    }));
+  };
+
   const handleAddDishToCart = (dish: {
     id: string;
     name: string;
@@ -393,7 +409,8 @@ function MenuPageContent() {
 
         {/* Image + Add Button */}
         <div className="relative flex flex-col items-center flex-shrink-0">
-          <div className={`rounded-2xl overflow-hidden bg-[#1A0D04] ring-1 ring-black/5 shadow-sm ${compact ? 'w-[75px] h-[75px]' : 'w-[100px] h-[100px]'}`}>
+          <div className={`rounded-2xl overflow-hidden bg-[#1A0D04] ring-1 ring-black/5 shadow-sm relative ${compact ? 'w-[75px] h-[75px]' : 'w-[100px] h-[100px]'}`}>
+
             {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
               <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
             ) : (
@@ -435,7 +452,8 @@ function MenuPageContent() {
       className="flex-shrink-0 w-36 cursor-pointer group"
     >
       <div className="bg-white rounded-[1.25rem] overflow-hidden border border-[#EDE4D5] hover:border-[#C4956A]/50 transition-all hover:shadow-[0_4px_16px_rgba(196,149,106,0.12)]">
-        <div className="w-full h-28 overflow-hidden bg-[#1A0D04]">
+        <div className="w-full h-28 overflow-hidden bg-[#1A0D04] relative">
+
           {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes('/video/upload/')) ? (
             <video src={dish.image} muted loop autoPlay className="w-full h-full object-cover" />
           ) : (
@@ -631,14 +649,14 @@ function MenuPageContent() {
               </div>
             )}
 
-            {/* Trending */}
-            {getTrendingDishes().length > 0 && (
+            {/* Today's Special */}
+            {getTodaysSpecials().length > 0 && (
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-[#2C1810] font-bold text-lg">{t('trendingToday') || '🔥 Trending Today'}</h2>
+                  <h2 className="text-[#2C1810] font-bold text-xl tracking-wide">{t('todaysSpecial') || "Todays Special"}</h2>
                 </div>
                 <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-                  {getTrendingDishes().map((dish) => (
+                  {getTodaysSpecials().map((dish) => (
                     <ScrollCard key={dish.id} dish={dish} />
                   ))}
                 </div>
