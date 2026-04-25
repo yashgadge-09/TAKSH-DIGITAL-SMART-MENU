@@ -85,6 +85,7 @@ function MenuPageContent() {
     isGuestFavorite: false,
     isChefSpecial: false,
     isTrending: false,
+    isTodaysSpecial: false,
     isAvailable: true,
     kcal: "",
     protein: "",
@@ -182,6 +183,7 @@ function MenuPageContent() {
         isGuestFavorite:
           dish.is_guest_favorite ?? dish.isGuestFavorite ?? false,
         isTrending: dish.is_trending ?? dish.isTrending ?? false,
+        isTodaysSpecial: dish.is_todays_special ?? dish.isTodaysSpecial ?? false,
         images: (() => {
           if (Array.isArray(dish.image_url)) return dish.image_url;
           if (typeof dish.image_url === 'string' && dish.image_url.startsWith('[')) {
@@ -223,6 +225,7 @@ function MenuPageContent() {
       isGuestFavorite: false,
       isChefSpecial: false,
       isTrending: false,
+      isTodaysSpecial: false,
       isAvailable: true,
       kcal: "",
       protein: "",
@@ -422,6 +425,7 @@ function MenuPageContent() {
         isChefSpecial: formData.isChefSpecial,
         isGuestFavorite: formData.isGuestFavorite,
         isTrending: formData.isTrending,
+        isTodaysSpecial: formData.isTodaysSpecial,
         isAvailable: formData.isAvailable,
         nutrition: {
           kcal: Number(formData.kcal) || 0,
@@ -454,6 +458,7 @@ function MenuPageContent() {
         is_chef_special: newItem.isChefSpecial,
         is_guest_favorite: newItem.isGuestFavorite,
         is_trending: newItem.isTrending,
+        is_todays_special: newItem.isTodaysSpecial,
         is_available: newItem.isAvailable,
         kcal: newItem.nutrition.kcal,
         protein: newItem.nutrition.protein,
@@ -500,6 +505,7 @@ function MenuPageContent() {
       isGuestFavorite: item.isGuestFavorite,
       isChefSpecial: item.isChefSpecial,
       isTrending: item.isTrending,
+      isTodaysSpecial: item.isTodaysSpecial,
       isAvailable: item.isAvailable,
       kcal: item.nutrition?.kcal?.toString() || "",
       protein: item.nutrition?.protein?.toString() || "",
@@ -1293,6 +1299,21 @@ function MenuPageContent() {
                       />
                     </button>
                     <span className="text-[#2C1810] text-sm">Trending</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, isTodaysSpecial: !formData.isTodaysSpecial })}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${formData.isTodaysSpecial ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
+                        }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${formData.isTodaysSpecial ? "left-5" : "left-0.5"
+                          }`}
+                      />
+                    </button>
+                    <span className="text-[#2C1810] text-sm">Today's Special</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">

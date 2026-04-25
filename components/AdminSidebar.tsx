@@ -10,6 +10,7 @@ import {
   Eye,
   PanelLeftClose,
   PanelLeft,
+  Sparkles,
 } from "lucide-react"
 import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/admin/categories", label: "Categories", icon: Tag },
+  { href: "/admin/todays-special", label: "Today's Special", icon: Sparkles },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/admin/preview", label: "Preview Menu", icon: Eye },
 ]
