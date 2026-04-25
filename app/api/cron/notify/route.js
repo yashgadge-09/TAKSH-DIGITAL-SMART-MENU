@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
+import { getVapidSubject } from "@/lib/vapid";
 
 export const runtime = "nodejs";
 
@@ -38,7 +39,7 @@ export async function GET(request) {
     );
   }
 
-  webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
+  webpush.setVapidDetails(getVapidSubject(vapidEmail), vapidPublicKey, vapidPrivateKey);
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -60,6 +61,7 @@ export async function GET(request) {
 
   for (const job of jobs || []) {
     processed += 1;
+    const jobType = job?.type || "feedback";
     const { data: subscriptionRow, error: subscriptionError } = await supabase
       .from("push_subscriptions")
       .select("subscription")
@@ -76,11 +78,13 @@ export async function GET(request) {
     }
 
     const payload = {
-      title: "Taksh Pure Veg \ud83c\udf7d\ufe0f",
-      body: "How was your meal today? Tell us about your favourite dish!",
+      title: "Taksh Pure Veg 🍽️",
+      body: jobType === "feedback"
+        ? "How was your meal today? Tell us about your favourite dish!"
+        : "Your meal is being freshly prepared! 🍽️\nHow's your experience on our app so far?",
       icon: "/logo.png",
       badge: "/badge.png",
-      url: `/review/${job.id}`,
+      url: jobType === "feedback" ? `/review/${job.id}` : `/menu`,
     };
 
     try {

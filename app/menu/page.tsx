@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight, Star } from "lucide-react";
+import { Search, ShoppingCart, NotebookPen, RefreshCw, ChevronRight, Star, Bell, BellOff } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { OrderSummarySheet } from "@/components/OrderSummarySheet";
@@ -10,7 +10,7 @@ import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
 import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView } from "@/lib/database";
-import { scheduleNotification } from "@/lib/push";
+import { sendImmediateNotification, scheduleNotification } from "@/lib/push";
 import { getOrCreateSessionId } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
@@ -37,7 +37,7 @@ function MenuPageContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { totalItems, addItem, items } = useCart();
-  usePushNotification();
+  const { isSubscribed, subscribe, unsubscribe, isSupported, lastError, permissionStatus } = usePushNotification();
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
 
@@ -72,6 +72,8 @@ function MenuPageContent() {
   const [lastConfirmedOrderItems, setLastConfirmedOrderItems] = useState<CartItem[]>([]);
   const [isOrderRatingOpen, setIsOrderRatingOpen] = useState(false);
   const [isSavingDishRatings, setIsSavingDishRatings] = useState(false);
+  const [isTogglingPush, setIsTogglingPush] = useState(false);
+  const [showPushFlashPrompt, setShowPushFlashPrompt] = useState(false);
   const categoriesRef = useRef<HTMLDivElement>(null);
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const pendingScrollCategoryRef = useRef<string | null>(null);
@@ -172,6 +174,27 @@ function MenuPageContent() {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
+
+  useEffect(() => {
+    if (!isSupported || isSubscribed || permissionStatus !== "default") {
+      setShowPushFlashPrompt(false);
+      return;
+    }
+
+    const key = "taksh:push-enable-flash-shown";
+    const hasShown = window.sessionStorage.getItem(key) === "1";
+
+    if (hasShown) return;
+
+    window.sessionStorage.setItem(key, "1");
+    setShowPushFlashPrompt(true);
+
+    const timer = window.setTimeout(() => {
+      setShowPushFlashPrompt(false);
+    }, 7000);
+
+    return () => window.clearTimeout(timer);
+  }, [isSupported, isSubscribed, permissionStatus]);
 
   const normalizeCategory = (category: string | null | undefined) =>
     (category || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -367,7 +390,35 @@ function MenuPageContent() {
     setIsReviewOpen(true);
   };
 
-  const handleOrderConfirmed = (orderedItems: CartItem[]) => {
+  const handleTogglePushNotifications = async () => {
+    if (!isSupported) {
+      toast.error("Push notifications are not supported on this browser.");
+      return;
+    }
+
+    setIsTogglingPush(true);
+    try {
+      if (isSubscribed) {
+        const done = await unsubscribe();
+        if (done) {
+          toast.success("Notifications disabled.");
+        } else {
+          toast.error("Failed to disable notifications.");
+        }
+      } else {
+        const done = await subscribe();
+        if (done) {
+          toast.success("Notifications enabled.");
+        } else {
+          toast.error(lastError || "Notification permission was not granted or setup failed.");
+        }
+      }
+    } finally {
+      setIsTogglingPush(false);
+    }
+  };
+
+  const handleOrderConfirmed = async (orderedItems: CartItem[]) => {
     const sanitizedItems = orderedItems.filter((item) => item?.id && item?.name);
     if (sanitizedItems.length === 0) return;
 
@@ -375,13 +426,30 @@ function MenuPageContent() {
     setIsOrderRatingOpen(true);
 
     const sessionId = getOrCreateSessionId();
+
+    const ready = isSupported ? (isSubscribed || (await subscribe())) : false;
+
+    if (!ready) {
+      toast.error(lastError || "Enable notifications to receive order updates and feedback reminders.");
+      console.warn("Push notifications are not ready, skipping order confirmation push.");
+      return;
+    }
+
+    // Send immediate order confirmation notification
+    void sendImmediateNotification(sessionId, "confirmation").catch((error) => {
+      console.error("Failed to send confirmation notification", error);
+    });
+
+    // Schedule feedback notification after 30 minutes
     void scheduleNotification(
       sessionId,
       sanitizedItems.map((item) => ({
         id: item.id,
         name_en: item.name,
         image_url: item.image,
-      }))
+      })),
+      30, // 30 minutes
+      "feedback"
     ).catch((error) => {
       console.error("Failed to schedule feedback notification", error);
     });
@@ -622,6 +690,21 @@ function MenuPageContent() {
                 className="w-full bg-[#1A0D04]/60 text-[#E7CFA8] placeholder-[#8E7F71] rounded-xl pl-11 pr-4 py-3 border border-[rgba(196,149,106,0.15)] focus:outline-none focus:border-[#C4956A]/50 text-sm backdrop-blur-sm"
               />
             </div>
+
+            {isSubscribed && (
+              <button
+                onClick={handleTogglePushNotifications}
+                disabled={isTogglingPush || !isSupported}
+                className={`mt-3 w-full flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all border-[#4E9F5B] bg-[#1F2D20] text-[#9EE2A7] hover:bg-[#243826] ${isTogglingPush || !isSupported ? "opacity-60 cursor-not-allowed" : ""}`}
+              >
+                <Bell size={16} />
+                <span>
+                  {isTogglingPush
+                    ? "Updating notification setting..."
+                    : "Disable Notifications"}
+                </span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -666,6 +749,47 @@ function MenuPageContent() {
 
       {/* ─── Main Content ─── */}
       <div className="max-w-[430px] mx-auto px-5 pb-20 pt-4">
+        {showPushFlashPrompt && (
+          <div className="mb-4 rounded-xl border border-[#D9C2A8] bg-[#FFF6EC] px-4 py-3 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <BellOff size={16} className="mt-0.5 text-[#B8743E]" />
+                <div>
+                  <p className="text-sm font-semibold text-[#5A3721]">Enable notifications?</p>
+                  <p className="text-xs text-[#7B5A44]">Get instant order confirmation and a feedback reminder after your meal.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPushFlashPrompt(false)}
+                className="text-xs font-semibold text-[#8E7F71] hover:text-[#5A3721]"
+              >
+                Later
+              </button>
+            </div>
+
+            <button
+              onClick={async () => {
+                setIsTogglingPush(true);
+                try {
+                  const done = await subscribe();
+                  if (done) {
+                    setShowPushFlashPrompt(false);
+                    toast.success("Notifications enabled.");
+                  } else {
+                    toast.error(lastError || "Notification permission was not granted or setup failed.");
+                  }
+                } finally {
+                  setIsTogglingPush(false);
+                }
+              }}
+              disabled={isTogglingPush}
+              className={`mt-3 w-full rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${isTogglingPush ? "bg-[#CBB8A7] text-[#6D5A49]" : "bg-[#5A3721] text-[#F8E2CF] hover:bg-[#6B4329]"}`}
+            >
+              {isTogglingPush ? "Enabling..." : "Enable Notifications"}
+            </button>
+          </div>
+        )}
+
         {/* Loading State */}
         {isLoading && dishes.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20">
