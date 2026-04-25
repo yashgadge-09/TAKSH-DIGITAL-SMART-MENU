@@ -44,14 +44,14 @@ function MenuPageContent() {
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null)
   const [errorModalOpen, setErrorModalOpen] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
-  
+
   useEffect(() => {
     const currentSearch = searchParams.get("search") || ""
     if (searchQuery !== currentSearch) {
       const params = new URLSearchParams(searchParams.toString())
       if (!searchQuery) params.delete("search")
       else params.set("search", searchQuery)
-      
+
       const queryString = params.toString()
       router.replace(`${pathname}${queryString ? '?' + queryString : ''}`, { scroll: false })
     }
@@ -85,6 +85,7 @@ function MenuPageContent() {
     isGuestFavorite: false,
     isChefSpecial: false,
     isTrending: false,
+    isTodaysSpecial: false,
     isAvailable: true,
     kcal: "",
     protein: "",
@@ -125,8 +126,8 @@ function MenuPageContent() {
 
   const resolvedSelectedCategory = selectedCategory
     ? categoriesList.find((cat) => isSameCategory(cat, selectedCategory)) ||
-      menuItems.find((item) => isSameCategory(item?.category, selectedCategory))?.category ||
-      selectedCategory
+    menuItems.find((item) => isSameCategory(item?.category, selectedCategory))?.category ||
+    selectedCategory
     : ""
 
   const loadMenu = async () => {
@@ -182,6 +183,7 @@ function MenuPageContent() {
         isGuestFavorite:
           dish.is_guest_favorite ?? dish.isGuestFavorite ?? false,
         isTrending: dish.is_trending ?? dish.isTrending ?? false,
+        isTodaysSpecial: dish.is_todays_special ?? dish.isTodaysSpecial ?? false,
         images: (() => {
           if (Array.isArray(dish.image_url)) return dish.image_url;
           if (typeof dish.image_url === 'string' && dish.image_url.startsWith('[')) {
@@ -223,6 +225,7 @@ function MenuPageContent() {
       isGuestFavorite: false,
       isChefSpecial: false,
       isTrending: false,
+      isTodaysSpecial: false,
       isAvailable: true,
       kcal: "",
       protein: "",
@@ -271,16 +274,16 @@ function MenuPageContent() {
       if (newErrors.name_en || newErrors.description_en || newErrors.ingredients_en) {
         setActiveTab("en")
       }
-      
+
       const missingFields = [];
       if (newErrors.name_en) missingFields.push("Dish Name (English)");
       if (newErrors.description_en) missingFields.push("Description (English)");
       if (newErrors.ingredients_en) missingFields.push("Ingredients (English)");
       if (newErrors.price) missingFields.push("Price");
-      
+
       setValidationErrors(missingFields);
       setErrorModalOpen(true);
-      
+
       return false
     }
     return true
@@ -310,7 +313,7 @@ function MenuPageContent() {
     if (!files || files.length === 0) return
 
     setIsUploading(true)
-    
+
     try {
       const uploadPromises = Array.from(files).map(async (file) => {
         const formDataUpload = new FormData()
@@ -325,10 +328,10 @@ function MenuPageContent() {
 
       const urls = await Promise.all(uploadPromises)
       const validUrls = urls.filter(Boolean)
-      
-      setFormData((prev) => ({ 
-        ...prev, 
-        images: [...prev.images, ...validUrls] 
+
+      setFormData((prev) => ({
+        ...prev,
+        images: [...prev.images, ...validUrls]
       }))
     } catch (err) {
       console.error("Error uploading:", err)
@@ -345,13 +348,13 @@ function MenuPageContent() {
         setIsUploading(true)
         const formDataUpload = new FormData()
         formDataUpload.append("file", croppedBlob, "cropped-image.jpg")
-        
+
         const res = await fetch("/api/upload", {
           method: "POST",
           body: formDataUpload,
         })
         const data = await res.json()
-        
+
         if (data.url) {
           setFormData((prev) => {
             const newImages = [...prev.images]
@@ -359,7 +362,7 @@ function MenuPageContent() {
             return { ...prev, images: newImages }
           })
         }
-        
+
         handleCropCancel()
         setIsUploading(false)
       }
@@ -413,8 +416,8 @@ function MenuPageContent() {
         },
         price: Number(formData.price),
         category: formData.category,
-        images: formData.images.length > 0 
-          ? formData.images 
+        images: formData.images.length > 0
+          ? formData.images
           : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"],
         spiceLevel: formData.spiceIndicator ? 1 : 0,
 
@@ -422,6 +425,7 @@ function MenuPageContent() {
         isChefSpecial: formData.isChefSpecial,
         isGuestFavorite: formData.isGuestFavorite,
         isTrending: formData.isTrending,
+        isTodaysSpecial: formData.isTodaysSpecial,
         isAvailable: formData.isAvailable,
         nutrition: {
           kcal: Number(formData.kcal) || 0,
@@ -454,6 +458,7 @@ function MenuPageContent() {
         is_chef_special: newItem.isChefSpecial,
         is_guest_favorite: newItem.isGuestFavorite,
         is_trending: newItem.isTrending,
+        is_todays_special: newItem.isTodaysSpecial,
         is_available: newItem.isAvailable,
         kcal: newItem.nutrition.kcal,
         protein: newItem.nutrition.protein,
@@ -500,6 +505,7 @@ function MenuPageContent() {
       isGuestFavorite: item.isGuestFavorite,
       isChefSpecial: item.isChefSpecial,
       isTrending: item.isTrending,
+      isTodaysSpecial: item.isTodaysSpecial,
       isAvailable: item.isAvailable,
       kcal: item.nutrition?.kcal?.toString() || "",
       protein: item.nutrition?.protein?.toString() || "",
@@ -578,35 +584,35 @@ function MenuPageContent() {
       {/* Header */}
       <div className="mb-8 overflow-hidden rounded-3xl border border-[#7A4F2F] bg-[linear-gradient(130deg,#2A180F_0%,#1A100A_70%,#130B07_100%)] p-6 shadow-[0_20px_50px_rgba(15,9,5,0.5)] sm:p-7">
         <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Catalog</p>
-          <h1 className="text-[#F4DEC0] font-bold text-3xl mb-2">Menu</h1>
-          <p className="text-[#C4A078]">
-            {resolvedSelectedCategory
-              ? `Viewing ${resolvedSelectedCategory} dishes.`
-              : "View and manage dishes."}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {selectedCategory && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#C89F72]">Catalog</p>
+            <h1 className="text-[#F4DEC0] font-bold text-3xl mb-2">Menu</h1>
+            <p className="text-[#C4A078]">
+              {resolvedSelectedCategory
+                ? `Viewing ${resolvedSelectedCategory} dishes.`
+                : "View and manage dishes."}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {selectedCategory && (
+              <button
+                onClick={() => router.push('/admin/menu')}
+                className="px-4 py-2.5 rounded-lg border border-[#8A592F] text-[#F2C786] font-medium hover:bg-[#3A2517] transition-colors"
+              >
+                Clear Filter
+              </button>
+            )}
             <button
-              onClick={() => router.push('/admin/menu')}
-              className="px-4 py-2.5 rounded-lg border border-[#8A592F] text-[#F2C786] font-medium hover:bg-[#3A2517] transition-colors"
+              onClick={() => {
+                resetForm()
+                setShowAddForm(true)
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#F0A33D] text-[#2B170D] font-semibold hover:bg-[#F4B55A] transition-colors"
             >
-              Clear Filter
+              <Plus className="w-4 h-4" />
+              Add Dish
             </button>
-          )}
-          <button
-            onClick={() => {
-              resetForm()
-              setShowAddForm(true)
-            }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#F0A33D] text-[#2B170D] font-semibold hover:bg-[#F4B55A] transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Dish
-          </button>
-        </div>
+          </div>
         </div>
       </div>
 
@@ -1152,7 +1158,7 @@ function MenuPageContent() {
                         )}
                       </div>
                     ))}
-                    
+
                     <label className={`aspect-square flex flex-col items-center justify-center gap-2 bg-white border border-[#EDE4D5] border border-dashed border-[#EDE4D5] rounded-lg text-[#2C1810] cursor-pointer hover:border-[#E8650A] transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}>
                       {isUploading ? (
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#E8650A]" />
@@ -1183,7 +1189,7 @@ function MenuPageContent() {
                           const url = (e.target as HTMLInputElement).value.trim()
                           if (url) {
                             setFormData({ ...formData, images: [...formData.images, url] })
-                            ;(e.target as HTMLInputElement).value = ''
+                              ; (e.target as HTMLInputElement).value = ''
                           }
                         }
                       }}
@@ -1293,6 +1299,21 @@ function MenuPageContent() {
                       />
                     </button>
                     <span className="text-[#2C1810] text-sm">Trending</span>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, isTodaysSpecial: !formData.isTodaysSpecial })}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${formData.isTodaysSpecial ? "bg-[#22c55e]" : "bg-[#4a4a4a]"
+                        }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${formData.isTodaysSpecial ? "left-5" : "left-0.5"
+                          }`}
+                      />
+                    </button>
+                    <span className="text-[#2C1810] text-sm">Today's Special</span>
                   </label>
 
                   <label className="flex items-center gap-3 cursor-pointer">

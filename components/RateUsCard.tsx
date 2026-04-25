@@ -23,7 +23,7 @@ export function RateUsCard() {
               <span className="w-8 h-[1.5px] bg-[#3B2314] text-[#E7CFA8]/60" />
               <span className="text-[#8E7F71] text-[10px] font-bold uppercase tracking-[0.2em]">Customer Feedback</span>
             </div>
-            <h2 className="text-[#2C1810] font-bold text-2xl drop-shadow-sm mt-1">Review Our Taste</h2>
+            <h2 className="text-[#2C1810] font-bold text-2xl drop-shadow-sm mt-1">Review Your Dining Experience</h2>
           </div>
           <div className="w-14 h-14 rounded-2xl bg-white/[0.03] backdrop-blur-md flex items-center justify-center border border-[#EDE4D5] group-hover:border-[#E28B4B]/50 group-hover:bg-[#3B2314] text-[#E7CFA8]/10 transition-all duration-300">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
