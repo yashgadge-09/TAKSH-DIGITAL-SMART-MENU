@@ -55,7 +55,7 @@ export function OrderSummarySheet({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-[#F8F1E8]">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-[color:var(--brand-bg)]">
       {/* Invisible overlay to "freeze" clicks during the short delay */}
       {isFreezing && <div className="absolute inset-0 z-[110] cursor-wait" />}
 
@@ -65,19 +65,19 @@ export function OrderSummarySheet({
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto px-6 py-10 flex flex-col items-center">
         {/* Bill Container */}
-        <div className="w-full max-w-[400px] bg-[#FFFEFA] rounded-sm p-8 shadow-[0_10px_40px_rgba(44,24,16,0.12)] border border-[#E8DDD0] relative overflow-hidden">
+        <div className="w-full max-w-[400px] bg-[color:var(--brand-bg-deep)] rounded-sm p-8 shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-[color:var(--brand-gold)]/20 relative overflow-hidden">
           
           {/* Header */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold tracking-[0.2em] text-[#3B2314] mb-2" style={{ fontFamily: "Georgia, serif" }}>
+            <h1 className="font-serif text-3xl tracking-[0.2em] text-[color:var(--brand-gold)] mb-2">
               TAKSH
             </h1>
-            <p className="text-[#8E7F71] text-[10px] tracking-[0.3em] uppercase font-semibold mb-6">
+            <p className="text-[color:var(--brand-gold-muted)] text-[10px] tracking-[0.3em] uppercase font-semibold mb-6">
               Pure Veg Restaurant
             </p>
             <div className="h-px bg-gradient-to-r from-transparent via-[#EDE4D5] to-transparent w-full mb-6" />
-            <h2 className="text-2xl font-bold text-[#2C1810] mb-1">Your Order</h2>
-            <p className="text-[#A09080] text-xs uppercase tracking-wider">{orderTime}</p>
+            <h2 className="font-serif text-2xl text-[color:var(--brand-gold)] mb-1">Your Order</h2>
+            <p className="text-[color:var(--brand-gold-muted)] text-xs uppercase tracking-wider">{orderTime}</p>
           </div>
 
           {/* Items List */}
@@ -85,14 +85,14 @@ export function OrderSummarySheet({
             {items.map((item) => (
               <div key={item.id} className="flex justify-between items-start gap-4">
                 <div className="flex-1">
-                  <p className="text-[#2C1810] font-bold text-lg leading-tight uppercase tracking-tight">
+                  <p className="font-serif text-[color:var(--brand-gold)] text-lg leading-tight uppercase tracking-tight">
                     {item.name}
                   </p>
-                  <p className="text-[#8E7F71] text-sm mt-0.5">
+                  <p className="text-[color:var(--brand-gold-muted)] text-sm mt-0.5">
                     Qty: {item.quantity} × ₹{item.price}
                   </p>
                 </div>
-                <p className="text-[#2C1810] font-bold text-lg">
+                <p className="font-serif text-[color:var(--brand-gold)] text-lg">
                   ₹{item.price * item.quantity}
                 </p>
               </div>
@@ -104,13 +104,13 @@ export function OrderSummarySheet({
 
           {/* Total */}
           <div className="flex justify-between items-center mb-8">
-            <span className="text-[#8E7F71] font-bold uppercase tracking-widest text-sm">Amount Due</span>
-            <span className="text-[#2C1810] font-black text-3xl">₹{totalPrice}</span>
+            <span className="text-[color:var(--brand-gold-muted)] font-bold uppercase tracking-widest text-sm">Amount Due</span>
+            <span className="font-serif text-[color:var(--brand-gold)] font-black text-3xl">₹{totalPrice}</span>
           </div>
 
           {/* Helper Text */}
-          <div className="bg-[#F8F1E8] rounded-xl p-4 text-center border border-[#EDE4D5] shadow-inner">
-            <p className="text-[#3B2314] font-bold text-sm leading-relaxed">
+          <div className="bg-[color:var(--brand-bg)] rounded-xl p-4 text-center border border-[color:var(--brand-gold)]/15">
+            <p className="text-[color:var(--brand-gold-soft)] font-bold text-sm leading-relaxed">
               Show this screen to the waiter to place your order
             </p>
           </div>
@@ -118,13 +118,13 @@ export function OrderSummarySheet({
       </div>
 
       {/* Bottom Actions */}
-      <div className="p-6 bg-[#F8F1E8] border-t border-[#E8DDD0] shadow-[0_-10px_30px_rgba(44,24,16,0.05)]">
+      <div className="p-6 bg-[color:var(--brand-bg)] border-t border-[color:var(--brand-gold)]/15 shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
         <div className="max-w-[430px] mx-auto grid grid-cols-2 gap-4">
           <button
             onClick={onEdit}
             disabled={isFreezing}
-            className={`flex items-center justify-center gap-2 bg-white border-2 border-[#3B2314] text-[#3B2314] py-4 rounded-2xl font-bold transition-all shadow-sm ${
-              isFreezing ? 'opacity-50 cursor-not-allowed' : 'active:scale-95 hover:bg-[#3B2314] hover:text-white group'
+            className={`flex items-center justify-center gap-2 bg-[color:var(--brand-bg-deep)] border border-[color:var(--brand-gold)]/40 text-[color:var(--brand-gold-soft)] py-4 rounded-2xl font-bold transition-all ${
+              isFreezing ? 'opacity-50 cursor-not-allowed' : 'active:scale-95 hover:border-[color:var(--brand-gold)] hover:text-[color:var(--brand-gold)] group'
             }`}
           >
             <Edit2 size={18} className={isFreezing ? '' : "group-hover:rotate-12 transition-transform"} />
@@ -133,8 +133,8 @@ export function OrderSummarySheet({
           <button
             onClick={handleConfirm}
             disabled={isFreezing}
-            className={`flex items-center justify-center gap-2 bg-[#3B2314] text-[#E7CFA8] py-4 rounded-2xl font-bold transition-all shadow-lg ${
-              isFreezing ? 'opacity-70 cursor-wait animate-pulse' : 'active:scale-95 hover:bg-[#2A1609]'
+            className={`flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-[#f5d98c] via-[color:var(--brand-gold)] to-[#a37a30] py-4 text-[color:var(--brand-bg-deep)] font-bold transition-all shadow-[0_8px_24px_-8px_rgba(212,166,86,0.8)] ${
+              isFreezing ? 'opacity-70 cursor-wait animate-pulse' : 'active:scale-[0.99]'
             }`}
           >
             <CheckCircle2 size={18} />
@@ -143,7 +143,7 @@ export function OrderSummarySheet({
           <button
             onClick={handleClear}
             disabled={isFreezing}
-            className={`col-span-2 flex items-center justify-center gap-2 text-[#8E7F71] py-2 font-bold transition-colors uppercase tracking-widest text-[10px] ${
+            className={`col-span-2 flex items-center justify-center gap-2 text-[color:var(--brand-gold-muted)] py-2 font-bold transition-colors uppercase tracking-widest text-[10px] ${
               isFreezing ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-500'
             }`}
           >
