@@ -10,8 +10,13 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 const vapidEmail = process.env.VAPID_EMAIL;
+const PUSH_NOTIFICATIONS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_PUSH_NOTIFICATIONS === "true";
 
 export async function POST(request) {
+  if (!PUSH_NOTIFICATIONS_ENABLED) {
+    return NextResponse.json({ error: "Notification feature is paused." }, { status: 410 });
+  }
+
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json(
       { error: "Supabase environment variables are missing." },
