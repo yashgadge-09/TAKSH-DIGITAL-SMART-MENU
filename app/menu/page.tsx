@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { usePushNotification } from "@/hooks/usePushNotification";
 
 const PREVIEW_LIMIT = 6;
+const PUSH_NOTIFICATIONS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_PUSH_NOTIFICATIONS === "true";
 
 const MAIN_PREVIEW_CATEGORIES = [
   { label: "Breakfast", aliases: ["breakfast"] },
@@ -37,7 +38,8 @@ function MenuPageContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { totalItems, addItem, items } = useCart();
-  const { isSubscribed, subscribe, unsubscribe, isSupported, lastError, permissionStatus } = usePushNotification();
+  const pushNotificationState = usePushNotification();
+  const { isSubscribed, subscribe, unsubscribe, isSupported, lastError, permissionStatus } = pushNotificationState;
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
 
@@ -195,6 +197,11 @@ function MenuPageContent() {
   }, []);
 
   useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) {
+      setShowPushFlashPrompt(false);
+      return;
+    }
+
     if (!isSupported || isSubscribed || permissionStatus !== "default") {
       setShowPushFlashPrompt(false);
       return;
@@ -426,6 +433,8 @@ function MenuPageContent() {
   };
 
   const handleTogglePushNotifications = async () => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return;
+
     if (!isSupported) {
       toast.error("Push notifications are not supported on this browser.");
       return;
@@ -459,6 +468,10 @@ function MenuPageContent() {
 
     setLastConfirmedOrderItems(sanitizedItems);
     setIsOrderRatingOpen(true);
+
+    if (!PUSH_NOTIFICATIONS_ENABLED) {
+      return;
+    }
 
     const sessionId = getOrCreateSessionId();
 
@@ -728,7 +741,7 @@ function MenuPageContent() {
               />
             </div>
 
-            {isSubscribed && (
+            {PUSH_NOTIFICATIONS_ENABLED && isSubscribed && (
               <button
                 onClick={handleTogglePushNotifications}
                 disabled={isTogglingPush || !isSupported}
@@ -786,7 +799,7 @@ function MenuPageContent() {
 
       {/* ─── Main Content ─── */}
       <div className="max-w-[430px] mx-auto px-5 pb-20 pt-4">
-        {showPushFlashPrompt && (
+        {PUSH_NOTIFICATIONS_ENABLED && showPushFlashPrompt && (
           <div className="mb-4 rounded-xl border border-[#D9C2A8] bg-[#FFF6EC] px-4 py-3 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-2">

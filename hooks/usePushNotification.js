@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getOrCreateSessionId } from "@/lib/session";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+const PUSH_NOTIFICATIONS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_PUSH_NOTIFICATIONS === "true";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -23,6 +24,14 @@ export function usePushNotification() {
   const [permissionStatus, setPermissionStatus] = useState("default");
 
   useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) {
+      setIsSupported(false);
+      setIsSubscribed(false);
+      setLastError("");
+      setPermissionStatus("default");
+      return;
+    }
+
     const supported =
       typeof window !== "undefined" &&
       "serviceWorker" in navigator &&
@@ -37,6 +46,8 @@ export function usePushNotification() {
   }, []);
 
   const saveSubscription = useCallback(async (subscription) => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return false;
+
     const session_id = getOrCreateSessionId();
     const response = await fetch("/api/push/subscribe", {
       method: "POST",
@@ -57,6 +68,11 @@ export function usePushNotification() {
 
   const subscribe = useCallback(async () => {
     setLastError("");
+
+    if (!PUSH_NOTIFICATIONS_ENABLED) {
+      setIsSubscribed(false);
+      return false;
+    }
 
     if (!isSupported) {
       setLastError("Push notifications are not supported on this browser.");
@@ -132,6 +148,11 @@ export function usePushNotification() {
   const unsubscribe = useCallback(async () => {
     setLastError("");
 
+    if (!PUSH_NOTIFICATIONS_ENABLED) {
+      setIsSubscribed(false);
+      return false;
+    }
+
     if (!isSupported) {
       setLastError("Push notifications are not supported on this browser.");
       return false;
@@ -169,6 +190,8 @@ export function usePushNotification() {
   }, [isSupported]);
 
   useEffect(() => {
+    if (!PUSH_NOTIFICATIONS_ENABLED) return;
+
     if (!isSupported || Notification.permission !== "granted") {
       if (isSupported) {
         setPermissionStatus(Notification.permission);
