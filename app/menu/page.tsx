@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -287,7 +287,7 @@ function MenuPageContent() {
       <div className="mx-auto w-full max-w-sm pb-28">
 
         {/* ── Header ── */}
-        <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md border-b border-[color:var(--brand-gold)]/10 px-4 pt-5 pb-3">
+        <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md px-4 pt-5 pb-2">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="font-serif text-[28px] leading-none tracking-[0.18em] text-[color:var(--brand-gold)]">TAKSH</h1>
@@ -334,17 +334,42 @@ function MenuPageContent() {
         </header>
 
         {/* ── Category tabs ── */}
-        <nav aria-label="Menu categories" className="border-b border-[color:var(--brand-gold)]/10">
-          <div className="no-scrollbar flex gap-5 overflow-x-auto px-4 py-3">
-            {["All", ...menuTabs].map(tab => (
-              <button key={tab} type="button"
-                ref={el => { categoryButtonRefs.current[tab] = el; }}
-                onClick={() => handleCategoryChange(tab)}
-                className={["shrink-0 pb-1 text-[13px] font-medium whitespace-nowrap transition border-b-2", activeCategory === tab ? "border-[color:var(--brand-gold)] text-[color:var(--brand-gold)] font-semibold" : "border-transparent text-[color:var(--brand-gold-muted)] hover:text-[color:var(--brand-gold-soft)]"].join(" ")}>
-                {tab === "All" ? (t("all") || "All") : tab}
-              </button>
-            ))}
-          </div>
+        <nav aria-label="Menu categories" className="mt-3 pb-1">
+          <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
+            {["All", ...menuTabs].map(tab => {
+              const isActive = activeCategory === tab;
+              const displayLabel = tab === "All" ? (t("all") || "All") : tab;
+              // Placeholder image for now until category schema is updated
+              const imgSrc = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&h=100&fit=crop";
+              
+              return (
+                <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    ref={el => { categoryButtonRefs.current[tab] = el; }}
+                    onClick={() => handleCategoryChange(tab)}
+                    aria-label={displayLabel}
+                    className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${
+                      isActive 
+                        ? "ring-[color:var(--brand-gold)]" 
+                        : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
+                    }`}
+                  >
+                    <img
+                      src={imgSrc}
+                      alt={displayLabel}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                  <span className={`text-[11px] font-medium transition-colors text-center leading-tight line-clamp-2 ${
+                    isActive ? "text-[color:var(--brand-gold)] font-bold" : "text-[color:var(--brand-gold-soft)]"
+                  }`}>
+                    {displayLabel}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </nav>
 
         {/* ── Loading state ── */}
