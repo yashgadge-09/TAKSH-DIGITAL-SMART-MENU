@@ -2,17 +2,44 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Heart, NotebookPen, Sparkles } from "lucide-react";
+import { ArrowLeft, Heart, ChefHat, Sparkles, Minus, Plus } from "lucide-react";
 import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, trackFavourite } from "@/lib/database";
 import { getFavouriteSessionKey, getOrCreateSessionId } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  type CarouselApi,
-} from "@/components/ui/carousel";
+import Link from "next/link";
+
+function LanguageToggle() {
+  const langs = ["EN", "HI", "MR"] as const;
+  const { language, setLanguage } = useLanguage();
+  return (
+    <div
+      role="group"
+      aria-label="Language"
+      className="pointer-events-auto flex h-10 items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)]/95 p-1 shadow-md backdrop-blur"
+    >
+      {langs.map((l) => {
+        const isActive = language === l.toLowerCase();
+        return (
+          <button
+            key={l}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => setLanguage(l.toLowerCase() as any)}
+            className={[
+              "rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wider transition",
+              isActive
+                ? "bg-[color:var(--brand-gold)] text-[color:var(--brand-bg-deep)]"
+                : "text-[color:var(--brand-gold-muted)] hover:text-[color:var(--brand-gold)]",
+            ].join(" ")}
+          >
+            {l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function DishDetailPage() {
   const TOAST_DURATION_MS = 950;
@@ -20,7 +47,7 @@ export default function DishDetailPage() {
   const router = useRouter();
   const id = params.id as string;
   const { addItem, items } = useCart();
-  const { language: lang, setLanguage: setLang, t } = useLanguage();
+  const { language: lang, t } = useLanguage();
 
   const [rawDish, setRawDish] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -35,8 +62,10 @@ export default function DishDetailPage() {
   const recommendationSectionRef = useRef<HTMLDivElement | null>(null);
   const [shouldScrollToRecommendations, setShouldScrollToRecommendations] = useState(false);
   const [highlightRecommendations, setHighlightRecommendations] = useState(false);
-  const [api, setApi] = useState<CarouselApi>();
-  const [currentSlide, setCurrentSlide] = useState(0);
+
+  const [qty, setQty] = useState(1);
+  const [scrollY, setScrollY] = useState(0);
+  const heroRef = useRef<HTMLDivElement>(null);
 
   const dish = useMemo(() => {
     if (!rawDish) return null;
@@ -81,33 +110,31 @@ export default function DishDetailPage() {
       isChefSpecial: rawDish.is_chef_special ?? false,
       isGuestFavorite: rawDish.is_guest_favorite ?? false,
       isTrending: rawDish.is_trending ?? false,
-      healthBenefits: rawDish.healthBenefits || [],
-      nutrition: {
-        kcal: rawDish.kcal ?? (rawDish.nutrition?.kcal ?? 0),
-        protein: rawDish.protein ?? (rawDish.nutrition?.protein ?? 0),
-        fat: rawDish.fat ?? (rawDish.nutrition?.fat ?? 0),
-        carbs: rawDish.carbs ?? (rawDish.nutrition?.carbs ?? 0),
-        fibre: rawDish.fibre ?? (rawDish.nutrition?.fibre ?? 0),
-      },
+      tags: rawDish.tags ?? [],
+      servings: rawDish.servings ?? null,
+      chefsNote: rawDish.chefsNote ?? rawDish.description_en ?? "A delicate balance of spices and fresh ingredients, prepared with love.",
     };
   }, [rawDish, lang]);
 
+  // Track scroll for fade-down effect
   useEffect(() => {
-    if (!api) return;
-    setCurrentSlide(api.selectedScrollSnap());
-    api.on("select", () => {
-      setCurrentSlide(api.selectedScrollSnap());
-    });
-  }, [api]);
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setScrollY(window.scrollY));
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
-      if (highlightTimerRef.current) {
-        clearTimeout(highlightTimerRef.current);
-      }
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     };
   }, []);
 
@@ -126,19 +153,13 @@ export default function DishDetailPage() {
         block: "start",
       });
       setHighlightRecommendations(true);
-      if (highlightTimerRef.current) {
-        clearTimeout(highlightTimerRef.current);
-      }
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
       highlightTimerRef.current = setTimeout(() => {
         setHighlightRecommendations(false);
       }, 1200);
       setShouldScrollToRecommendations(false);
     });
   }, [dish, items, showAddedToast, recommendations.length, shouldScrollToRecommendations]);
-
-  useEffect(() => {
-    setSessionId(getOrCreateSessionId());
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -166,9 +187,7 @@ export default function DishDetailPage() {
             fetchedDish.id,
             fetchedDish.name_en || fetchedDish.name?.en || "Unknown Dish",
             fetchedDish.category || "General"
-          ).catch(() => {
-            // Tracking failures should not block dish detail rendering.
-          });
+          ).catch(() => {});
         }
 
         const dishRecommendations = await getDishRecommendations(
@@ -203,46 +222,72 @@ export default function DishDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E8650A]" />
-        <p className="ml-3 text-[#2C1810]">{t('loading')}</p>
+      <div className="flex min-h-screen items-center justify-center bg-[color:var(--brand-bg)]">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-[color:var(--brand-gold)]" />
       </div>
     );
   }
 
   if (!dish) {
     return (
-      <div className="min-h-screen bg-[#F8F1E8] flex items-center justify-center">
-        <p className="text-[#2C1810]">{t('dishNotFound')}</p>
+      <div className="flex min-h-screen items-center justify-center bg-[color:var(--brand-bg)]">
+        <p className="text-[color:var(--brand-gold)]">{t('dishNotFound')}</p>
       </div>
     );
   }
 
-  // Explicit handleAddToCart to avoid closure or event-passing issues
   const handleAddToCart = () => {
     if (!dish) return;
 
-    // Use a robust extraction for the image
     const itemImage = (Array.isArray(dish.images) && dish.images.length > 0) 
       ? dish.images[0] 
       : (dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop");
 
-    addItem({
-      id: dish.id,
-      name: dish.name,
-      price: dish.price,
-      image: itemImage,
-      category: dish.category || "Main",
-    });
+    for (let i = 0; i < qty; i++) {
+        addItem({
+        id: dish.id,
+        name: dish.name,
+        price: dish.price,
+        image: itemImage,
+        category: dish.category || "Main",
+        });
+    }
 
     setShowAddedToast(true);
     setShouldScrollToRecommendations(true);
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
+    setQty(1);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => {
       setShowAddedToast(false);
     }, TOAST_DURATION_MS);
+  };
+
+  const handleFavouriteToggle = () => {
+    if (isFavorited) return; // Once liked in the session, it cannot be disliked
+
+    const nextState = true;
+    setIsFavorited(nextState);
+
+    if (!dish) return;
+
+    const activeSessionId = sessionId || getOrCreateSessionId();
+    if (!sessionId) setSessionId(activeSessionId);
+
+    const favouriteKey = getFavouriteSessionKey(activeSessionId, dish.id);
+
+    if (window.sessionStorage.getItem(favouriteKey) === "1") return;
+
+    window.sessionStorage.setItem(favouriteKey, "1");
+
+    void trackFavourite(
+      dish.id,
+      dish.name || dish.name_en || "Unknown Dish",
+      activeSessionId,
+      nextState
+    ).catch(() => {
+      window.sessionStorage.removeItem(favouriteKey);
+      setIsFavorited(false);
+    });
   };
 
   const getRecommendationName = (recommendedDish: any) =>
@@ -263,289 +308,384 @@ export default function DishDetailPage() {
   );
   const isCurrentDishInCart = Boolean(dish?.id) && items.some((item) => item.id === dish.id);
 
-  const handleFavouriteToggle = () => {
-    const nextState = !isFavorited;
-    setIsFavorited(nextState);
-
-    if (!dish) return;
-
-    const activeSessionId = sessionId || getOrCreateSessionId();
-    if (!sessionId) setSessionId(activeSessionId);
-
-    const favouriteKey = getFavouriteSessionKey(activeSessionId, dish.id);
-
-    if (nextState && window.sessionStorage.getItem(favouriteKey) === "1") {
-      return;
-    }
-
-    if (nextState) {
-      window.sessionStorage.setItem(favouriteKey, "1");
-    } else {
-      window.sessionStorage.removeItem(favouriteKey);
-    }
-
-    void trackFavourite(
-      dish.id,
-      dish.name || dish.name_en || "Unknown Dish",
-      activeSessionId,
-      nextState
-    ).catch(() => {
-      // Do not interrupt favorite UX when analytics insert fails.
-      if (nextState) {
-        window.sessionStorage.removeItem(favouriteKey);
-      } else {
-        window.sessionStorage.setItem(favouriteKey, "1");
-      }
-      setIsFavorited(!nextState);
-    });
-  };
-
-
+  const heroFadeDistance = typeof window !== "undefined" ? Math.max(window.innerHeight * 0.6, 360) : 600;
+  const fadeProgress = Math.min(1, scrollY / heroFadeDistance);
+  const heroOpacity = 1 - fadeProgress;
+  const heroTranslate = scrollY * 0.25;
+  const heroScale = 1 - fadeProgress * 0.08;
+  const heroBlur = fadeProgress * 6;
+  const total = dish.price * qty;
 
   return (
-    <div className="max-w-[430px] mx-auto min-h-screen bg-[#F8F1E8]">
-      {/* Hero Carousel */}
-      <div className="relative h-96 mx-2 mt-2 bg-white border border-[#EDE4D5] rounded-[2.5rem] overflow-hidden shadow-md">
-        <Carousel setApi={setApi} className="w-full h-full">
-          <CarouselContent className="h-96">
-            {dish.images.map((img: string, index: number) => (
-              <CarouselItem key={index} className="h-full">
-                {(img?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || img?.includes('/video/upload/')) ? (
-                  <video
-                    src={img}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <img
-                    src={img}
-                    alt={`${dish.name} - ${index + 1}`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=400'
-                    }}
-                  />
-                )}
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
+    <main className="relative min-h-screen bg-[color:var(--brand-bg)] text-[color:var(--brand-gold-soft)] pb-32">
+      {/* Soft warm radial wash that stays behind everything */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background:
+            "radial-gradient(60% 45% at 50% 38%, rgba(255,200,120,0.10) 0%, rgba(35,22,10,0) 60%)",
+        }}
+      />
 
-        {/* Slide Indicators */}
-        {dish.images.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-            {dish.images.map((_: any, i: number) => (
-              <div
-                key={i}
-                className={`w-1.5 h-1.5 rounded-full transition-all ${
-                  currentSlide === i ? "bg-[#3B2314] text-[#E7CFA8] w-4" : "bg-white/40"
-                }`}
+      {/* Fixed top-aligned square hero (~50% of viewport), horizontally centered */}
+      <div
+        ref={heroRef}
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-x-0 top-0 z-0 flex justify-center"
+        style={{
+          opacity: heroOpacity,
+          transform: `translate3d(0, ${-heroTranslate}px, 0) scale(${heroScale})`,
+          transformOrigin: "center top",
+          filter: `blur(${heroBlur}px)`,
+          willChange: "transform, opacity, filter",
+        }}
+      >
+        <div className="relative w-full max-w-[100vw] md:max-w-[min(50vw,50vh)]">
+          <div className="relative aspect-[4/3] w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]">
+            {(dish.images[0]?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.images[0]?.includes('/video/upload/')) ? (
+              <video
+                src={dish.images[0]}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
               />
-            ))}
-          </div>
-        )}
-
-        {/* Back Button */}
-        <button
-          onClick={() => router.back()}
-          className="absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-[#F8F1E8]/80 flex items-center justify-center hover:bg-white transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-[#2C1810]" />
-        </button>
-
-        {/* Language + Favorite */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-          <div className="flex items-center rounded-full border border-[#C4956A]/50 bg-[#1A0D04]/75 p-0.5 backdrop-blur-md shadow-[0_8px_20px_rgba(26,13,4,0.45)]">
-            {(['en', 'hi', 'mr'] as const).map((l) => (
-              <button
-                key={l}
-                onClick={() => setLang(l)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide transition-all ${lang === l
-                  ? "bg-[#E28B4B] text-[#1A0D04] shadow-[0_4px_12px_rgba(226,139,75,0.45)]"
-                  : "text-[#F6E2C8] hover:text-white hover:bg-[#3B2314]/80"
-                  }`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={handleFavouriteToggle}
-            className={`w-11 h-11 flex items-center justify-center backdrop-blur-md border rounded-2xl transition-all duration-500 shadow-xl ${
-              isFavorited 
-                ? "bg-red-500/30 border-red-500/60 shadow-red-500/40 scale-110" 
-                : "bg-black/30 border-white/20 shadow-black/10 hover:bg-black/40"
-            }`}
-          >
-            <Heart
-              size={24}
-              fill={isFavorited ? "#ef4444" : "none"}
-              stroke={isFavorited ? "#ef4444" : "rgba(255,255,255,0.9)"}
-              className={`${isFavorited ? "animate-pulse" : ""} transition-transform`}
+            ) : (
+              <img
+                src={dish.images[0]}
+                alt={dish.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+                }}
+              />
+            )}
+            {/* Soft inner top gradient for sticky-controls legibility */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-24"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(35,22,10,0.55) 0%, rgba(35,22,10,0) 100%)",
+              }}
             />
-          </button>
+          </div>
+          {/* Smooth fade from image bottom into the page background */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(35,22,10,0) 0%, rgba(35,22,10,0.55) 55%, var(--brand-bg) 100%)",
+            }}
+          />
+          {/* Extra blend zone that bleeds the image into the page below the square */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-full h-24"
+            style={{
+              background:
+                "linear-gradient(180deg, var(--brand-bg) 0%, rgba(35,22,10,0) 100%)",
+            }}
+          />
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-[430px] mx-auto px-5 py-6">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-3">
-          <h1 className="text-[#2C1810] font-bold text-3xl">{dish.name}</h1>
-          <span className="text-[#C4956A] font-bold text-2xl">₹{dish.price}</span>
+      {/* Sticky top controls (fade as user scrolls) */}
+      <div
+        className="pointer-events-none fixed inset-x-0 top-0 z-30"
+        style={{
+          opacity: 1 - Math.min(1, scrollY / 220),
+        }}
+      >
+        <div className="mx-auto flex w-full max-w-md items-center justify-between px-4 pt-4">
+          <button
+            onClick={() => router.back()}
+            aria-label="Go back"
+            className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-[color:var(--brand-gold-soft)]/95 text-[color:var(--brand-bg-deep)] shadow-md backdrop-blur transition hover:bg-[color:var(--brand-gold-soft)]"
+          >
+            <ArrowLeft className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <button
+              type="button"
+              aria-label={isFavorited ? "Unlike dish" : "Like dish"}
+              aria-pressed={isFavorited}
+              onClick={handleFavouriteToggle}
+              className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-[color:var(--brand-gold-soft)]/95 shadow-md backdrop-blur transition hover:bg-[color:var(--brand-gold-soft)]"
+            >
+              <Heart
+                className={[
+                  "h-[18px] w-[18px] transition",
+                  isFavorited
+                    ? "fill-red-500 text-red-500"
+                    : "text-[color:var(--brand-bg-deep)]",
+                ].join(" ")}
+                strokeWidth={2.2}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Content above the hero */}
+      <div className="relative z-10 mx-auto w-full max-w-md pb-12">
+        {/* Spacer that lets the top-anchored hero show through. */}
+        <div
+          aria-hidden="true"
+          className="h-[calc(75vw-200px)] w-full md:h-[calc(min(50vw,50vh)-150px)]"
+        />
+
+        {/* Veg indicator */}
+        <div className="px-5">
+          <span
+            aria-label="Vegetarian"
+            className="inline-grid h-4 w-4 place-items-center rounded-[4px] border-2 border-emerald-500 bg-background/50 backdrop-blur"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          </span>
         </div>
 
-        {/* Flavor & Spice Line */}
-        {(dish.tasteDescription || dish.hasSpiceIndicator) && (
-          <div className="flex items-start gap-2 text-[#8E7F71] text-sm mb-2 font-medium">
-            <span className="text-base text-[#C18F58]">{dish.hasSpiceIndicator ? '🔥' : '✨'}</span>
-            <span className="leading-snug">{dish.tasteDescription || t('spicy')}</span>
+        {/* Title */}
+        <section className="px-5 pt-3">
+          <div className="flex items-end justify-between gap-3">
+            <h1 className="font-serif text-[30px] font-semibold leading-[1.05] text-[color:var(--brand-gold-soft)] text-balance">
+              {dish.name}
+            </h1>
+            <p className="shrink-0 font-serif text-[22px] font-semibold text-[color:var(--brand-gold)]">
+              ₹{dish.price}
+            </p>
           </div>
-        )}
 
-        {/* Servings */}
-        {dish.servings && (
-          <div className="flex items-center gap-2 text-[#8E7F71] text-sm mb-6 font-medium">
-            <span className="text-base">👥</span>
-            <span>{t('serves')} {dish.servings} {t('people')}</span>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(dish.tasteDescription || dish.hasSpiceIndicator) && (
+              <span className="rounded-full bg-[color:var(--brand-gold)]/85 px-3 py-1 text-[12px] font-semibold text-[color:var(--brand-bg-deep)] flex items-center gap-1">
+                {dish.hasSpiceIndicator && "🔥 "}
+                {dish.tasteDescription || t('spicy')}
+              </span>
+            )}
+            {dish.servings && (
+              <span className="text-[13px] text-[color:var(--brand-gold-soft)]/85">
+                👥 {t('serves')} {dish.servings}
+              </span>
+            )}
+            {dish.tags.map((t: string) => (
+              <span
+                key={t}
+                className="rounded-full bg-[color:var(--brand-gold)]/85 px-3 py-1 text-[12px] font-semibold text-[color:var(--brand-bg-deep)]"
+              >
+                {t}
+              </span>
+            ))}
           </div>
-        )}
+        </section>
 
         {/* Chef's Note */}
         {dish.description && (
-          <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-4 shadow-sm">
-            <h2 className="text-[#2C1810] font-bold mb-1.5 text-base">👨‍🍳 {t('chefNote')}</h2>
-            <p className="text-[#8E7F71] text-sm leading-relaxed italic">{dish.description}</p>
-          </div>
+          <section className="px-5 pt-5">
+            <div
+              className="rounded-2xl px-4 py-4 ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)]"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(60,38,18,0.85) 0%, rgba(40,24,12,0.85) 100%)",
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[color:var(--brand-gold)]/12 ring-1 ring-[color:var(--brand-gold)]/25">
+                  <ChefHat
+                    className="h-4 w-4 text-[color:var(--brand-gold)]"
+                    strokeWidth={2}
+                  />
+                </span>
+                <div>
+                  <h2 className="font-serif text-[18px] font-semibold text-[color:var(--brand-gold)]">
+                    {t('chefNote')}
+                  </h2>
+                  <p className="mt-1.5 text-[13.5px] leading-relaxed text-[color:var(--brand-gold-soft)]/90">
+                    {dish.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
         )}
 
         {/* Ingredients */}
         {dish.ingredients && dish.ingredients.length > 0 && (
-          <div className="bg-white border border-[#EDE4D5] rounded-[1.5rem] p-5 mb-8 shadow-sm">
-            <h3 className="text-[#2C1810] font-bold mb-1.5 text-base">{t('ingredients')}</h3>
-            <p className="text-[#C4956A] text-sm leading-relaxed font-medium">{dish.ingredients.join(", ")}</p>
-          </div>
+          <section className="px-5 pt-6">
+            <h2 className="font-serif text-[22px] font-semibold text-[color:var(--brand-gold)]">
+              {t('ingredients')}
+            </h2>
+            <p className="mt-2 text-[14px] leading-relaxed text-[color:var(--brand-gold-soft)]/95">
+              {dish.ingredients.join(", ")}
+            </p>
+          </section>
         )}
 
+        {/* More Like This */}
         {uniqueMoreLikeThisDishes.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-[#2C1810] font-bold text-lg mb-3">{t('moreLikeThis')}</h3>
-            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
-              {uniqueMoreLikeThisDishes.slice(0, 10).map((relatedDish: any) => (
-                <button
-                  key={relatedDish.id}
-                  onClick={() => router.push(`/dish/${relatedDish.id}`)}
-                  className="w-[120px] shrink-0 bg-white border border-[#EDE4D5] hover:border-[#E28B4B] rounded-[1.75rem] overflow-hidden text-left transition-colors shadow-sm"
+          <section className="pt-8">
+            <h2 className="px-5 font-serif text-[22px] font-semibold text-[color:var(--brand-gold)]">
+              {t('moreLikeThis')}
+            </h2>
+            <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-5 pb-1">
+              {uniqueMoreLikeThisDishes.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/dish/${item.id}`}
+                  className="group flex w-[130px] shrink-0 flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
                 >
-                  <div className="h-[90px] w-full border-b border-[#EDE4D5]">
-                    {(String(getRecommendationImage(relatedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(relatedDish)).includes('/video/upload/')) ? (
-                      <video src={String(getRecommendationImage(relatedDish))} muted loop autoPlay className="w-full h-full object-cover" />
+                  <div className="relative aspect-square w-full overflow-hidden">
+                    {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
+                      <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
                     ) : (
                       <img
-                        src={String(getRecommendationImage(relatedDish))}
-                        alt={getRecommendationName(relatedDish)}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                        }}
+                        src={String(getRecommendationImage(item))}
+                        alt={getRecommendationName(item)}
+                        className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                        onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop' }}
                       />
                     )}
                   </div>
-                  <div className="p-3">
-                    <p className="text-[#2C1810] text-[13px] font-bold truncate leading-tight mb-1">{getRecommendationName(relatedDish)}</p>
-                    <p className="text-[#C4956A] font-bold text-xs">₹{relatedDish.price}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {isCurrentDishInCart && !showAddedToast && recommendations.length > 0 && (
-          <section
-            ref={recommendationSectionRef}
-            className={`mb-8 rounded-2xl border border-[#C4956A]/35 bg-[linear-gradient(135deg,rgba(196,149,106,0.15)_0%,rgba(255,255,255,0.96)_45%,rgba(248,241,232,0.98)_100%)] p-4 shadow-[0_0_0_1px_rgba(196,149,106,0.08),0_14px_30px_rgba(44,24,16,0.08)] transition-all duration-500 ${
-              highlightRecommendations ? "ring-2 ring-[#C4956A]/50 shadow-[0_0_0_1px_rgba(196,149,106,0.2),0_18px_34px_rgba(44,24,16,0.14)]" : ""
-            }`}
-          >
-            <div className="mb-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.24em] text-[#B89A7D] mb-1">Curated Picks</p>
-                <h3 className="text-[#2C1810] font-extrabold text-lg leading-tight flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#C4956A]" />
-                  {t('completeYourMeal')}
-                </h3>
-              </div>
-            </div>
-
-            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-              {recommendations.map((recommendedDish) => (
-                <button
-                  key={recommendedDish.id}
-                  onClick={() => router.push(`/dish/${recommendedDish.id}`)}
-                  className="w-44 flex-shrink-0 rounded-2xl overflow-hidden border border-[#C4956A]/25 bg-white hover:border-[#C4956A] hover:-translate-y-0.5 transition-all text-left shadow-sm"
-                >
-                  <div className="relative">
-                    {(String(getRecommendationImage(recommendedDish)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(recommendedDish)).includes('/video/upload/')) ? (
-                      <video src={String(getRecommendationImage(recommendedDish))} muted loop autoPlay className="w-full h-28 object-cover" />
-                    ) : (
-                      <img
-                        src={String(getRecommendationImage(recommendedDish))}
-                        alt={getRecommendationName(recommendedDish)}
-                        className="w-full h-28 object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                        }}
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0" />
-                  </div>
-
-                  <div className="p-3">
-                    <p className="text-[#2C1810] text-sm font-bold leading-5 line-clamp-2 min-h-[2.5rem]">
-                      {getRecommendationName(recommendedDish)}
+                  <div className="flex flex-col gap-0.5 px-2.5 py-2">
+                    <h3 className="truncate font-serif text-[13px] text-[color:var(--brand-gold-soft)]">
+                      {getRecommendationName(item)}
+                    </h3>
+                    <p className="text-[12px] font-semibold text-[color:var(--brand-gold)]">
+                      ₹{item.price}
                     </p>
-                    <div className="mt-2 flex items-center justify-between">
-                      <p className="text-[#C4956A] font-extrabold text-base">₹{recommendedDish.price}</p>
-                      <span className="text-[10px] uppercase tracking-wider text-[#B89A7D]">View</span>
-                    </div>
                   </div>
-                </button>
+                </Link>
               ))}
             </div>
           </section>
         )}
 
-      </div>
-
-      <div className="h-28"></div> {/* Spacer for fixed button */}
-
-      {/* Add To Cart Button - Fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 max-w-[430px] mx-auto bg-gradient-to-t from-[#F8F1E8] via-[#F8F1E8] to-transparent pt-8 pb-8 px-5">
-        <button
-          onClick={() => handleAddToCart()}
-          className="w-full bg-[#3B2314] text-[#E7CFA8] font-bold py-4 rounded-full flex items-center justify-center gap-3 shadow-xl hover:scale-[1.02] active:scale-95 transition-all outline outline-offset-2 outline-[#3B2314]/50"
-        >
-          <span className="text-[17px] tracking-widest uppercase">{t('placeOrder')}</span>
-        </button>
-
-        {/* Toast */}
-        {showAddedToast && (
-          <div className="absolute -top-14 left-4 right-4 rounded-2xl border border-emerald-300/40 bg-[linear-gradient(135deg,rgba(16,185,129,0.18)_0%,rgba(255,255,255,0.92)_100%)] text-emerald-800 px-4 py-3 shadow-[0_10px_30px_rgba(16,185,129,0.2)] backdrop-blur-sm animate-fade-in-out">
-            <div className="flex items-center justify-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">✓</span>
-              <div className="text-left">
-                <p className="text-sm font-extrabold leading-tight">Added to cart</p>
-                <p className="text-[11px] font-medium text-emerald-700/90">Suggestions will appear right away</p>
+        {/* Curated Picks */}
+        {isCurrentDishInCart && !showAddedToast && recommendations.length > 0 && (
+          <section ref={recommendationSectionRef} className="px-5 pt-6">
+            <div
+              className={`overflow-hidden rounded-2xl ring-1 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)] transition-all duration-500 ${
+                highlightRecommendations ? "ring-[color:var(--brand-gold)]/60 shadow-[0_0_20px_rgba(212,166,86,0.3)]" : "ring-[color:var(--brand-gold)]/20"
+              }`}
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(60,38,18,0.9) 0%, rgba(40,24,12,0.9) 100%)",
+              }}
+            >
+              <div className="px-4 pt-4 pb-2">
+                <p className="text-[10px] font-semibold tracking-[0.22em] text-[color:var(--brand-gold)]/80">
+                  CURATED PICKS
+                </p>
+                <h2 className="mt-1 flex items-center gap-1.5 font-serif text-[20px] font-semibold text-[color:var(--brand-gold-soft)]">
+                  <Sparkles
+                    className="h-4 w-4 text-[color:var(--brand-gold)]"
+                    strokeWidth={2}
+                  />
+                  {t('completeYourMeal')}
+                </h2>
+              </div>
+              <div className="no-scrollbar flex gap-3 overflow-x-auto px-4 pb-4">
+                {recommendations.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`/dish/${item.id}`}
+                    className="group flex w-[140px] shrink-0 flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg)] ring-1 ring-[color:var(--brand-gold)]/15 transition hover:ring-[color:var(--brand-gold)]/40"
+                  >
+                    <div className="relative aspect-[4/3] w-full overflow-hidden">
+                      {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
+                        <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
+                      ) : (
+                        <img
+                          src={String(getRecommendationImage(item))}
+                          alt={getRecommendationName(item)}
+                          className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                          onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop' }}
+                        />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1 px-2.5 py-2">
+                      <h3 className="truncate font-serif text-[13px] text-[color:var(--brand-gold-soft)]">
+                        {getRecommendationName(item)}
+                      </h3>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[12px] font-semibold text-[color:var(--brand-gold)]">
+                          ₹{item.price}
+                        </p>
+                        <span className="text-[9px] font-semibold tracking-wider text-[color:var(--brand-gold)]/70">
+                          VIEW
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
-          </div>
+          </section>
         )}
       </div>
-    </div>
+
+      {/* Fixed bottom CTA */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--brand-gold)]/15 bg-[color:var(--brand-bg-deep)]/95 backdrop-blur-md pb-safe">
+        <div className="mx-auto flex w-full max-w-md flex-col items-center gap-3 px-4 py-3">
+          {showAddedToast && (
+            <div className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-950/80 text-emerald-300 px-4 py-2.5 shadow-[0_10px_30px_rgba(16,185,129,0.15)] backdrop-blur-md animate-fade-in-out text-center">
+              <div className="flex items-center justify-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-emerald-950 text-xs font-bold flex items-center justify-center">✓</span>
+                <p className="text-[13px] font-bold leading-tight">Added to cart</p>
+              </div>
+            </div>
+          )}
+          <div className="flex w-full items-center gap-3">
+            <div
+              role="group"
+              aria-label="Quantity"
+              className="flex h-12 items-center gap-1 rounded-full bg-[color:var(--brand-bg)] ring-1 ring-[color:var(--brand-gold)]/25"
+            >
+              <button
+                type="button"
+                aria-label="Decrease quantity"
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+                className="grid h-12 w-11 place-items-center rounded-full text-[color:var(--brand-gold-soft)] transition hover:bg-[color:var(--brand-gold)]/10 disabled:opacity-40"
+              >
+                <Minus className="h-4 w-4" strokeWidth={2.2} />
+              </button>
+              <span
+                aria-live="polite"
+                className="min-w-[20px] text-center font-serif text-[16px] font-semibold tabular-nums text-[color:var(--brand-gold-soft)]"
+              >
+                {qty}
+              </span>
+              <button
+                type="button"
+                aria-label="Increase quantity"
+                onClick={() => setQty((q) => q + 1)}
+                className="grid h-12 w-11 place-items-center rounded-full text-[color:var(--brand-gold-soft)] transition hover:bg-[color:var(--brand-gold)]/10"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full text-[15px] font-semibold text-[color:var(--brand-bg-deep)] shadow-[0_10px_22px_-10px_rgba(0,0,0,0.6)] transition active:scale-[0.99]"
+              style={{
+                background:
+                  "linear-gradient(180deg, oklch(0.86 0.13 82) 0%, var(--brand-gold) 100%)",
+              }}
+            >
+              <span>{t('placeOrder')}</span>
+              <span>₹{total}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
