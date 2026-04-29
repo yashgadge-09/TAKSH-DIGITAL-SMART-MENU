@@ -314,6 +314,17 @@ export async function deleteCategory(id: string) {
   if (error) throw error
 }
 
+export async function updateCategory(id: string, payload: { image_url?: string | null }) {
+  const { data, error } = await supabase
+    .from('categories')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 export async function getPublicReviews() {
   const { data, error } = await supabase
     .from('reviews')

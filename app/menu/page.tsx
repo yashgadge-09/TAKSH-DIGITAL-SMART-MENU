@@ -61,6 +61,7 @@ function MenuPageContent() {
   const pendingScrollCategoryRef = useRef<string | null>(null);
   const [dishes, setDishes] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [categoryImageMap, setCategoryImageMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const { language: lang, setLanguage: setLang, t } = useLanguage();
   const [isReviewSectionVisible, setIsReviewSectionVisible] = useState(false);
@@ -103,8 +104,12 @@ function MenuPageContent() {
       setDishes(mappedDishes);
       setMostLovedRatings(Array.isArray(liveMostLovedRatings) ? liveMostLovedRatings : []);
       const categoryNames = Array.isArray(categoryData) ? categoryData.map((c: any) => String(c?.name || "").trim()).filter(Boolean) : [];
-      if (categoryNames.length > 0) setCategories(categoryNames);
-      else { const cats = new Set<string>(); mappedDishes.forEach((d: any) => { if (d.category) cats.add(d.category); }); setCategories(Array.from(cats)); }
+      if (categoryNames.length > 0) {
+        setCategories(categoryNames);
+        const imgMap: Record<string, string | null> = {};
+        (categoryData as any[]).forEach((c: any) => { if (c?.name) imgMap[String(c.name).trim()] = c.image_url || null; });
+        setCategoryImageMap(imgMap);
+      } else { const cats = new Set<string>(); mappedDishes.forEach((d: any) => { if (d.category) cats.add(d.category); }); setCategories(Array.from(cats)); }
     } catch (err) { console.error("Failed to load dishes", err); }
     finally { setIsLoading(false); }
   };
@@ -339,8 +344,7 @@ function MenuPageContent() {
             {["All", ...menuTabs].map(tab => {
               const isActive = activeCategory === tab;
               const displayLabel = tab === "All" ? (t("all") || "All") : tab;
-              // Placeholder image for now until category schema is updated
-              const imgSrc = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&h=100&fit=crop";
+              const imgSrc = tab === "All" ? null : (categoryImageMap[tab] || null);
               
               return (
                 <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">
@@ -355,11 +359,18 @@ function MenuPageContent() {
                         : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
                     }`}
                   >
-                    <img
-                      src={imgSrc}
-                      alt={displayLabel}
-                      className="h-full w-full object-cover"
-                    />
+                    {imgSrc ? (
+                      <img
+                        src={imgSrc}
+                        alt={displayLabel}
+                        className="h-full w-full object-cover"
+                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center bg-[color:var(--brand-bg-deep)] text-[22px] select-none">
+                        {tab === "All" ? "🍽️" : "🫕"}
+                      </div>
+                    )}
                   </button>
                   <span className={`text-[11px] font-medium transition-colors text-center leading-tight line-clamp-2 ${
                     isActive ? "text-[color:var(--brand-gold)] font-bold" : "text-[color:var(--brand-gold-soft)]"
