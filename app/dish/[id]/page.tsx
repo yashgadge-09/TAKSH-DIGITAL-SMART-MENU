@@ -187,7 +187,7 @@ export default function DishDetailPage() {
             fetchedDish.id,
             fetchedDish.name_en || fetchedDish.name?.en || "Unknown Dish",
             fetchedDish.category || "General"
-          ).catch(() => {});
+          ).catch(() => { });
         }
 
         const dishRecommendations = await getDishRecommendations(
@@ -239,18 +239,18 @@ export default function DishDetailPage() {
   const handleAddToCart = () => {
     if (!dish) return;
 
-    const itemImage = (Array.isArray(dish.images) && dish.images.length > 0) 
-      ? dish.images[0] 
+    const itemImage = (Array.isArray(dish.images) && dish.images.length > 0)
+      ? dish.images[0]
       : (dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop");
 
     for (let i = 0; i < qty; i++) {
-        addItem({
+      addItem({
         id: dish.id,
         name: dish.name,
         price: dish.price,
         image: itemImage,
         category: dish.category || "Main",
-        });
+      });
     }
 
     setShowAddedToast(true);
@@ -342,7 +342,7 @@ export default function DishDetailPage() {
         }}
       >
         <div className="relative w-full max-w-[100vw] md:max-w-[min(50vw,50vh)]">
-          <div className="relative aspect-[4/3] w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]">
+          <div className="relative aspect-square w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]">
             {(dish.images[0]?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.images[0]?.includes('/video/upload/')) ? (
               <video
                 src={dish.images[0]}
@@ -437,7 +437,7 @@ export default function DishDetailPage() {
         {/* Spacer that lets the top-anchored hero show through. */}
         <div
           aria-hidden="true"
-          className="h-[calc(75vw-200px)] w-full md:h-[calc(min(50vw,50vh)-150px)]"
+          className="h-[calc(100vw-80px)] w-full md:h-[calc(min(50vw,50vh)-80px)]"
         />
 
         {/* Veg indicator */}
@@ -569,9 +569,8 @@ export default function DishDetailPage() {
         {isCurrentDishInCart && !showAddedToast && recommendations.length > 0 && (
           <section ref={recommendationSectionRef} className="px-5 pt-6">
             <div
-              className={`overflow-hidden rounded-2xl ring-1 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)] transition-all duration-500 ${
-                highlightRecommendations ? "ring-[color:var(--brand-gold)]/60 shadow-[0_0_20px_rgba(212,166,86,0.3)]" : "ring-[color:var(--brand-gold)]/20"
-              }`}
+              className={`overflow-hidden rounded-2xl ring-1 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)] transition-all duration-500 ${highlightRecommendations ? "ring-[color:var(--brand-gold)]/60 shadow-[0_0_20px_rgba(212,166,86,0.3)]" : "ring-[color:var(--brand-gold)]/20"
+                }`}
               style={{
                 background:
                   "linear-gradient(180deg, rgba(60,38,18,0.9) 0%, rgba(40,24,12,0.9) 100%)",

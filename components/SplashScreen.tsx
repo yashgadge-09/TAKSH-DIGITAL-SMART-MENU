@@ -100,7 +100,7 @@ export function SplashScreen() {
       <div className="absolute bottom-10 flex items-center gap-4 opacity-0 animate-[textFade_1.2s_ease-out_1.0s_forwards]">
         <div className="w-10 h-[1px] bg-[#A47B53]/30"></div>
         <p className="text-[#A47B53] text-[10px] tracking-[0.2em] flex items-center gap-2">
-          BY <span className="font-serif font-bold text-[#D48C46] text-[17px] tracking-normal" style={{ fontFamily: "Georgia, serif" }}>RestroDevs</span>
+          BY <span className="font-serif font-bold text-[#D48C46] text-[17px] tracking-normal" style={{ fontFamily: "Georgia, serif" }}>Tastefy</span>
         </p>
         <div className="w-10 h-[1px] bg-[#A47B53]/30"></div>
       </div>
