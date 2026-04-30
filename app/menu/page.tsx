@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Plus } from "lucide-react";
+import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Plus, ChefHat } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { OrderSummarySheet } from "@/components/OrderSummarySheet";
@@ -91,7 +91,7 @@ function MenuPageContent() {
         image: (() => {
           if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
           if (typeof dish.image_url === "string" && dish.image_url.startsWith("[")) {
-            try { const p = JSON.parse(dish.image_url); if (Array.isArray(p) && p.length > 0) return p[0]; } catch {}
+            try { const p = JSON.parse(dish.image_url); if (Array.isArray(p) && p.length > 0) return p[0]; } catch { }
           }
           return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
         })(),
@@ -121,7 +121,7 @@ function MenuPageContent() {
     const prev = Number(window.sessionStorage.getItem(key) || 0);
     if (!Number.isFinite(prev) || now - prev > 30000) {
       window.sessionStorage.setItem(key, String(now));
-      void trackMenuView().catch(() => {});
+      void trackMenuView().catch(() => { });
     }
     const handleFocus = () => loadData();
     window.addEventListener("focus", handleFocus);
@@ -129,9 +129,9 @@ function MenuPageContent() {
   }, []);
 
   const normalizeCategory = (cat: string | null | undefined) => (cat || "").toLowerCase().replace(/\s+/g, " ").trim();
-  const toSingular = (v: string | null | undefined) => normalizeCategory(v).split(" ").map(w => { if (w.length <= 3) return w; if (w.endsWith("ies") && w.length > 4) return w.slice(0,-3)+"y"; if (w.endsWith("ss")) return w; if (w.endsWith("s")) return w.slice(0,-1); return w; }).join(" ");
+  const toSingular = (v: string | null | undefined) => normalizeCategory(v).split(" ").map(w => { if (w.length <= 3) return w; if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y"; if (w.endsWith("ss")) return w; if (w.endsWith("s")) return w.slice(0, -1); return w; }).join(" ");
   const isSameCategory = (l: string | null | undefined, r: string | null | undefined) => { const nl = normalizeCategory(l), nr = normalizeCategory(r); if (!nl || !nr) return false; if (nl === nr) return true; return toSingular(nl) === toSingular(nr); };
-  const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")}`;
+  const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
   const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
   const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc.includes(na) || na.includes(nc); }); }) || null;
   const previewCategories = MAIN_PREVIEW_CATEGORIES.map(item => ({ label: item.label, categoryValue: resolveCategoryFromAliases(item.aliases) })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
@@ -163,8 +163,8 @@ function MenuPageContent() {
   const recommendationCategory = normalizeCategory(lastAddedCategory || items[items.length - 1]?.category);
   const sameCategoryRecommendations = recommendationCategory
     ? dishes.filter(d => isSameCategory(d.category, recommendationCategory)).filter(d => !cartIds.has(d.id))
-        .sort((a, b) => ((b.isGuestFavorite?3:0)+(b.isChefSpecial?2:0)+(b.isTrending?1:0)) - ((a.isGuestFavorite?3:0)+(a.isChefSpecial?2:0)+(a.isTrending?1:0)))
-        .slice(0, 4).map(d => ({ id: d.id, name: d.nameRaw?.[lang] || d.name || "", price: d.price, image: d.image, category: d.category }))
+      .sort((a, b) => ((b.isGuestFavorite ? 3 : 0) + (b.isChefSpecial ? 2 : 0) + (b.isTrending ? 1 : 0)) - ((a.isGuestFavorite ? 3 : 0) + (a.isChefSpecial ? 2 : 0) + (a.isTrending ? 1 : 0)))
+      .slice(0, 4).map(d => ({ id: d.id, name: d.nameRaw?.[lang] || d.name || "", price: d.price, image: d.image, category: d.category }))
     : [];
 
   const scrollToCategory = (target: HTMLElement) => {
@@ -232,14 +232,20 @@ function MenuPageContent() {
   /* ── Card Components ── */
   const DishCard = ({ dish }: { dish: any }) => {
     const isSpecial = dish.isChefSpecial;
-    
+
     return (
       <article
         onClick={() => router.push(`/dish/${dish.id}`)}
-        className={`flex cursor-pointer items-center gap-4 rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5 ${
-          isSpecial ? "p-4 -mx-3 my-2" : "p-3"
-        }`}
+        className={`relative flex cursor-pointer items-center gap-4 rounded-2xl shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5 ${isSpecial
+            ? "p-4 -mx-3 my-3 animated-gradient-bg border border-[color:var(--brand-gold)]/50"
+            : "p-3 bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15"
+          }`}
       >
+        {isSpecial && (
+          <div className="absolute -top-2.5 -left-2 bg-gradient-to-r from-[color:var(--brand-gold)] to-[#b37435] text-[color:var(--brand-bg-deep)] px-2.5 py-0.5 text-[9px] font-extrabold tracking-widest uppercase rounded shadow-[0_4px_10px_rgba(212,140,70,0.4)] border border-[color:var(--brand-gold)] z-10 flex items-center gap-1">
+            <ChefHat className="h-3 w-3" strokeWidth={2.5} /> Chef's Pick
+          </div>
+        )}
         <div className="relative flex-1 min-w-0">
           <h3 className={`font-serif leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 ${isSpecial ? "text-[17px]" : "text-[15px]"}`}>{dish.name}</h3>
           {dish.tasteDescription && <p className={`mt-0.5 italic text-[color:var(--brand-gold-muted)] line-clamp-1 ${isSpecial ? "text-[13px]" : "text-[12px]"}`}>{dish.tasteDescription}</p>}
@@ -311,106 +317,104 @@ function MenuPageContent() {
         <div id="sticky-header" className="sticky top-0 z-50 bg-background/95 backdrop-blur-md pb-1 border-b border-[color:var(--brand-gold)]/10">
           {/* ── Header ── */}
           <header className="px-4 pt-5 pb-2">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="font-serif text-[28px] leading-none tracking-[0.18em] text-[color:var(--brand-gold)]">TAKSH</h1>
-              <div className="mt-2 flex items-center gap-1.5">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(74,222,128,0.7)]" />
-                <p className="text-[9px] font-medium tracking-[0.25em] text-[color:var(--brand-gold-muted)]">PURE VEG RESTAURANT</p>
-                {isLoading && <RefreshCw className="h-3 w-3 animate-spin text-[color:var(--brand-gold-muted)]" />}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h1 className="font-serif text-[28px] leading-none tracking-[0.18em] text-[color:var(--brand-gold)]">TAKSH</h1>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(74,222,128,0.7)]" />
+                  <p className="text-[9px] font-medium tracking-[0.25em] text-[color:var(--brand-gold-muted)]">PURE VEG RESTAURANT</p>
+                  {isLoading && <RefreshCw className="h-3 w-3 animate-spin text-[color:var(--brand-gold-muted)]" />}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Language toggle */}
+                <div role="group" aria-label="Language" className="flex items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] p-0.5">
+                  {(["en", "hi", "mr"] as const).map(l => (
+                    <button key={l} type="button" onClick={() => setLang(l)}
+                      className={["rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wider transition", lang === l ? "bg-[color:var(--brand-gold)] text-[color:var(--brand-bg-deep)]" : "text-[color:var(--brand-gold-muted)] hover:text-[color:var(--brand-gold)]"].join(" ")}>
+                      {l.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                {/* Cart button */}
+                <button onClick={() => setIsCartOpen(true)} aria-label={`View cart, ${totalItems} items`}
+                  className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
+                  <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
+                  {totalItems > 0 && (
+                    <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-[color:var(--brand-gold)] text-[9px] font-semibold text-[color:var(--brand-bg-deep)]">{totalItems}</span>
+                  )}
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {/* Language toggle */}
-              <div role="group" aria-label="Language" className="flex items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] p-0.5">
-                {(["en","hi","mr"] as const).map(l => (
-                  <button key={l} type="button" onClick={() => setLang(l)}
-                    className={["rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wider transition", lang === l ? "bg-[color:var(--brand-gold)] text-[color:var(--brand-bg-deep)]" : "text-[color:var(--brand-gold-muted)] hover:text-[color:var(--brand-gold)]"].join(" ")}>
-                    {l.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              {/* Cart button */}
-              <button onClick={() => setIsCartOpen(true)} aria-label={`View cart, ${totalItems} items`}
-                className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
-                <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
-                {totalItems > 0 && (
-                  <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-[color:var(--brand-gold)] text-[9px] font-semibold text-[color:var(--brand-bg-deep)]">{totalItems}</span>
-                )}
-              </button>
-            </div>
-          </div>
 
-          {/* Search bar */}
-          <div className="mt-3">
-            <label htmlFor="menu-search" className="sr-only">Search dishes</label>
-            <div 
-              className="flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] ring-1 ring-[color:var(--brand-gold)]/40"
-              style={{
-                background: "linear-gradient(110deg, var(--brand-gold) 0%, #FFE4B5 35%, var(--brand-gold) 70%, #B87333 100%)"
-              }}
-            >
-              <Search className="h-4 w-4 shrink-0 text-[color:var(--brand-bg-deep)]" strokeWidth={2.4} />
-              <input id="menu-search" type="search"
-                placeholder={t("searchPlaceholder") || "Search for dishes, drinks…"}
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent text-[13px] font-medium text-[color:var(--brand-bg-deep)] placeholder:text-[color:var(--brand-bg-deep)]/70 focus:outline-none"
-              />
+            {/* Search bar */}
+            <div className="mt-3">
+              <label htmlFor="menu-search" className="sr-only">Search dishes</label>
+              <div
+                className="flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] ring-1 ring-[color:var(--brand-gold)]/40"
+                style={{
+                  background: "linear-gradient(110deg, var(--brand-gold) 0%, #FFE4B5 35%, var(--brand-gold) 70%, #B87333 100%)"
+                }}
+              >
+                <Search className="h-4 w-4 shrink-0 text-[color:var(--brand-bg-deep)]" strokeWidth={2.4} />
+                <input id="menu-search" type="search"
+                  placeholder={t("searchPlaceholder") || "Search for dishes, drinks…"}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full bg-transparent text-[13px] font-medium text-[color:var(--brand-bg-deep)] placeholder:text-[color:var(--brand-bg-deep)]/70 focus:outline-none"
+                />
+              </div>
             </div>
-          </div>
           </header>
 
           {/* ── Category tabs ── */}
           <nav aria-label="Menu categories" className="mt-2">
-          <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
-            {["All", ...menuTabs].map(tab => {
-              const isActive = activeCategory === tab;
-              const displayLabel = tab === "All" ? (t("all") || "All") : tab;
-              
-              // Find the image for "All" (case-insensitive) or the specific tab
-              let imgSrc = null;
-              if (tab === "All") {
-                const allKey = Object.keys(categoryImageMap).find(k => k.toLowerCase() === "all");
-                imgSrc = allKey ? categoryImageMap[allKey] : null;
-              } else {
-                imgSrc = categoryImageMap[tab] || null;
-              }
-              
-              return (
-                <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">
-                  <button
-                    type="button"
-                    ref={el => { categoryButtonRefs.current[tab] = el; }}
-                    onClick={() => handleCategoryChange(tab)}
-                    aria-label={displayLabel}
-                    className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${
-                      isActive 
-                        ? "ring-[color:var(--brand-gold)]" 
-                        : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
-                    }`}
-                  >
-                    {imgSrc ? (
-                      <img
-                        src={imgSrc}
-                        alt={displayLabel}
-                        className="h-full w-full object-cover"
-                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center bg-[color:var(--brand-bg-deep)] text-[22px] select-none">
-                        {tab === "All" ? "🍽️" : "🫕"}
-                      </div>
-                    )}
-                  </button>
-                  <span className={`text-[11px] font-medium transition-colors text-center leading-tight line-clamp-2 ${
-                    isActive ? "text-[color:var(--brand-gold)] font-bold" : "text-[color:var(--brand-gold-soft)]"
-                  }`}>
-                    {displayLabel}
-                  </span>
-                </li>
-              );
-            })}
+            <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
+              {["All", ...menuTabs].map(tab => {
+                const isActive = activeCategory === tab;
+                const displayLabel = tab === "All" ? (t("all") || "All") : tab;
+
+                // Find the image for "All" (case-insensitive) or the specific tab
+                let imgSrc = null;
+                if (tab === "All") {
+                  const allKey = Object.keys(categoryImageMap).find(k => k.toLowerCase() === "all");
+                  imgSrc = allKey ? categoryImageMap[allKey] : null;
+                } else {
+                  imgSrc = categoryImageMap[tab] || null;
+                }
+
+                return (
+                  <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">
+                    <button
+                      type="button"
+                      ref={el => { categoryButtonRefs.current[tab] = el; }}
+                      onClick={() => handleCategoryChange(tab)}
+                      aria-label={displayLabel}
+                      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${isActive
+                          ? "ring-[color:var(--brand-gold)]"
+                          : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
+                        }`}
+                    >
+                      {imgSrc ? (
+                        <img
+                          src={imgSrc}
+                          alt={displayLabel}
+                          className="h-full w-full object-cover"
+                          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                        />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center bg-[color:var(--brand-bg-deep)] text-[22px] select-none">
+                          {tab === "All" ? "🍽️" : "🫕"}
+                        </div>
+                      )}
+                    </button>
+                    <span className={`text-[11px] font-medium transition-colors text-center leading-tight line-clamp-2 ${isActive ? "text-[color:var(--brand-gold)] font-bold" : "text-[color:var(--brand-gold-soft)]"
+                      }`}>
+                      {displayLabel}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </nav>
         </div>
@@ -426,14 +430,14 @@ function MenuPageContent() {
         {/* ── Discovery sections (All + no search) ── */}
         {activeCategory === "All" && !searchQuery && (
           <>
-            {getGuestFavorites().length > 0 && (
+            {getTodaysSpecials().length > 0 && (
               <section className="mt-6">
                 <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("mostLoved") || "Most Loved"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Guest favourites at Taksh</p>
+                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("todaysSpecial") || "Today's Special"}</h2>
+                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Fresh from the kitchen today</p>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {getGuestFavorites().map(dish => <ScrollCard key={dish.id} dish={dish} showRating />)}
+                  {getTodaysSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
                 </div>
               </section>
             )}
@@ -448,14 +452,14 @@ function MenuPageContent() {
                 </div>
               </section>
             )}
-            {getTodaysSpecials().length > 0 && (
+            {getGuestFavorites().length > 0 && (
               <section className="mt-6">
                 <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("todaysSpecial") || "Today's Special"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Fresh from the kitchen today</p>
+                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("mostLoved") || "Most Loved"}</h2>
+                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Guest favourites at Taksh</p>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {getTodaysSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
+                  {getGuestFavorites().map(dish => <ScrollCard key={dish.id} dish={dish} showRating />)}
                 </div>
               </section>
             )}

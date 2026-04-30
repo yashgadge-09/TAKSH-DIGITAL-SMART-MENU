@@ -79,10 +79,17 @@ function CategoriesPageContent() {
   useEffect(() => { void loadData() }, [])
 
   const handleSave = async () => {
-    if (!newCategoryName.trim()) return
+    const trimmedName = newCategoryName.trim()
+    if (!trimmedName) return
+    
+    if (categories.some(c => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      alert("A category with this name already exists.")
+      return
+    }
+
     setIsSaving(true)
     try {
-      await addCategory(newCategoryName.trim())
+      await addCategory(trimmedName)
       setNewCategoryName("")
       await loadData()
     } finally { setIsSaving(false) }
@@ -162,9 +169,12 @@ function CategoriesPageContent() {
     try {
       const primary = imageList[0] || null
       if (editingImageCategory.id === 'all-category-temp') {
-        const newCat = await addCategory('All')
+        let existingAll = categories.find(c => c.name.toLowerCase() === 'all' && c.id !== 'all-category-temp')
+        if (!existingAll) {
+          existingAll = await addCategory('All')
+        }
         if (primary) {
-          await updateCategory(newCat.id, { image_url: primary })
+          await updateCategory(existingAll.id, { image_url: primary })
         }
       } else {
         await updateCategory(editingImageCategory.id, { image_url: primary })

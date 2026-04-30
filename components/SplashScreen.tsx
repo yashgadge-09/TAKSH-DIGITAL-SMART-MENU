@@ -27,12 +27,12 @@ export function SplashScreen() {
   if (!mounted) return null;
 
   return (
-    <div 
-      className={`fixed inset-0 z-[9999] bg-[#110B08] flex flex-col items-center justify-center overflow-hidden transition-opacity duration-1000 ease-in-out ${
-        isHiding ? "opacity-0 pointer-events-none" : "opacity-100"
-      }`}
+    <div
+      className={`fixed inset-0 z-[9999] bg-[#110B08] flex flex-col items-center justify-center overflow-hidden transition-opacity duration-1000 ease-in-out ${isHiding ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
     >
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes takshPop {
           0% { opacity: 0; transform: scale(0.9); }
           100% { opacity: 1; transform: scale(1); }
@@ -54,7 +54,7 @@ export function SplashScreen() {
 
       {/* Center Group (No base animation, elements animate individually) */}
       <div className="relative flex flex-col items-center">
-        
+
         {/* Concentric Circles & Logo */}
         <div className="relative flex items-center justify-center w-[300px] h-[300px]">
           {/* Inner Circle / Solid (Starts glowing at 0.2s) */}
@@ -63,10 +63,10 @@ export function SplashScreen() {
           <div className="absolute inset-[1.5rem] rounded-full border border-[#D48C46]/20 opacity-0 animate-[ringPop_1.2s_cubic-bezier(0.16,1,0.3,1)_0.4s_forwards]" />
           {/* Outer Ring (Starts glowing at 0.6s) */}
           <div className="absolute inset-0 rounded-full border border-[#D48C46]/10 opacity-0 animate-[ringPop_1.4s_cubic-bezier(0.16,1,0.3,1)_0.6s_forwards]" />
-          
+
           {/* Text inside circle (TAKSH pops immediately at 0s) */}
           <div className="z-10 flex flex-col items-center justify-center mt-2 opacity-0 animate-[takshPop_1.2s_cubic-bezier(0.16,1,0.3,1)_forwards]">
-            <h1 
+            <h1
               className="text-[#D48C46] text-4xl tracking-[0.15em] font-bold drop-shadow-[0_0_10px_rgba(212,140,70,0.3)]"
               style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
             >
@@ -86,7 +86,7 @@ export function SplashScreen() {
             </p>
             <div className="w-2.5 h-2.5 rounded-full bg-[#4ADE80] shadow-[0_0_8px_rgba(74,222,128,0.5)]"></div>
           </div>
-          
+
           {/* 3 Loading Dots (Staggered from 1s to 1.4s with smooth pop) */}
           <div className="flex gap-2.5">
             <div className="w-1.5 h-1.5 rounded-full bg-[#D48C46]/80 opacity-0 animate-[dotLoad_0.6s_ease-out_1.0s_forwards]"></div>

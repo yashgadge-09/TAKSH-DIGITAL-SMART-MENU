@@ -54,8 +54,8 @@ export default function RootLayout({
         <LanguageProvider>
           <CartProvider>
             {children}
-            <Toaster 
-              position="top-center" 
+            <Toaster
+              position="top-center"
               toastOptions={{
                 style: {
                   background: 'oklch(0.18 0.025 50)',

@@ -24,11 +24,49 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const playCartSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    
+    const playNote = (freq: number, startTime: number) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      
+      // Soft attack, elegant ringing decay
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 1.0);
+    };
+
+    // Play a pleasant, luxurious two-tone chime (C6 then E6)
+    playNote(1046.50, ctx.currentTime);
+    playNote(1318.51, ctx.currentTime + 0.1);
+  } catch (e) {
+    // Ignore if audio fails or is blocked by browser policies
+  }
+};
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
 
   const addItem = useCallback(
     (dish: { id: string; name: string; price: number; image: string; category: string }) => {
+      // Play a satisfying pop sound
+      if (typeof window !== "undefined") {
+        playCartSound();
+      }
+
       void trackCartEvent(
         dish.id,
         dish.name,
