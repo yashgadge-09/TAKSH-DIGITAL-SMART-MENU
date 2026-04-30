@@ -132,7 +132,7 @@ function MenuPageContent() {
   const toSingular = (v: string | null | undefined) => normalizeCategory(v).split(" ").map(w => { if (w.length <= 3) return w; if (w.endsWith("ies") && w.length > 4) return w.slice(0,-3)+"y"; if (w.endsWith("ss")) return w; if (w.endsWith("s")) return w.slice(0,-1); return w; }).join(" ");
   const isSameCategory = (l: string | null | undefined, r: string | null | undefined) => { const nl = normalizeCategory(l), nr = normalizeCategory(r); if (!nl || !nr) return false; if (nl === nr) return true; return toSingular(nl) === toSingular(nr); };
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")}`;
-  const menuTabs = [...categories];
+  const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
   const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc.includes(na) || na.includes(nc); }); }) || null;
   const previewCategories = MAIN_PREVIEW_CATEGORIES.map(item => ({ label: item.label, categoryValue: resolveCategoryFromAliases(item.aliases) })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
 
@@ -344,7 +344,15 @@ function MenuPageContent() {
             {["All", ...menuTabs].map(tab => {
               const isActive = activeCategory === tab;
               const displayLabel = tab === "All" ? (t("all") || "All") : tab;
-              const imgSrc = tab === "All" ? null : (categoryImageMap[tab] || null);
+              
+              // Find the image for "All" (case-insensitive) or the specific tab
+              let imgSrc = null;
+              if (tab === "All") {
+                const allKey = Object.keys(categoryImageMap).find(k => k.toLowerCase() === "all");
+                imgSrc = allKey ? categoryImageMap[allKey] : null;
+              } else {
+                imgSrc = categoryImageMap[tab] || null;
+              }
               
               return (
                 <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">

@@ -60,7 +60,18 @@ function CategoriesPageContent() {
   const loadData = async () => {
     setIsLoading(true)
     const [catsRes, dishesRes] = await Promise.all([getCategories(), getAllDishesAdmin()])
-    setCategories(catsRes || [])
+    
+    let categoriesList = catsRes || [];
+    let allCategory = categoriesList.find((c: any) => c.name.toLowerCase() === 'all')
+    if (!allCategory) {
+      allCategory = { id: 'all-category-temp', name: 'All', image_url: null }
+      categoriesList = [allCategory, ...categoriesList]
+    } else {
+      const filtered = categoriesList.filter((c: any) => c.id !== allCategory.id)
+      categoriesList = [allCategory, ...filtered]
+    }
+    
+    setCategories(categoriesList)
     setDishes(dishesRes || [])
     setIsLoading(false)
   }
@@ -77,7 +88,14 @@ function CategoriesPageContent() {
     } finally { setIsSaving(false) }
   }
 
-  const openDeleteModal = (category: Category) => { setCategoryToDelete(category); setDeleteModalOpen(true) }
+  const openDeleteModal = (category: Category) => { 
+    if (category.name.toLowerCase() === 'all') {
+      alert("The 'All' section cannot be deleted.")
+      return
+    }
+    setCategoryToDelete(category); 
+    setDeleteModalOpen(true) 
+  }
   const closeDeleteModal = () => { setDeleteModalOpen(false); setCategoryToDelete(null) }
 
   const confirmDelete = async () => {
@@ -143,7 +161,14 @@ function CategoriesPageContent() {
     setIsSaving(true)
     try {
       const primary = imageList[0] || null
-      await updateCategory(editingImageCategory.id, { image_url: primary })
+      if (editingImageCategory.id === 'all-category-temp') {
+        const newCat = await addCategory('All')
+        if (primary) {
+          await updateCategory(newCat.id, { image_url: primary })
+        }
+      } else {
+        await updateCategory(editingImageCategory.id, { image_url: primary })
+      }
       await loadData()
       closeImageModal()
     } finally { setIsSaving(false) }
