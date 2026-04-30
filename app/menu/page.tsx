@@ -167,9 +167,19 @@ function MenuPageContent() {
         .slice(0, 4).map(d => ({ id: d.id, name: d.nameRaw?.[lang] || d.name || "", price: d.price, image: d.image, category: d.category }))
     : [];
 
+  const scrollToCategory = (target: HTMLElement) => {
+    const header = document.getElementById("sticky-header");
+    const offset = header ? header.offsetHeight : 180;
+    const elementPosition = target.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({
+      top: elementPosition - offset - 16,
+      behavior: "smooth"
+    });
+  };
+
   const handleCategoryChange = (cat: string) => {
     const scrollTarget = document.getElementById(getCategorySectionId(cat));
-    if (activeCategory === "All" && !searchQuery && cat !== "All" && scrollTarget) { scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    if (activeCategory === "All" && !searchQuery && cat !== "All" && scrollTarget) { scrollToCategory(scrollTarget); return; }
     pendingScrollCategoryRef.current = cat === "All" ? null : cat;
     setActiveCategory(cat);
     setSearchQuery("");
@@ -185,7 +195,7 @@ function MenuPageContent() {
     const pending = pendingScrollCategoryRef.current;
     if (!pending || activeCategory !== pending) return;
     const target = document.getElementById(getCategorySectionId(pending));
-    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (target) scrollToCategory(target);
     pendingScrollCategoryRef.current = null;
   }, [activeCategory, filteredDishes.length]);
 
@@ -220,36 +230,42 @@ function MenuPageContent() {
   };
 
   /* ── Card Components ── */
-  const DishCard = ({ dish }: { dish: any }) => (
-    <article
-      onClick={() => router.push(`/dish/${dish.id}`)}
-      className="flex cursor-pointer items-center gap-4 rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 p-3 shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5"
-    >
-      <div className="relative flex-1 min-w-0">
-        <h3 className="font-serif text-[15px] leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2">{dish.name}</h3>
-        {dish.tasteDescription && <p className="mt-0.5 text-[12px] text-[color:var(--brand-gold-muted)] italic line-clamp-1">{dish.tasteDescription}</p>}
-        {dish.hasSpiceIndicator && <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-orange-400">🔥 Spicy</span>}
-        <p className="mt-2 font-serif text-[17px] text-[color:var(--brand-gold)]">₹{dish.price}</p>
-      </div>
-      <div className="relative flex shrink-0 flex-col items-center">
-        <div className="h-[88px] w-[88px] overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20">
-          {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes("/video/upload/")) ? (
-            <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
-          ) : (
-            <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
-              onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"; }} />
-          )}
+  const DishCard = ({ dish }: { dish: any }) => {
+    const isSpecial = dish.isChefSpecial;
+    
+    return (
+      <article
+        onClick={() => router.push(`/dish/${dish.id}`)}
+        className={`flex cursor-pointer items-center gap-4 rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5 ${
+          isSpecial ? "p-4 -mx-3 my-2" : "p-3"
+        }`}
+      >
+        <div className="relative flex-1 min-w-0">
+          <h3 className={`font-serif leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 ${isSpecial ? "text-[17px]" : "text-[15px]"}`}>{dish.name}</h3>
+          {dish.tasteDescription && <p className={`mt-0.5 italic text-[color:var(--brand-gold-muted)] line-clamp-1 ${isSpecial ? "text-[13px]" : "text-[12px]"}`}>{dish.tasteDescription}</p>}
+          {dish.hasSpiceIndicator && <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>🔥 Spicy</span>}
+          <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>₹{dish.price}</p>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); handleAddDishToCart({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category }); }}
-          className="absolute -bottom-3 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] px-3 py-1 text-[10px] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)]"
-          aria-label={`Add ${dish.name} to cart`}
-        >
-          ADD <Plus className="h-3 w-3" strokeWidth={2.4} />
-        </button>
-      </div>
-    </article>
-  );
+        <div className="relative flex shrink-0 flex-col items-center">
+          <div className={`overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
+            {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes("/video/upload/")) ? (
+              <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
+            ) : (
+              <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"; }} />
+            )}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAddDishToCart({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category }); }}
+            className={`absolute -bottom-3 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ${isSpecial ? "px-4 py-1.5 text-[11px]" : "px-3 py-1 text-[10px]"}`}
+            aria-label={`Add ${dish.name} to cart`}
+          >
+            ADD <Plus className={`h-3 w-3 ${isSpecial ? "scale-110" : ""}`} strokeWidth={2.4} />
+          </button>
+        </div>
+      </article>
+    );
+  };
 
   const ScrollCard = ({ dish, showRating = false }: { dish: any; showRating?: boolean }) => (
     <article
@@ -291,8 +307,10 @@ function MenuPageContent() {
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto w-full max-w-sm pb-28">
 
-        {/* ── Header ── */}
-        <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md px-4 pt-5 pb-2">
+        {/* ── Sticky Container ── */}
+        <div id="sticky-header" className="sticky top-0 z-50 bg-background/95 backdrop-blur-md pb-1 border-b border-[color:var(--brand-gold)]/10">
+          {/* ── Header ── */}
+          <header className="px-4 pt-5 pb-2">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="font-serif text-[28px] leading-none tracking-[0.18em] text-[color:var(--brand-gold)]">TAKSH</h1>
@@ -326,20 +344,25 @@ function MenuPageContent() {
           {/* Search bar */}
           <div className="mt-3">
             <label htmlFor="menu-search" className="sr-only">Search dishes</label>
-            <div className="flex items-center gap-2.5 rounded-full bg-[color:var(--brand-gold)]/85 px-4 py-2.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)]">
-              <Search className="h-4 w-4 shrink-0 text-[color:var(--brand-bg-deep)]" strokeWidth={2.2} />
+            <div 
+              className="flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] ring-1 ring-[color:var(--brand-gold)]/40"
+              style={{
+                background: "linear-gradient(110deg, var(--brand-gold) 0%, #FFE4B5 35%, var(--brand-gold) 70%, #B87333 100%)"
+              }}
+            >
+              <Search className="h-4 w-4 shrink-0 text-[color:var(--brand-bg-deep)]" strokeWidth={2.4} />
               <input id="menu-search" type="search"
                 placeholder={t("searchPlaceholder") || "Search for dishes, drinks…"}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent text-[13px] text-[color:var(--brand-bg-deep)] placeholder:text-[color:var(--brand-bg-deep)]/70 focus:outline-none"
+                className="w-full bg-transparent text-[13px] font-medium text-[color:var(--brand-bg-deep)] placeholder:text-[color:var(--brand-bg-deep)]/70 focus:outline-none"
               />
             </div>
           </div>
-        </header>
+          </header>
 
-        {/* ── Category tabs ── */}
-        <nav aria-label="Menu categories" className="mt-3 pb-1">
+          {/* ── Category tabs ── */}
+          <nav aria-label="Menu categories" className="mt-2">
           <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
             {["All", ...menuTabs].map(tab => {
               const isActive = activeCategory === tab;
@@ -388,8 +411,9 @@ function MenuPageContent() {
                 </li>
               );
             })}
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        </div>
 
         {/* ── Loading state ── */}
         {isLoading && dishes.length === 0 && (
