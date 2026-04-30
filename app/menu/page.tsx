@@ -13,6 +13,7 @@ import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatings
 import { getOrCreateSessionId } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
+import { NotificationPrompt } from "@/components/NotificationPrompt";
 
 const PREVIEW_LIMIT = 6;
 
@@ -341,7 +342,7 @@ function MenuPageContent() {
         {/* ── Category tabs ── */}
         <nav aria-label="Menu categories" className="mt-3 pb-1">
           <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
-            {["All", ...menuTabs].map(tab => {
+            {Array.from(new Set(["All", ...menuTabs])).map(tab => {
               const isActive = activeCategory === tab;
               const displayLabel = tab === "All" ? (t("all") || "All") : tab;
               const imgSrc = tab === "All" ? null : (categoryImageMap[tab] || null);
@@ -520,6 +521,7 @@ export default function MenuPage() {
       </div>
     }>
       <MenuPageContent />
+      <NotificationPrompt />
     </Suspense>
   );
 }
