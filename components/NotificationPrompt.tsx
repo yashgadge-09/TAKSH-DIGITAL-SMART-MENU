@@ -13,48 +13,44 @@ export function NotificationPrompt() {
     
     const interval = setInterval(() => {
       if (!("Notification" in window)) {
-        console.log("Notifications API not supported");
         return;
       }
       if (Notification.permission === "denied") {
-        console.log("Notification permission is definitively denied");
         return; // Don't show if denied
       }
 
-      const acceptedSession = sessionStorage.getItem("notification_accepted_session");
-      if (acceptedSession === "true") {
-        console.log("User already accepted prompt in this session");
+      const accepted = sessionStorage.getItem("notification_accepted");
+      if (accepted === "true") {
         return; // Never show if they accepted this session
       }
 
-      const dismissedTime = localStorage.getItem("notification_dismissed_time");
+      const dismissCount = parseInt(sessionStorage.getItem("notification_dismiss_count") || "0", 10);
+      if (dismissCount >= 3) {
+        return; // Stop after 3 dismissals in this session
+      }
+
+      const lastDismissedTime = sessionStorage.getItem("notification_last_dismissed_time");
       const now = Date.now();
 
-      if (dismissedTime) {
-        // Show again after 3 minutes (180000 ms)
-        if (now - parseInt(dismissedTime, 10) >= 180000) {
-          console.log("Showing card now (re-appear)");
+      if (lastDismissedTime) {
+        // Show after 60 seconds (60000 ms)
+        if (now - parseInt(lastDismissedTime, 10) >= 60000) {
           setShowPrompt(true);
-        } else {
-          console.log("Waiting for reappear timer...");
         }
       } else {
-        // Initial delay before showing (3 seconds for testing)
-        if (now - startTime >= 3000) {
-          console.log("Showing card now (initial)");
+        // Initial delay before showing: 60 seconds (60000 ms)
+        if (now - startTime >= 60000) {
           setShowPrompt(true);
-        } else {
-          console.log("Waiting for initial timer...");
         }
       }
-    }, 1000); // Check every 1 second for faster testing
+    }, 1000);
 
     return () => clearInterval(interval);
   }, []);
 
   const handleAccept = async () => {
     setShowPrompt(false);
-    sessionStorage.setItem("notification_accepted_session", "true");
+    sessionStorage.setItem("notification_accepted", "true");
 
     try {
       // Parse firebase config from env
@@ -96,8 +92,9 @@ export function NotificationPrompt() {
 
   const handleDecline = () => {
     setShowPrompt(false);
-    // Save current timestamp to reappear after 3 minutes
-    localStorage.setItem("notification_dismissed_time", Date.now().toString());
+    const count = parseInt(sessionStorage.getItem("notification_dismiss_count") || "0", 10);
+    sessionStorage.setItem("notification_dismiss_count", String(count + 1));
+    sessionStorage.setItem("notification_last_dismissed_time", Date.now().toString());
   };
 
   if (!showPrompt) return null;
