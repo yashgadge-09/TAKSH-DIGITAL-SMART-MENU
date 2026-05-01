@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
+
+// Initialize Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -8,91 +13,95 @@ if (!admin.apps.length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+        credential: admin.credential.cert(serviceAccount)
       });
     } else {
-      console.warn('FIREBASE_SERVICE_ACCOUNT environment variable is not set. Firebase Admin cannot be initialized properly.');
+      console.warn("FIREBASE_SERVICE_ACCOUNT is missing in environment variables.");
     }
   } catch (error) {
-    console.error('Firebase Admin initialization error', error);
+    console.error("Firebase admin initialization error:", error);
   }
 }
 
 export async function GET(request: Request) {
+  // Verify CRON_SECRET
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get('x-cron-secret');
+  
+  if (!cronSecret || authHeader !== cronSecret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
-    // 1. Check authorization
-    const cronSecret = request.headers.get('x-cron-secret');
-    if (cronSecret !== process.env.CRON_SECRET) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // 2. Query sessions older than 30 mins
+    // 30 minutes ago
     const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    
+
+    // Query push_sessions where notification_sent is false and session_start < thirtyMinsAgo
     const { data: sessions, error: fetchError } = await supabase
       .from('push_sessions')
-      .select('*')
+      .select('id, fcm_token')
       .eq('notification_sent', false)
-      .lte('session_start', thirtyMinsAgo);
+      .lt('session_start', thirtyMinsAgo);
 
     if (fetchError) {
-      console.error('Error fetching sessions:', fetchError);
-      return NextResponse.json({ error: 'Failed to fetch sessions' }, { status: 500 });
+      console.error('Database error fetching sessions:', fetchError);
+      return NextResponse.json({ error: 'Database error fetching sessions' }, { status: 500 });
     }
 
     if (!sessions || sessions.length === 0) {
-      return NextResponse.json({ message: 'No sessions to process' }, { status: 200 });
+      return NextResponse.json({ success: true, message: 'No pending notifications' });
     }
 
-    if (!admin.apps.length) {
-       return NextResponse.json({ error: 'Firebase Admin not initialized' }, { status: 500 });
-    }
+    let successCount = 0;
+    let failureCount = 0;
 
-    // 3. Send notifications and update rows
-    const results = [];
+    // Process sequentially (could use Promise.all for speed if high volume)
     for (const session of sessions) {
+      if (!session.fcm_token) continue;
+
       try {
-        const message = {
+        // Send Firebase FCM push notification
+        await admin.messaging().send({
           token: session.fcm_token,
           notification: {
-            title: 'Thank you for dining with us! 🍽️',
-            body: 'Enjoyed your meal? Tap to share your experience ⭐',
+            title: "Thank you for dining with us! 🍽️",
+            body: "Enjoyed your meal? Tap to share your experience ⭐"
           },
           data: {
-            url: `/api/review-click?session=${session.id}`,
-          },
-        };
+            url: `/api/review-click?session=${session.id}`
+          }
+        });
 
-        await admin.messaging().send(message);
-
-        // Update supabase row
+        // Update row on successful send
         const { error: updateError } = await supabase
           .from('push_sessions')
           .update({
             notification_sent: true,
-            notification_sent_at: new Date().toISOString(),
+            notification_sent_at: new Date().toISOString()
           })
           .eq('id', session.id);
 
         if (updateError) {
           console.error(`Failed to update session ${session.id}:`, updateError);
-          results.push({ id: session.id, status: 'error_updating_db' });
+          // Even if DB update fails, the message was sent, so we still count it as a notification success?
+          // Or we count it as failure because it might send again. We'll count as failure for logging.
+          failureCount++;
         } else {
-          results.push({ id: session.id, status: 'success' });
+          successCount++;
         }
-      } catch (sendError) {
-        console.error(`Failed to send notification for session ${session.id}:`, sendError);
-        results.push({ id: session.id, status: 'error_sending_push' });
+      } catch (err) {
+        console.error(`Failed to send notification for session ${session.id}:`, err);
+        failureCount++;
       }
     }
 
-    return NextResponse.json({ success: true, processed: sessions.length, results }, { status: 200 });
+    return NextResponse.json({ 
+      success: true, 
+      sent: successCount, 
+      failed: failureCount 
+    });
   } catch (error) {
-    console.error('Send notifications error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Error processing notifications:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
