@@ -548,7 +548,6 @@ function MenuPageContent() {
 
       <ReviewModal isOpen={isReviewOpen} onClose={() => setIsReviewOpen(false)} initialRating={reviewRating} />
     </main>
-  );
 }
 
 export default function MenuPage() {
