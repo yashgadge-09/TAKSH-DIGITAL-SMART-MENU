@@ -420,6 +420,7 @@ function MenuPageContent() {
             })}
           </ul>
         </nav>
+        </div>
 
         {/* ── Loading state ── */}
         {isLoading && dishes.length === 0 && (
