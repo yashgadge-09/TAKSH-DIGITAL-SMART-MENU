@@ -33,65 +33,100 @@ export async function GET(request: Request) {
   }
 
   try {
+    const now = Date.now();
     // 30 minutes ago
-    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const thirtyMinsAgo = new Date(now - 30 * 60 * 1000).toISOString();
+    // 45 minutes ago
+    const fortyFiveMinsAgo = new Date(now - 45 * 60 * 1000).toISOString();
 
-    // Query push_sessions where notification_sent is false and session_start < thirtyMinsAgo
-    const { data: sessions, error: fetchError } = await supabase
+    let successCount = 0;
+    let failureCount = 0;
+
+    // --- 1. First Notification Logic (30 minutes) ---
+    const { data: firstSessions, error: firstFetchError } = await supabase
       .from('push_sessions')
       .select('id, fcm_token')
       .eq('notification_sent', false)
       .lt('session_start', thirtyMinsAgo);
 
-    if (fetchError) {
-      console.error('Database error fetching sessions:', fetchError);
-      return NextResponse.json({ error: 'Database error fetching sessions' }, { status: 500 });
-    }
+    if (firstFetchError) {
+      console.error('Database error fetching first sessions:', firstFetchError);
+    } else if (firstSessions && firstSessions.length > 0) {
+      for (const session of firstSessions) {
+        if (!session.fcm_token) continue;
+        try {
+          await admin.messaging().send({
+            token: session.fcm_token,
+            notification: {
+              title: "Thank you for dining with us! 🍽️",
+              body: "Enjoyed your meal? Tap to share your experience ⭐"
+            },
+            data: { url: `/api/review-click?session=${session.id}` }
+          });
 
-    if (!sessions || sessions.length === 0) {
-      return NextResponse.json({ success: true, message: 'No pending notifications' });
-    }
+          const { error: updateError } = await supabase
+            .from('push_sessions')
+            .update({
+              notification_sent: true,
+              notification_sent_at: new Date().toISOString()
+            })
+            .eq('id', session.id);
 
-    let successCount = 0;
-    let failureCount = 0;
-
-    // Process sequentially (could use Promise.all for speed if high volume)
-    for (const session of sessions) {
-      if (!session.fcm_token) continue;
-
-      try {
-        // Send Firebase FCM push notification
-        await admin.messaging().send({
-          token: session.fcm_token,
-          notification: {
-            title: "Thank you for dining with us! 🍽️",
-            body: "Enjoyed your meal? Tap to share your experience ⭐"
-          },
-          data: {
-            url: `/api/review-click?session=${session.id}`
+          if (updateError) {
+            console.error(`Failed to update session ${session.id}:`, updateError);
+            failureCount++;
+          } else {
+            successCount++;
           }
-        });
-
-        // Update row on successful send
-        const { error: updateError } = await supabase
-          .from('push_sessions')
-          .update({
-            notification_sent: true,
-            notification_sent_at: new Date().toISOString()
-          })
-          .eq('id', session.id);
-
-        if (updateError) {
-          console.error(`Failed to update session ${session.id}:`, updateError);
-          // Even if DB update fails, the message was sent, so we still count it as a notification success?
-          // Or we count it as failure because it might send again. We'll count as failure for logging.
+        } catch (err) {
+          console.error(`Failed to send first notification for session ${session.id}:`, err);
           failureCount++;
-        } else {
-          successCount++;
         }
-      } catch (err) {
-        console.error(`Failed to send notification for session ${session.id}:`, err);
-        failureCount++;
+      }
+    }
+
+    // --- 2. Second Notification Logic (45 minutes) ---
+    const { data: secondSessions, error: secondFetchError } = await supabase
+      .from('push_sessions')
+      .select('id, fcm_token')
+      .eq('notification_sent', true)
+      .eq('second_notification_sent', false)
+      .eq('review_clicked', false)
+      .lt('session_start', fortyFiveMinsAgo);
+
+    if (secondFetchError) {
+      console.error('Database error fetching second sessions:', secondFetchError);
+    } else if (secondSessions && secondSessions.length > 0) {
+      for (const session of secondSessions) {
+        if (!session.fcm_token) continue;
+        try {
+          await admin.messaging().send({
+            token: session.fcm_token,
+            notification: {
+              title: "We miss your feedback! 🌟",
+              body: "Your review takes just 10 seconds and helps so many people. Tap to share ❤️"
+            },
+            data: { url: `/api/review-click?session=${session.id}` }
+          });
+
+          const { error: updateError } = await supabase
+            .from('push_sessions')
+            .update({
+              second_notification_sent: true,
+              second_notification_sent_at: new Date().toISOString()
+            })
+            .eq('id', session.id);
+
+          if (updateError) {
+            console.error(`Failed to update session ${session.id} (second notification):`, updateError);
+            failureCount++;
+          } else {
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to send second notification for session ${session.id}:`, err);
+          failureCount++;
+        }
       }
     }
 
