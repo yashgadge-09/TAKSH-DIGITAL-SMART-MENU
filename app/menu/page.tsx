@@ -187,8 +187,8 @@ function MenuPageContent() {
   };
 
   const handleCategoryChange = (cat: string) => {
-    const scrollTarget = document.getElementById(getCategorySectionId(cat));
-    if (activeCategory === "All" && !searchQuery && cat !== "All" && scrollTarget) { scrollToCategory(scrollTarget); return; }
+    // When clicking a category, switch to it even if we are on "All"
+    // This ensures "Show all" buttons and category tabs actually filter the view
     pendingScrollCategoryRef.current = cat === "All" ? null : cat;
     setActiveCategory(cat);
     setSearchQuery("");
@@ -548,13 +548,14 @@ function MenuPageContent() {
 
       <ReviewModal isOpen={isReviewOpen} onClose={() => setIsReviewOpen(false)} initialRating={reviewRating} />
     </main>
+  );
 }
 
 export default function MenuPage() {
   return (
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-[color:var(--brand-gold)]" />
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-brand-gold" />
       </div>
     }>
       <MenuPageContent />
