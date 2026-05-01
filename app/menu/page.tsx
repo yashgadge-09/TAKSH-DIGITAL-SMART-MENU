@@ -13,6 +13,7 @@ import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatings
 import { getOrCreateSessionId } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
+import { NotificationPrompt } from "@/components/NotificationPrompt";
 
 const PREVIEW_LIMIT = 6;
 
@@ -367,57 +368,50 @@ function MenuPageContent() {
             </div>
           </header>
 
-          {/* ── Category tabs ── */}
-          <nav aria-label="Menu categories" className="mt-2">
-            <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
-              {["All", ...menuTabs].map(tab => {
-                const isActive = activeCategory === tab;
-                const displayLabel = tab === "All" ? (t("all") || "All") : tab;
-
-                // Find the image for "All" (case-insensitive) or the specific tab
-                let imgSrc = null;
-                if (tab === "All") {
-                  const allKey = Object.keys(categoryImageMap).find(k => k.toLowerCase() === "all");
-                  imgSrc = allKey ? categoryImageMap[allKey] : null;
-                } else {
-                  imgSrc = categoryImageMap[tab] || null;
-                }
-
-                return (
-                  <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">
-                    <button
-                      type="button"
-                      ref={el => { categoryButtonRefs.current[tab] = el; }}
-                      onClick={() => handleCategoryChange(tab)}
-                      aria-label={displayLabel}
-                      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${isActive
-                          ? "ring-[color:var(--brand-gold)]"
-                          : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
-                        }`}
-                    >
-                      {imgSrc ? (
-                        <img
-                          src={imgSrc}
-                          alt={displayLabel}
-                          className="h-full w-full object-cover"
-                          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                        />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center bg-[color:var(--brand-bg-deep)] text-[22px] select-none">
-                          {tab === "All" ? "🍽️" : "🫕"}
-                        </div>
-                      )}
-                    </button>
-                    <span className={`text-[11px] font-medium transition-colors text-center leading-tight line-clamp-2 ${isActive ? "text-[color:var(--brand-gold)] font-bold" : "text-[color:var(--brand-gold-soft)]"
-                      }`}>
-                      {displayLabel}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        </div>
+        {/* ── Category tabs ── */}
+        <nav aria-label="Menu categories" className="mt-3 pb-1">
+          <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
+            {["All", ...menuTabs].map(tab => {
+              const isActive = activeCategory === tab;
+              const displayLabel = tab === "All" ? (t("all") || "All") : tab;
+              const imgSrc = tab === "All" ? null : (categoryImageMap[tab] || null);
+              
+              return (
+                <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    ref={el => { categoryButtonRefs.current[tab] = el; }}
+                    onClick={() => handleCategoryChange(tab)}
+                    aria-label={displayLabel}
+                    className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${
+                      isActive 
+                        ? "ring-[color:var(--brand-gold)]" 
+                        : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
+                    }`}
+                  >
+                    {imgSrc ? (
+                      <img
+                        src={imgSrc}
+                        alt={displayLabel}
+                        className="h-full w-full object-cover"
+                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center bg-[color:var(--brand-bg-deep)] text-[22px] select-none">
+                        {tab === "All" ? "🍽️" : "🫕"}
+                      </div>
+                    )}
+                  </button>
+                  <span className={`text-[11px] font-medium transition-colors text-center leading-tight line-clamp-2 ${
+                    isActive ? "text-[color:var(--brand-gold)] font-bold" : "text-[color:var(--brand-gold-soft)]"
+                  }`}>
+                    {displayLabel}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
         {/* ── Loading state ── */}
         {isLoading && dishes.length === 0 && (
@@ -556,6 +550,7 @@ export default function MenuPage() {
       </div>
     }>
       <MenuPageContent />
+      <NotificationPrompt />
     </Suspense>
   );
 }
