@@ -134,7 +134,15 @@ function MenuPageContent() {
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
   const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
   const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc.includes(na) || na.includes(nc); }); }) || null;
-  const previewCategories = MAIN_PREVIEW_CATEGORIES.map(item => ({ label: item.label, categoryValue: resolveCategoryFromAliases(item.aliases) })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
+  
+  const resolvedPreviewCategories = MAIN_PREVIEW_CATEGORIES.map(item => ({ label: item.label, categoryValue: resolveCategoryFromAliases(item.aliases) })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
+  const mappedCategoryValues = new Set(resolvedPreviewCategories.map(p => p.categoryValue));
+  const previewCategories = [...resolvedPreviewCategories];
+  categories.forEach(c => {
+    if (c.toLowerCase() !== "all" && !mappedCategoryValues.has(c)) {
+      previewCategories.push({ label: c, categoryValue: c });
+    }
+  });
 
   const filteredDishes = dishes.filter(d => {
     const name = (d.nameRaw[lang] || "").toLowerCase();
