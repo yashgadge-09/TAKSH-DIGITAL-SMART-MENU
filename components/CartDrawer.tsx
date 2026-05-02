@@ -42,7 +42,7 @@ export function CartDrawer({
 
       {/* Drawer */}
       <div className="fixed right-0 top-0 bottom-0 z-50 flex w-[88vw] max-w-[380px] flex-col bg-[color:var(--brand-bg)] shadow-2xl">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-6 pb-4">
           <button onClick={onClose} className="p-2 -ml-2 text-[color:var(--brand-gold-soft)] transition hover:text-[color:var(--brand-gold)]">
@@ -95,7 +95,7 @@ export function CartDrawer({
                           ₹{item.price}
                         </p>
                       </div>
-                      
+
                       <p className="text-[12px] text-[color:var(--brand-gold-muted)] truncate">
                         {item.category || "Delicious choice"}
                       </p>
@@ -196,8 +196,8 @@ export function CartDrawer({
                 background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)",
               }}
             >
-              <span className="flex items-center gap-1.5 text-[14px] font-bold text-[color:var(--brand-bg-deep)]">
-                PROCEED TO CHECKOUT • ₹{finalTotal} <span className="font-black text-[16px] leading-none mb-[2px]">&gt;</span>
+              <span className="flex items-center gap-1.5 text-[14px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
+                CONFIRM YOUR ORDER • ₹{finalTotal} <span className="font-black text-[16px] leading-none mb-[2px]">&gt;</span>
               </span>
               <span className="text-[10px] font-medium text-[color:var(--brand-bg-deep)]/80 mt-0.5">
                 Estimated delivery: 35 mins

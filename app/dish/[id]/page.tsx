@@ -468,11 +468,6 @@ export default function DishDetailPage() {
                 {dish.tasteDescription || t('spicy')}
               </span>
             )}
-            {dish.servings && (
-              <span className="text-[13px] text-[color:var(--brand-gold-soft)]/85">
-                👥 {t('serves')} {dish.servings}
-              </span>
-            )}
             {dish.tags.map((t: string) => (
               <span
                 key={t}
@@ -482,6 +477,14 @@ export default function DishDetailPage() {
               </span>
             ))}
           </div>
+
+          {dish.servings && (
+            <div className="mt-2.5 flex items-center gap-1.5 px-1">
+              <span className="text-[13.5px] font-medium text-[color:var(--brand-gold-soft)]/85">
+                👥 {t('serves')} {dish.servings}
+              </span>
+            </div>
+          )}
         </section>
 
         {/* Chef's Note */}
