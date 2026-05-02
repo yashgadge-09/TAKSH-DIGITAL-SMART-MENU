@@ -179,5 +179,5 @@
       oklch(0.32 0.06 65) 50%,
       oklch(0.22 0.03 55) 100%);
   background-size: 200% 200%;
-  animation: slowGradientDance 10s ease-in-out infinite;
+  animation: slowGradientDance 7s ease-in-out infinite;
 }
