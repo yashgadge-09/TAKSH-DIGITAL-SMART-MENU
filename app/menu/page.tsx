@@ -37,17 +37,15 @@ function MenuPageContent() {
 
   useEffect(() => {
     const currentCategory = searchParams.get("category") || "All";
-    const currentSearch = searchParams.get("search") || "";
-    if (activeCategory !== currentCategory || searchQuery !== currentSearch) {
+    if (activeCategory !== currentCategory) {
       const params = new URLSearchParams(searchParams.toString());
       if (activeCategory === "All") params.delete("category");
       else params.set("category", activeCategory);
-      if (!searchQuery) params.delete("search");
-      else params.set("search", searchQuery);
+      params.delete("search"); // don't persist search in URL
       const qs = params.toString();
       router.replace(`${pathname}${qs ? "?" + qs : ""}`, { scroll: false });
     }
-  }, [activeCategory, searchQuery, pathname, router, searchParams]);
+  }, [activeCategory, pathname, router, searchParams]);
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState(false);
