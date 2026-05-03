@@ -58,6 +58,17 @@ function MenuPageContent() {
   const [isSavingDishRatings, setIsSavingDishRatings] = useState(false);
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const pendingScrollCategoryRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("cart") === "open") {
+      setIsCartOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("cart");
+      const qs = params.toString();
+      router.replace(`${pathname}${qs ? "?" + qs : ""}`, { scroll: false });
+    }
+  }, [searchParams, pathname, router]);
+
   const [dishes, setDishes] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [categoryImageMap, setCategoryImageMap] = useState<Record<string, string | null>>({});
@@ -352,7 +363,9 @@ function MenuPageContent() {
                   className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
                   <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
                   {totalItems > 0 && (
-                    <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-[color:var(--brand-gold)] text-[9px] font-semibold text-[color:var(--brand-bg-deep)]">{totalItems}</span>
+                    <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#8B0000] px-1 text-[10px] font-extrabold text-[color:var(--brand-gold)] shadow-[0_0_10px_rgba(139,0,0,0.8)] ring-1 ring-[color:var(--brand-gold)]">
+                      {totalItems}
+                    </span>
                   )}
                 </button>
               </div>
