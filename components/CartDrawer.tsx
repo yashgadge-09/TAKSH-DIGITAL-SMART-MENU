@@ -28,7 +28,7 @@ export function CartDrawer({
   onAddRecommendation,
   onShowOrder,
 }: CartDrawerProps) {
-  const { items, updateQuantity, totalPrice } = useCart();
+  const { items, updateQuantity, removeItem, totalPrice } = useCart();
   const router = useRouter();
 
   if (!isOpen) return null;
@@ -105,7 +105,13 @@ export function CartDrawer({
                       {/* Qty controls */}
                       <div className="mt-2 inline-flex w-fit items-center overflow-hidden rounded-lg border border-[color:var(--brand-gold)]/20 bg-[#2b1b11]">
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => {
+                            if (item.quantity > 1) {
+                              updateQuantity(item.id, item.quantity - 1);
+                            } else if (item.quantity === 1) {
+                              removeItem(item.id);
+                            }
+                          }}
                           className="grid h-6 w-7 place-items-center text-[color:var(--brand-gold-muted)] transition hover:text-[color:var(--brand-gold)] active:bg-[color:var(--brand-gold)]/10"
                         >
                           <Minus size={12} />
@@ -200,7 +206,7 @@ export function CartDrawer({
               }}
             >
               <span className="text-[15px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
-                CONFIRM YOUR ORDER • ₹{finalTotal}
+                SHOW ORDER TO WAITER - ₹{finalTotal}
               </span>
             </button>
           </div>
