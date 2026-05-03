@@ -35,6 +35,7 @@ function MenuPageContent() {
   const { totalItems, addItem, items } = useCart();
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
+  const [showSpicyOnly, setShowSpicyOnly] = useState(false);
 
   useEffect(() => {
     const currentCategory = searchParams.get("category") || "All";
@@ -97,6 +98,7 @@ function MenuPageContent() {
           }
           return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
         })(),
+        spiceLevel: Number(dish.spice_level ?? 0),
         hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
         isChefSpecial: dish.is_chef_special ?? false,
         isGuestFavorite: dish.is_guest_favorite ?? false,
@@ -149,7 +151,8 @@ function MenuPageContent() {
     const sl = searchQuery.toLowerCase().trim();
     const matchesSearch = !sl || name.includes(sl) || desc.includes(sl);
     const matchesCategory = sl ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
-    return matchesSearch && matchesCategory;
+    const matchesSpice = !showSpicyOnly || d.spiceLevel === 3;
+    return matchesSearch && matchesCategory && matchesSpice;
   }).map(d => ({ ...d, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }));
 
   const getGuestFavorites = () => {
@@ -256,7 +259,11 @@ function MenuPageContent() {
         <div className="relative flex-1 min-w-0">
           <h3 className={`font-serif leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 ${isSpecial ? "text-[17px]" : "text-[15px]"}`}>{dish.name}</h3>
           {dish.tasteDescription && <p className={`mt-0.5 italic text-[color:var(--brand-gold-muted)] line-clamp-1 ${isSpecial ? "text-[13px]" : "text-[12px]"}`}>{dish.tasteDescription}</p>}
-          {dish.hasSpiceIndicator && <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>🔥 Spicy</span>}
+          {dish.spiceLevel > 0 && (
+            <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>
+              {"🔥".repeat(dish.spiceLevel)} {dish.spiceLevel === 1 ? "Low" : dish.spiceLevel === 2 ? "Medium" : "High"}
+            </span>
+          )}
           <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>₹{dish.price}</p>
         </div>
         <div className="relative flex shrink-0 flex-col items-center">
@@ -343,6 +350,17 @@ function MenuPageContent() {
                     </button>
                   ))}
                 </div>
+                {/* Spice filter */}
+                <button
+                  onClick={() => setShowSpicyOnly(!showSpicyOnly)}
+                  aria-label={showSpicyOnly ? "Show all items" : "Show only high spice items"}
+                  className={`grid h-8 w-8 place-items-center rounded-full border transition-all ${showSpicyOnly
+                    ? "bg-orange-600 border-orange-500 text-white shadow-[0_0_12px_rgba(234,88,12,0.4)]"
+                    : "border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] hover:border-[color:var(--brand-gold)]/60"
+                    }`}
+                >
+                  <span className={showSpicyOnly ? "animate-pulse" : ""}>🔥</span>
+                </button>
                 {/* Cart button */}
                 <button onClick={() => setIsCartOpen(true)} aria-label={`View cart, ${totalItems} items`}
                   className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
@@ -426,8 +444,8 @@ function MenuPageContent() {
           </div>
         )}
 
-        {/* ── Discovery sections (All + no search) ── */}
-        {activeCategory === "All" && !searchQuery && (
+        {/* ── Discovery sections (All + no search + no spice filter) ── */}
+        {activeCategory === "All" && !searchQuery && !showSpicyOnly && (
           <>
             {getTodaysSpecials().length > 0 && (
               <section className="mt-6">

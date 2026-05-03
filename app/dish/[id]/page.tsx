@@ -462,10 +462,10 @@ export default function DishDetailPage() {
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {(dish.tasteDescription || dish.hasSpiceIndicator) && (
+            {(dish.tasteDescription || dish.spiceLevel > 0) && (
               <span className="rounded-full bg-[color:var(--brand-gold)]/85 px-3 py-1 text-[12px] font-semibold text-[color:var(--brand-bg-deep)] flex items-center gap-1">
-                {dish.hasSpiceIndicator && "🔥 "}
-                {dish.tasteDescription || t('spicy')}
+                {dish.spiceLevel > 0 && "🔥".repeat(dish.spiceLevel) + " "}
+                {dish.tasteDescription || (dish.spiceLevel === 1 ? "Low" : dish.spiceLevel === 2 ? "Medium" : "High")}
               </span>
             )}
             {dish.tags.map((t: string) => (
