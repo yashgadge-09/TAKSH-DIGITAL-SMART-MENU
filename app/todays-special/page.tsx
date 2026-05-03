@@ -42,6 +42,7 @@ export default function TodaysSpecialPage() {
               return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
             })(),
             tasteDescription: dish[`taste_${lang}`] || dish.taste_en || "",
+            spiceLevel: Number(dish.spice_level ?? 0),
             hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
             isChefSpecial: dish.is_chef_special ?? false,
           }));
@@ -183,9 +184,9 @@ function DishCard({ dish, index, onAdd, onClick }: any) {
             {dish.tasteDescription}
           </p>
         )}
-        {dish.hasSpiceIndicator && (
+        {dish.spiceLevel > 0 && (
           <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>
-            🔥 Spicy
+            {"🔥".repeat(dish.spiceLevel)} {dish.spiceLevel === 1 ? "Low" : dish.spiceLevel === 2 ? "Medium" : "High"}
           </span>
         )}
         <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>
