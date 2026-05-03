@@ -14,6 +14,7 @@ import { getOrCreateSessionId } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 import { NotificationPrompt } from "@/components/NotificationPrompt";
+import { isSameCategory, normalizeCategory, toSingular } from "@/lib/utils";
 
 const PREVIEW_LIMIT = 6;
 
@@ -129,9 +130,6 @@ function MenuPageContent() {
     return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
-  const normalizeCategory = (cat: string | null | undefined) => (cat || "").toLowerCase().replace(/\s+/g, " ").trim();
-  const toSingular = (v: string | null | undefined) => normalizeCategory(v).split(" ").map(w => { if (w.length <= 3) return w; if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y"; if (w.endsWith("ss")) return w; if (w.endsWith("s")) return w.slice(0, -1); return w; }).join(" ");
-  const isSameCategory = (l: string | null | undefined, r: string | null | undefined) => { const nl = normalizeCategory(l), nr = normalizeCategory(r); if (!nl || !nr) return false; if (nl === nr) return true; return toSingular(nl) === toSingular(nr); };
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
   const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
   const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc.includes(na) || na.includes(nc); }); }) || null;
@@ -422,7 +420,7 @@ function MenuPageContent() {
 
         {/* ── Loading state ── */}
         {isLoading && dishes.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20">
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <RefreshCw className="h-8 w-8 animate-spin text-[color:var(--brand-gold)] mb-3" />
             <p className="text-[13px] text-[color:var(--brand-gold-muted)]">Loading menu…</p>
           </div>
