@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Heart, ChefHat, Sparkles, Minus, Plus } from "lucide-react";
+import { ArrowLeft, Heart, ChefHat, Sparkles, Minus, Plus, ShoppingCart } from "lucide-react";
 import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, trackFavourite } from "@/lib/database";
 import { getFavouriteSessionKey, getOrCreateSessionId } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
@@ -46,7 +46,7 @@ export default function DishDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const { addItem, items } = useCart();
+  const { addItem, items, totalItems } = useCart();
   const { language: lang, t } = useLanguage();
   const searchParams = useSearchParams();
   const fromCategory = searchParams.get('from');
@@ -439,6 +439,19 @@ export default function DishDetailPage() {
                 ].join(" ")}
                 strokeWidth={2.2}
               />
+            </button>
+            <button
+              type="button"
+              aria-label="Open Cart"
+              onClick={() => router.push("/menu?cart=open")}
+              className="pointer-events-auto relative grid h-10 w-10 place-items-center rounded-full bg-[color:var(--brand-gold-soft)]/95 shadow-md backdrop-blur transition hover:bg-[color:var(--brand-gold-soft)]"
+            >
+              <ShoppingCart className="h-[18px] w-[18px] text-[color:var(--brand-bg-deep)]" strokeWidth={2.2} />
+              {totalItems > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#8B0000] px-1 text-[11px] font-extrabold text-[color:var(--brand-gold)] shadow-[0_0_10px_rgba(139,0,0,0.8)] ring-1 ring-[color:var(--brand-gold)]">
+                  {totalItems}
+                </span>
+              )}
             </button>
           </div>
         </div>
