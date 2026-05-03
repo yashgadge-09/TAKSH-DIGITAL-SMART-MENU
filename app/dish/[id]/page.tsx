@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Heart, ChefHat, Sparkles, Minus, Plus } from "lucide-react";
 import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, trackFavourite } from "@/lib/database";
 import { getFavouriteSessionKey, getOrCreateSessionId } from "@/lib/session";
@@ -48,6 +48,19 @@ export default function DishDetailPage() {
   const id = params.id as string;
   const { addItem, items } = useCart();
   const { language: lang, t } = useLanguage();
+  const searchParams = useSearchParams();
+  const fromCategory = searchParams.get('from');
+
+  const handleBack = () => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    if (fromCategory) {
+      router.push(`/menu?category=${encodeURIComponent(fromCategory)}`);
+    } else if (rawDish?.category) {
+      router.push(`/menu?category=${encodeURIComponent(rawDish.category)}`);
+    } else {
+      router.push('/menu');
+    }
+  };
 
   const [rawDish, setRawDish] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -165,8 +178,7 @@ export default function DishDetailPage() {
     let mounted = true;
     (async () => {
       try {
-        const timestamp = new Date().getTime();
-        const fetchedDish = await getDishById(id, timestamp);
+        const fetchedDish = await getDishById(id);
         if (!mounted || !fetchedDish) return;
 
         setRawDish(fetchedDish);
@@ -402,7 +414,7 @@ export default function DishDetailPage() {
       >
         <div className="mx-auto flex w-full max-w-md items-center justify-between px-4 pt-4">
           <button
-            onClick={() => router.back()}
+            onClick={handleBack}
             aria-label="Go back"
             className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-[color:var(--brand-gold-soft)]/95 text-[color:var(--brand-bg-deep)] shadow-md backdrop-blur transition hover:bg-[color:var(--brand-gold-soft)]"
           >

@@ -10,7 +10,7 @@ export function NotificationPrompt() {
   useEffect(() => {
     console.log("Card component mounted");
     const startTime = Date.now();
-    
+
     const interval = setInterval(() => {
       if (!("Notification" in window)) {
         return;
@@ -33,13 +33,13 @@ export function NotificationPrompt() {
       const now = Date.now();
 
       if (lastDismissedTime) {
-        // Show after 60 seconds (60000 ms)
+        // Re-show after 60 seconds following a dismissal
         if (now - parseInt(lastDismissedTime, 10) >= 60000) {
           setShowPrompt(true);
         }
       } else {
-        // Initial delay before showing: 60 seconds (60000 ms)
-        if (now - startTime >= 60000) {
+        // First time: show after 7 seconds of page load
+        if (now - startTime >= 7000) {
           setShowPrompt(true);
         }
       }
@@ -59,14 +59,14 @@ export function NotificationPrompt() {
         console.warn("Firebase configuration is missing in environment variables.");
         return;
       }
-      
+
       const firebaseConfig = JSON.parse(configString);
-      
+
       const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
       const messaging = getMessaging(app);
 
       const permission = await Notification.requestPermission();
-      
+
       if (permission === "granted") {
         const token = await getToken(messaging, {
           vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY

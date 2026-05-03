@@ -110,27 +110,27 @@ export function DishDetailView({ dish }: { dish: DishDetail }) {
         <div
           className="relative w-full max-w-[100vw] md:max-w-[min(50vw,50vh)]"
         >
-        <div
-          className="relative aspect-square w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]"
-        >
-          <Image
-            src={dish.image || "/placeholder.svg"}
-            alt={dish.name}
-            fill
-            priority
-            sizes="(max-width: 768px) 100vw, 50vw"
-            className="object-cover"
-          />
-          {/* Soft inner top gradient for sticky-controls legibility */}
           <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-24"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(35,22,10,0.55) 0%, rgba(35,22,10,0) 100%)",
-            }}
-          />
-        </div>
+            className="relative aspect-square w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]"
+          >
+            <Image
+              src={dish.image || "/placeholder.svg"}
+              alt={dish.name}
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-cover"
+            />
+            {/* Soft inner top gradient for sticky-controls legibility */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-24"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(35,22,10,0.55) 0%, rgba(35,22,10,0) 100%)",
+              }}
+            />
+          </div>
           {/* Smooth fade from image bottom into the page background (kills the hard edge) */}
           <div
             aria-hidden="true"
