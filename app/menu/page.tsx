@@ -433,9 +433,17 @@ function MenuPageContent() {
           <>
             {getTodaysSpecials().length > 0 && (
               <section className="mt-6">
-                <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("todaysSpecial") || "Today's Special"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Fresh from the kitchen today</p>
+                <div 
+                  onClick={() => router.push("/todays-special")}
+                  className="flex items-center justify-between px-4 cursor-pointer group"
+                >
+                  <div>
+                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("todaysSpecial") || "Today's Special"}</h2>
+                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Fresh from the kitchen today</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
+                    See All <ChevronRight className="h-3 w-3" />
+                  </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
                   {getTodaysSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
@@ -444,9 +452,17 @@ function MenuPageContent() {
             )}
             {getChefSpecials().length > 0 && (
               <section className="mt-6">
-                <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("chefFavourites") || "Chef's Favourites"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Hand-picked by our chef</p>
+                <div 
+                  onClick={() => router.push("/chefs-favourites")}
+                  className="flex items-center justify-between px-4 cursor-pointer group"
+                >
+                  <div>
+                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("chefFavourites") || "Chef's Favourites"}</h2>
+                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Hand-picked by our chef</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
+                    See All <ChevronRight className="h-3 w-3" />
+                  </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
                   {getChefSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
@@ -455,9 +471,17 @@ function MenuPageContent() {
             )}
             {getGuestFavorites().length > 0 && (
               <section className="mt-6">
-                <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("mostLoved") || "Most Loved"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Guest favourites at Taksh</p>
+                <div 
+                  onClick={() => router.push("/most-loved")}
+                  className="flex items-center justify-between px-4 cursor-pointer group"
+                >
+                  <div>
+                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("mostLoved") || "Most Loved"}</h2>
+                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Guest favourites at Taksh</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
+                    See All <ChevronRight className="h-3 w-3" />
+                  </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
                   {getGuestFavorites().map(dish => <ScrollCard key={dish.id} dish={dish} showRating />)}
