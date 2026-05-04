@@ -79,7 +79,7 @@ function MenuPageContent() {
     price: "",
     category: "",
     images: [] as string[],
-    spiceIndicator: false,
+    spiceLevel: 0,
 
     servings: "2",
     isGuestFavorite: false,
@@ -219,7 +219,7 @@ function MenuPageContent() {
 
       category: selectedCategory || categoriesList[0] || "",
       images: [],
-      spiceIndicator: false,
+      spiceLevel: 0,
 
       servings: "2",
       isGuestFavorite: false,
@@ -419,7 +419,7 @@ function MenuPageContent() {
         images: formData.images.length > 0
           ? formData.images
           : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"],
-        spiceLevel: formData.spiceIndicator ? 1 : 0,
+        spiceLevel: Number(formData.spiceLevel),
 
         servings: Number(formData.servings) || 2,
         isChefSpecial: formData.isChefSpecial,
@@ -499,7 +499,7 @@ function MenuPageContent() {
       price: item.price.toString(),
       category: item.category,
       images: item.images || [],
-      spiceIndicator: (item.spice_level ?? item.spiceLevel ?? 0) > 0,
+      spiceLevel: Number(item.spice_level ?? item.spiceLevel ?? 0),
 
       servings: item.servings.toString(),
       isGuestFavorite: item.isGuestFavorite,
@@ -694,7 +694,7 @@ function MenuPageContent() {
                   <td className="p-4 text-sm">
                     {item.spiceLevel > 0 ? (
                       <span className="inline-flex items-center gap-1 text-[#C4956A]">
-                        🔥 Spicy
+                        {"🔥".repeat(item.spiceLevel)} {item.spiceLevel === 1 ? "Low" : item.spiceLevel === 2 ? "Medium" : "High"}
                       </span>
                     ) : (
                       <span className="text-[#8E6D4E]">None</span>
@@ -1054,21 +1054,30 @@ function MenuPageContent() {
                   </div>
                 </div>
 
-                {/* Spice Indicator */}
+                {/* Spice Level */}
                 <div>
-                  <label className="block text-[#B89A7D] text-sm mb-3">Spice Indicator</label>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, spiceIndicator: !formData.spiceIndicator })}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${formData.spiceIndicator
-                        ? "bg-[#3B2314] text-[#E7CFA8]"
-                        : "bg-white border border-[#EDE4D5] border border-[#EDE4D5] text-[#B89A7D] hover:border-[#EDE4D5]"
-                        }`}
-                    >
-                      {formData.spiceIndicator ? "🔥 Spice Indicator ON" : "No Spice Indicator"}
-                    </button>
-                    <p className="text-[#B89A7D]/60 text-xs">Toggle if this dish should show a spicy indicator/chili icon.</p>
+                  <label className="block text-[#B89A7D] text-sm mb-3">Spice Level</label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {[
+                      { val: 0, label: "None", icon: null },
+                      { val: 1, label: "Low", icon: "🔥" },
+                      { val: 2, label: "Medium", icon: "🔥🔥" },
+                      { val: 3, label: "High", icon: "🔥🔥🔥" },
+                    ].map((level) => (
+                      <button
+                        key={level.val}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, spiceLevel: level.val })}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${formData.spiceLevel === level.val
+                          ? "bg-[#3B2314] text-[#E7CFA8]"
+                          : "bg-white border border-[#EDE4D5] text-[#B89A7D] hover:border-[#EDE4D5]"
+                          }`}
+                      >
+                        {level.icon && <span className="text-xs">{level.icon}</span>}
+                        {level.label}
+                      </button>
+                    ))}
+                    <p className="w-full text-[#B89A7D]/60 text-xs mt-1">Select the spice intensity for this dish.</p>
                   </div>
                 </div>
 
