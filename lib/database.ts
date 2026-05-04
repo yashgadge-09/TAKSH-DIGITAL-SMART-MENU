@@ -21,7 +21,7 @@ function normalizeImageUrl(imageUrl: unknown): string {
     return imageUrl
   }
 
-  return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+  return ''
 }
 
 function isPermissionDeniedError(error: unknown): boolean {
@@ -323,21 +323,13 @@ export async function toggleAvailability(
   if (error) throw error
 }
 
-const getCategoriesCached = unstable_cache(
-  async () => {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('order_index', { ascending: true })
-    if (error) throw error
-    return data
-  },
-  ['categories'],
-  { revalidate: 300, tags: ['categories'] }
-)
-
 export async function getCategories() {
-  return getCategoriesCached()
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('order_index', { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function addCategory(name: string) {
