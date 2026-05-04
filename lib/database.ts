@@ -1,5 +1,7 @@
+"use server"
 
 import { supabase } from './supabase'
+import { unstable_cache } from 'next/cache'
 
 function normalizeImageUrl(imageUrl: unknown): string {
   if (typeof imageUrl === 'string' && imageUrl.startsWith('[')) {
@@ -111,23 +113,31 @@ function shuffleWithinCategoryPreserveCategoryOrder(items: any[]): any[] {
   return output
 }
 
+const getRecommendationsCached = unstable_cache(
+  async (currentDishId: string, currentCategory: string, limitPerCategory: number) => {
+    const { data, error } = await supabase.rpc('get_recommendations', {
+      current_dish_id: currentDishId,
+      current_category: currentCategory,
+      limit_per_category: limitPerCategory,
+    })
+
+    if (error) throw error
+
+    return (data || []).map((dish: any) => ({
+      ...dish,
+      image: normalizeImageUrl(dish.image_url),
+    }))
+  },
+  ['recommendations'],
+  { revalidate: 300, tags: ['recommendations'] }
+)
+
 export async function getRecommendations(
   currentDishId: string,
   currentCategory: string,
   limitPerCategory = 4
 ) {
-  const { data, error } = await supabase.rpc('get_recommendations', {
-    current_dish_id: currentDishId,
-    current_category: currentCategory,
-    limit_per_category: limitPerCategory,
-  })
-
-  if (error) throw error
-
-  return (data || []).map((dish: any) => ({
-    ...dish,
-    image: normalizeImageUrl(dish.image_url),
-  }))
+  return getRecommendationsCached(currentDishId, currentCategory, limitPerCategory)
 }
 
 export async function getFallbackDishes(
@@ -200,36 +210,60 @@ export async function getMoreLikeThisDishes(
   }))
 }
 
+const getAllDishesCached = unstable_cache(
+  async () => {
+    const { data, error } = await supabase
+      .from('dishes')
+      .select('*')
+      .eq('is_available', true)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+  ['all-dishes'],
+  { revalidate: 300, tags: ['dishes'] }
+);
+
 export async function getAllDishes(timestamp?: number) {
-  let query = supabase
-    .from('dishes')
-    .select('*')
-    .eq('is_available', true);
-    
   if (timestamp) {
-    // Add a unique query param via a dummy filter to bypass cache
-    query = query.neq('name_en', `CACHE_BUST_${timestamp}`);
+    const { data, error } = await supabase
+      .from('dishes')
+      .select('*')
+      .eq('is_available', true)
+      .neq('name_en', `CACHE_BUST_${timestamp}`)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data;
   }
-  
-  const { data, error } = await query.order('created_at', { ascending: true });
-  if (error) throw error
-  return data
+  return getAllDishesCached();
 }
 
+const getDishByIdCached = unstable_cache(
+  async (id: string) => {
+    const { data, error } = await supabase
+      .from('dishes')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  ['dish'],
+  { revalidate: 300, tags: ['dishes'] }
+);
+
 export async function getDishById(id: string, timestamp?: number) {
-  let query = supabase
-    .from('dishes')
-    .select('*')
-    .eq('id', id);
-
   if (timestamp) {
-    // Force bypass cache
-    query = query.neq('name_en', `CACHE_BUST_${timestamp}`);
+    const { data, error } = await supabase
+      .from('dishes')
+      .select('*')
+      .eq('id', id)
+      .neq('name_en', `CACHE_BUST_${timestamp}`)
+      .single();
+    if (error) throw error;
+    return data;
   }
-
-  const { data, error } = await query.single();
-  if (error) throw error
-  return data
+  return getDishByIdCached(id);
 }
 
 export async function getAllDishesAdmin(timestamp?: number) {
@@ -289,13 +323,21 @@ export async function toggleAvailability(
   if (error) throw error
 }
 
+const getCategoriesCached = unstable_cache(
+  async () => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('order_index', { ascending: true })
+    if (error) throw error
+    return data
+  },
+  ['categories'],
+  { revalidate: 300, tags: ['categories'] }
+)
+
 export async function getCategories() {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .order('order_index', { ascending: true })
-  if (error) throw error
-  return data
+  return getCategoriesCached()
 }
 
 export async function addCategory(name: string) {

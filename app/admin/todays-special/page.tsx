@@ -8,7 +8,7 @@ import { getAllDishesAdmin, updateDish } from "@/lib/database"
 
 interface MenuItem {
   id: string;
-  name: { en: string; [key: string]: string };
+  name: { en: string;[key: string]: string };
   category: string;
   price: number;
   images: string[];
@@ -20,7 +20,7 @@ function TodaysSpecialContent() {
   const [dishes, setDishes] = useState<MenuItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -29,7 +29,7 @@ function TodaysSpecialContent() {
     try {
       const timestamp = new Date().getTime()
       const data = await getAllDishesAdmin(timestamp)
-      
+
       const mappedDishes = (data || []).map((dish: any) => ({
         ...dish,
         name: {
@@ -82,7 +82,7 @@ function TodaysSpecialContent() {
 
   const todaysSpecials = dishes.filter(d => d.isTodaysSpecial)
   const availableDishes = dishes.filter(d => !d.isTodaysSpecial)
-  
+
   const filteredAvailableDishes = availableDishes.filter(dish => {
     if (!searchQuery.trim()) return true
     const query = searchQuery.toLowerCase().trim()
@@ -136,7 +136,7 @@ function TodaysSpecialContent() {
             Current Specials ({todaysSpecials.length})
           </h2>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -187,7 +187,7 @@ function TodaysSpecialContent() {
                     <div className="flex flex-col items-center gap-3">
                       <Star className="w-10 h-10 text-[#D4B391] opacity-50" />
                       <p className="text-base font-medium">No dishes marked as Today's Special yet.</p>
-                      <button 
+                      <button
                         onClick={() => setShowAddModal(true)}
                         className="mt-2 text-[#E8650A] font-bold hover:underline"
                       >
@@ -217,7 +217,7 @@ function TodaysSpecialContent() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="p-5 shrink-0 bg-white/40 border-b border-[#E8D3BD]">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#B89A7D]" />

@@ -74,14 +74,14 @@ export function DishShareModal({ isOpen, onClose, dish }: DishShareModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[350px] p-0 overflow-hidden bg-transparent border-none shadow-none">
         <div className="relative flex flex-col items-center justify-center p-5 bg-[#121212]/95 backdrop-blur-2xl rounded-[2rem] border border-white/10">
-          
+
           {/* Card to be captured */}
-          <div 
+          <div
             ref={cardRef}
             className="w-full aspect-[4/5] relative overflow-hidden rounded-[2.5rem] p-5 flex flex-col items-center bg-[#1A1108] shadow-2xl"
           >
             {/* Dot Pattern Background */}
-            <div 
+            <div
               className="absolute inset-0 opacity-10"
               style={{
                 backgroundImage: "radial-gradient(circle, #C4956A 1px, transparent 1px)",
@@ -106,9 +106,9 @@ export function DishShareModal({ isOpen, onClose, dish }: DishShareModalProps) {
             {/* Image Section */}
             <div className="relative z-10 w-full aspect-square rounded-[2rem] p-1 bg-[#C4956A]/20 shadow-2xl mb-5">
               <div className="w-full h-full rounded-[1.9rem] overflow-hidden">
-                <img 
-                  src={dish.image} 
-                  alt={dish.name} 
+                <img
+                  src={dish.image}
+                  alt={dish.name}
                   className="w-full h-full object-cover"
                   crossOrigin="anonymous"
                 />
@@ -167,13 +167,13 @@ export function DishShareModal({ isOpen, onClose, dish }: DishShareModalProps) {
               <p className="text-[9px] text-white/30 font-medium leading-tight max-w-[140px]">
                 Generate a custom card to share as your Story.
               </p>
-              <Button 
+              <Button
                 onClick={handleDownload}
                 disabled={isDownloading}
                 className="bg-[#C4956A]/10 hover:bg-[#C4956A]/20 text-[#C4956A] border border-[#C4956A]/30 font-bold rounded-lg px-4 h-10 gap-2 transition-all active:scale-95"
               >
                 {isDownloading ? (
-                   <div className="w-3 h-3 border-2 border-[#C4956A]/20 border-t-[#C4956A] rounded-full animate-spin" />
+                  <div className="w-3 h-3 border-2 border-[#C4956A]/20 border-t-[#C4956A] rounded-full animate-spin" />
                 ) : (
                   <Download className="w-4 h-4" />
                 )}
@@ -184,20 +184,20 @@ export function DishShareModal({ isOpen, onClose, dish }: DishShareModalProps) {
 
           {/* Action Buttons */}
           <div className="mt-8 flex gap-4 w-full">
-            <Button 
+            <Button
               onClick={handleDownload}
               disabled={isDownloading}
               className="flex-1 bg-white hover:bg-white/90 text-black font-bold rounded-2xl h-14 gap-3 transition-all active:scale-95 shadow-xl"
             >
               {isDownloading ? (
-                 <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
               ) : (
                 <Download className="w-5 h-5" />
               )}
               {isDownloading ? "Generating..." : "Download Card"}
             </Button>
-            
-            <Button 
+
+            <Button
               onClick={handleNativeShare}
               className="bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl h-14 w-14 flex items-center justify-center transition-all active:scale-95 border border-white/10"
             >
@@ -205,7 +205,7 @@ export function DishShareModal({ isOpen, onClose, dish }: DishShareModalProps) {
             </Button>
           </div>
 
-          <button 
+          <button
             onClick={onClose}
             className="absolute -top-12 right-0 text-white/60 hover:text-white transition-colors p-2"
           >

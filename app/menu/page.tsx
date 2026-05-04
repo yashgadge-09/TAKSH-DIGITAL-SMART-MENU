@@ -39,17 +39,15 @@ function MenuPageContent() {
 
   useEffect(() => {
     const currentCategory = searchParams.get("category") || "All";
-    const currentSearch = searchParams.get("search") || "";
-    if (activeCategory !== currentCategory || searchQuery !== currentSearch) {
+    if (activeCategory !== currentCategory) {
       const params = new URLSearchParams(searchParams.toString());
       if (activeCategory === "All") params.delete("category");
       else params.set("category", activeCategory);
-      if (!searchQuery) params.delete("search");
-      else params.set("search", searchQuery);
+      params.delete("search"); // don't persist search in URL
       const qs = params.toString();
       router.replace(`${pathname}${qs ? "?" + qs : ""}`, { scroll: false });
     }
-  }, [activeCategory, searchQuery, pathname, router, searchParams]);
+  }, [activeCategory, pathname, router, searchParams]);
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState(false);
@@ -79,9 +77,8 @@ function MenuPageContent() {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      const timestamp = Date.now();
       const [data, categoryData, liveMostLovedRatings] = await Promise.all([
-        getAllDishes(timestamp),
+        getAllDishes(),
         getCategories().catch(() => []),
         getMostLovedDishRatings(10).catch(() => []),
       ]);
@@ -119,6 +116,11 @@ function MenuPageContent() {
   };
 
   useEffect(() => {
+    // Override browser scroll restoration so returning from a dish page always starts at top
+    if (typeof window !== 'undefined') {
+      window.history.scrollRestoration = 'manual';
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
     loadData();
     const now = Date.now();
     const key = "taksh:last-menu-view-ts";
@@ -245,7 +247,7 @@ function MenuPageContent() {
 
     return (
       <article
-        onClick={() => router.push(`/dish/${dish.id}`)}
+        onClick={() => router.push(`/dish/${dish.id}?from=${encodeURIComponent(dish.category || '')}`)}
         className={`relative flex cursor-pointer items-center gap-4 rounded-2xl shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5 ${isSpecial
           ? "p-4 -mx-3 my-3 animated-gradient-bg border border-[color:var(--brand-gold)]/50"
           : "p-3 bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15"
@@ -289,7 +291,7 @@ function MenuPageContent() {
 
   const ScrollCard = ({ dish, showRating = false }: { dish: any; showRating?: boolean }) => (
     <article
-      onClick={() => router.push(`/dish/${dish.id}`)}
+      onClick={() => router.push(`/dish/${dish.id}?from=${encodeURIComponent(dish.category || '')}`)}
       className="flex w-[170px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-20px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden">
@@ -408,8 +410,8 @@ function MenuPageContent() {
                       onClick={() => handleCategoryChange(tab)}
                       aria-label={displayLabel}
                       className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${isActive
-                          ? "ring-[color:var(--brand-gold)]"
-                          : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
+                        ? "ring-[color:var(--brand-gold)]"
+                        : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
                         }`}
                     >
                       {imgSrc ? (
