@@ -49,7 +49,7 @@ function MenuPageContent() {
     }
   }, [activeCategory, pathname, router, searchParams]);
 
-  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(searchParams.get("cart") === "open");
   const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
@@ -147,7 +147,7 @@ function MenuPageContent() {
 
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
   const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
-  const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc.includes(na) || na.includes(nc); }); }) || null;
+  const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc === na + 's' || nc + 's' === na; }); }) || null;
 
   const resolvedPreviewCategories = MAIN_PREVIEW_CATEGORIES.map(item => ({ label: item.label, categoryValue: resolveCategoryFromAliases(item.aliases) })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
   const mappedCategoryValues = new Set(resolvedPreviewCategories.map(p => p.categoryValue));
@@ -524,7 +524,7 @@ function MenuPageContent() {
 
         {/* ── Dish listing ── */}
         <div className="px-4 mt-6">
-          {activeCategory === "All" && !searchQuery ? (
+          {activeCategory === "All" && !searchQuery && !showSpicyOnly ? (
             previewCategories.map(tab => {
               const catDishes = groupedDishes[tab.categoryValue] || [];
               if (catDishes.length === 0) return null;
@@ -555,13 +555,29 @@ function MenuPageContent() {
             ))
           )}
 
-          {!isLoading && filteredDishes.length === 0 && searchQuery && (
-            <div className="flex flex-col items-center py-16 text-center">
-              <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/20">
-                <span className="text-3xl">🍽️</span>
+          {!isLoading && filteredDishes.length === 0 && (
+            <div className="flex flex-col items-center py-16 text-center px-6">
+              <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/20 shadow-[0_4px_20px_-4px_rgba(234,88,12,0.3)]">
+                <span className="text-3xl">{showSpicyOnly ? "🔥" : "🍽️"}</span>
               </div>
-              <p className="font-serif text-[18px] text-[color:var(--brand-gold)]">No dishes found</p>
-              <p className="mt-1 text-[13px] text-[color:var(--brand-gold-muted)]">Try searching with different keywords</p>
+              <p className="font-serif text-[18px] text-[color:var(--brand-gold)]">
+                {showSpicyOnly ? t("noSpicyDishesFound") : t("noDishesFound")}
+              </p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--brand-gold-muted)]">
+                {searchQuery 
+                  ? t("tryDifferentKeywords")
+                  : showSpicyOnly 
+                    ? t("turnOffIndicator")
+                    : t("noDishesAvailable")}
+              </p>
+              {showSpicyOnly && (
+                <button 
+                  onClick={() => setShowSpicyOnly(false)}
+                  className="mt-6 rounded-full border border-[color:var(--brand-gold)]/40 px-5 py-2 text-[13px] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)]"
+                >
+                  {t("turnOffIndicatorBtn")}
+                </button>
+              )}
             </div>
           )}
         </div>

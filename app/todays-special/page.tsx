@@ -7,6 +7,7 @@ import { getAllDishes, trackMenuView } from "@/lib/database";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
+import Link from "next/link";
 
 export default function TodaysSpecialPage() {
   const router = useRouter();
@@ -90,8 +91,8 @@ export default function TodaysSpecialPage() {
               </p>
             </div>
             {/* Cart shortcut */}
-            <button 
-              onClick={() => router.push("/menu")}
+            <Link 
+              href="/menu?cart=open"
               className="relative grid h-9 w-9 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] ml-auto"
             >
               <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
@@ -100,7 +101,7 @@ export default function TodaysSpecialPage() {
                   {totalItems}
                 </span>
               )}
-            </button>
+            </Link>
           </div>
         </header>
       </div>

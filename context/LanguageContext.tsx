@@ -55,7 +55,13 @@ const translations: Record<Language, Record<string, string>> = {
     "Rice": "Rice",
     "Bread": "Bread",
     "Breads": "Breads",
-    "Desserts": "Desserts"
+    "Desserts": "Desserts",
+    noSpicyDishesFound: "No spicy dishes found",
+    noDishesFound: "No dishes found",
+    tryDifferentKeywords: "Try searching with different keywords",
+    turnOffIndicator: "Turn off the spice indicator to view the dishes of the current category.",
+    noDishesAvailable: "No dishes available in this category.",
+    turnOffIndicatorBtn: "TURN OFF INDICATOR"
   },
   hi: {
     ingredients: "सामग्री",
@@ -99,7 +105,13 @@ const translations: Record<Language, Record<string, string>> = {
     "Rice": "चावल",
     "Bread": "रोटी",
     "Breads": "रोटियां",
-    "Desserts": "मीठा"
+    "Desserts": "मीठा",
+    noSpicyDishesFound: "कोई तीखा व्यंजन नहीं मिला",
+    noDishesFound: "कोई व्यंजन नहीं मिला",
+    tryDifferentKeywords: "विभिन्न कीवर्ड के साथ खोजने का प्रयास करें",
+    turnOffIndicator: "वर्तमान श्रेणी के व्यंजन देखने के लिए स्पाइस इंडिकेटर बंद करें।",
+    noDishesAvailable: "इस श्रेणी में कोई व्यंजन उपलब्ध नहीं है।",
+    turnOffIndicatorBtn: "इंडिकेटर बंद करें"
   },
   mr: {
     ingredients: "साहित्य",
@@ -138,7 +150,13 @@ const translations: Record<Language, Record<string, string>> = {
     "Rice": "भात",
     "Bread": "पोळी / भाकरी",
     "Breads": "रोट्या / भाकरी",
-    "Desserts": "गोड पदार्थ"
+    "Desserts": "गोड पदार्थ",
+    noSpicyDishesFound: "कोणतेही झणझणीत पदार्थ आढळले नाहीत",
+    noDishesFound: "कोणतेही पदार्थ आढळले नाहीत",
+    tryDifferentKeywords: "वेगळ्या कीवर्डसह शोधून पहा",
+    turnOffIndicator: "सध्याच्या श्रेणीतील पदार्थ पाहण्यासाठी स्पाइस इंडिकेटर बंद करा.",
+    noDishesAvailable: "या श्रेणीमध्ये कोणतेही पदार्थ उपलब्ध नाहीत.",
+    turnOffIndicatorBtn: "इंडिकेटर बंद करा"
   }
 };
 
