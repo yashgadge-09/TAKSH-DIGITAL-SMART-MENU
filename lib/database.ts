@@ -21,7 +21,7 @@ function normalizeImageUrl(imageUrl: unknown): string {
     return imageUrl
   }
 
-  return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
+  return ''
 }
 
 function isPermissionDeniedError(error: unknown): boolean {
