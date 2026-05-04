@@ -100,17 +100,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateQuantity = useCallback((id: string, quantity: number) => {
-    setItems((prevItems) =>
-      prevItems.map((item) => (item.id === id ? { ...item, quantity } : item))
-    );
+    if (quantity <= 0) {
+      setItems((prevItems) => prevItems.filter((item) => item.id !== id));
+    } else {
+      setItems((prevItems) =>
+        prevItems.map((item) => (item.id === id ? { ...item, quantity } : item))
+      );
+    }
   }, []);
 
   const clearCart = useCallback(() => {
     setItems([]);
   }, []);
 
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const validItems = items.filter(item => item.quantity >= 1);
+  const totalItems = validItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalPrice = validItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   return (
     <CartContext.Provider

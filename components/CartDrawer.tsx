@@ -3,6 +3,7 @@
 import { useCart } from "@/context/CartContext";
 import { ChevronLeft, ShoppingCart, Minus, Plus } from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 interface RecommendedDish {
   id: string;
@@ -27,7 +28,8 @@ export function CartDrawer({
   onAddRecommendation,
   onShowOrder,
 }: CartDrawerProps) {
-  const { items, updateQuantity, totalPrice } = useCart();
+  const { items, updateQuantity, removeItem, totalPrice } = useCart();
+  const router = useRouter();
 
   if (!isOpen) return null;
 
@@ -41,7 +43,7 @@ export function CartDrawer({
       <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 flex w-[88vw] max-w-[380px] flex-col bg-[color:var(--brand-bg)] shadow-2xl">
+      <div className="fixed inset-x-0 mx-auto top-0 bottom-0 z-50 flex w-full max-w-sm flex-col bg-[color:var(--brand-bg)] shadow-2xl">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-6 pb-4">
@@ -103,7 +105,13 @@ export function CartDrawer({
                       {/* Qty controls */}
                       <div className="mt-2 inline-flex w-fit items-center overflow-hidden rounded-lg border border-[color:var(--brand-gold)]/20 bg-[#2b1b11]">
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => {
+                            if (item.quantity > 1) {
+                              updateQuantity(item.id, item.quantity - 1);
+                            } else if (item.quantity === 1) {
+                              removeItem(item.id);
+                            }
+                          }}
                           className="grid h-6 w-7 place-items-center text-[color:var(--brand-gold-muted)] transition hover:text-[color:var(--brand-gold)] active:bg-[color:var(--brand-gold)]/10"
                         >
                           <Minus size={12} />
@@ -133,7 +141,8 @@ export function CartDrawer({
                     {recommendations.map((dish) => (
                       <div
                         key={dish.id}
-                        className="flex w-[124px] shrink-0 flex-col overflow-hidden rounded-xl bg-[#23160e] border border-[color:var(--brand-gold)]/10"
+                        onClick={() => { router.push(`/dish/${dish.id}`); }}
+                        className="flex w-[124px] shrink-0 flex-col overflow-hidden rounded-xl bg-[#23160e] border border-[color:var(--brand-gold)]/10 cursor-pointer hover:border-[color:var(--brand-gold)]/40 transition"
                       >
                         <div className="relative h-[86px] w-full">
                           {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes("/video/upload/")) ? (
@@ -156,7 +165,7 @@ export function CartDrawer({
                               ₹{dish.price}
                             </p>
                             <button
-                              onClick={() => onAddRecommendation?.(dish)}
+                              onClick={(e) => { e.stopPropagation(); onAddRecommendation?.(dish); }}
                               className="rounded-full px-3 py-1 text-[12px] font-bold text-[color:var(--brand-bg-deep)] active:scale-[0.97] transition"
                               style={{
                                 background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)",
@@ -191,16 +200,13 @@ export function CartDrawer({
 
             <button
               onClick={() => onShowOrder?.()}
-              className="flex w-full flex-col items-center justify-center rounded-full py-2.5 mb-3 shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99]"
+              className="flex w-full items-center justify-center rounded-full py-3.5 mb-3 shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99]"
               style={{
                 background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)",
               }}
             >
-              <span className="flex items-center gap-1.5 text-[14px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
-                CONFIRM YOUR ORDER • ₹{finalTotal} <span className="font-black text-[16px] leading-none mb-[2px]">&gt;</span>
-              </span>
-              <span className="text-[10px] font-medium text-[color:var(--brand-bg-deep)]/80 mt-0.5">
-                Estimated delivery: 35 mins
+              <span className="text-[15px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
+                SHOW ORDER TO WAITER - ₹{finalTotal}
               </span>
             </button>
           </div>
