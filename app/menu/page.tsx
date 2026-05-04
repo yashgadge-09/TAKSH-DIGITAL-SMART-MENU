@@ -18,13 +18,7 @@ import { isSameCategory, normalizeCategory, toSingular } from "@/lib/utils";
 
 const PREVIEW_LIMIT = 6;
 
-const MAIN_PREVIEW_CATEGORIES = [
-  { label: "Breakfast", aliases: ["breakfast"] },
-  { label: "Tandoor Starters", aliases: ["tandoors", "tandoor starters", "tandoori starters", "tandoor starter", "tandoori starter"] },
-  { label: "Main Course", aliases: ["main course", "maincourse"] },
-  { label: "South Indian", aliases: ["south indian", "southindian"] },
-  { label: "Chinese", aliases: ["chinese"] },
-];
+
 
 type MostLovedRatingRow = { dishId: string; averageRating: number; ratingsCount: number };
 
@@ -117,13 +111,18 @@ function MenuPageContent() {
       }));
       setDishes(mappedDishes);
       setMostLovedRatings(Array.isArray(liveMostLovedRatings) ? liveMostLovedRatings : []);
-      const categoryNames = Array.isArray(categoryData) ? categoryData.map((c: any) => String(c?.name || "").trim()).filter(Boolean) : [];
-      if (categoryNames.length > 0) {
-        setCategories(categoryNames);
-        const imgMap: Record<string, string | null> = {};
-        (categoryData as any[]).forEach((c: any) => { if (c?.name) imgMap[String(c.name).trim().toLowerCase()] = c.image_url || null; });
-        setCategoryImageMap(imgMap);
-      } else { const cats = new Set<string>(); mappedDishes.forEach((d: any) => { if (d.category) cats.add(d.category); }); setCategories(Array.from(cats)); }
+      const categoryNames = Array.isArray(categoryData) 
+        ? Array.from(new Set(categoryData.map((c: any) => String(c?.name || "").trim()).filter(Boolean)))
+        : [];
+      setCategories(categoryNames);
+      
+      const imgMap: Record<string, string | null> = {};
+      if (Array.isArray(categoryData)) {
+        categoryData.forEach((c: any) => { 
+          if (c?.name) imgMap[String(c.name).trim().toLowerCase()] = c.image_url || null; 
+        });
+      }
+      setCategoryImageMap(imgMap);
     } catch (err) { console.error("Failed to load dishes", err); }
     finally { setIsLoading(false); }
   };
@@ -149,16 +148,7 @@ function MenuPageContent() {
 
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
   const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
-  const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc.includes(na) || na.includes(nc); }); }) || null;
-
-  const resolvedPreviewCategories = MAIN_PREVIEW_CATEGORIES.map(item => ({ label: item.label, categoryValue: resolveCategoryFromAliases(item.aliases) })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
-  const mappedCategoryValues = new Set(resolvedPreviewCategories.map(p => p.categoryValue));
-  const previewCategories = [...resolvedPreviewCategories];
-  categories.forEach(c => {
-    if (c.toLowerCase() !== "all" && !mappedCategoryValues.has(c)) {
-      previewCategories.push({ label: c, categoryValue: c });
-    }
-  });
+  const previewCategories = menuTabs.map(c => ({ label: c, categoryValue: c }));
 
   const filteredDishes = dishes.filter(d => {
     const name = (d.nameRaw[lang] || "").toLowerCase();
@@ -488,7 +478,7 @@ function MenuPageContent() {
           <>
             {getTodaysSpecials().length > 0 && (
               <section className="mt-6">
-                <div 
+                <div
                   onClick={() => router.push("/todays-special")}
                   className="flex items-center justify-between px-4 cursor-pointer group"
                 >
@@ -507,7 +497,7 @@ function MenuPageContent() {
             )}
             {getChefSpecials().length > 0 && (
               <section className="mt-6">
-                <div 
+                <div
                   onClick={() => router.push("/chefs-favourites")}
                   className="flex items-center justify-between px-4 cursor-pointer group"
                 >
@@ -526,7 +516,7 @@ function MenuPageContent() {
             )}
             {getGuestFavorites().length > 0 && (
               <section className="mt-6">
-                <div 
+                <div
                   onClick={() => router.push("/most-loved")}
                   className="flex items-center justify-between px-4 cursor-pointer group"
                 >
@@ -569,14 +559,17 @@ function MenuPageContent() {
               );
             })
           ) : (
-            Object.entries(groupedDishes).map(([cat, catDishes]) => (
-              <div key={cat} className="mb-8" id={getCategorySectionId(cat)}>
-                <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] mb-4">{cat}</h2>
-                <div className="space-y-4">
-                  {catDishes.map(dish => <DishCard key={dish.id} dish={dish} />)}
+            Array.from(new Set([...menuTabs, ...Object.keys(groupedDishes)])).filter(cat => groupedDishes[cat] && groupedDishes[cat].length > 0).map(cat => {
+              const catDishes = groupedDishes[cat];
+              return (
+                <div key={cat} className="mb-8" id={getCategorySectionId(cat)}>
+                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] mb-4">{cat}</h2>
+                  <div className="space-y-4">
+                    {catDishes.map(dish => <DishCard key={dish.id} dish={dish} />)}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
 
           {!isLoading && filteredDishes.length === 0 && searchQuery && (

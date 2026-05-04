@@ -323,21 +323,13 @@ export async function toggleAvailability(
   if (error) throw error
 }
 
-const getCategoriesCached = unstable_cache(
-  async () => {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('order_index', { ascending: true })
-    if (error) throw error
-    return data
-  },
-  ['categories'],
-  { revalidate: 300, tags: ['categories'] }
-)
-
 export async function getCategories() {
-  return getCategoriesCached()
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('order_index', { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function addCategory(name: string) {
