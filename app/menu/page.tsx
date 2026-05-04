@@ -14,6 +14,7 @@ import { getOrCreateSessionId } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 import { NotificationPrompt } from "@/components/NotificationPrompt";
+import { isSameCategory, normalizeCategory, toSingular } from "@/lib/utils";
 
 const PREVIEW_LIMIT = 6;
 
@@ -34,6 +35,7 @@ function MenuPageContent() {
   const { totalItems, addItem, items } = useCart();
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
+  const [showSpicyOnly, setShowSpicyOnly] = useState(false);
 
   useEffect(() => {
     const currentCategory = searchParams.get("category") || "All";
@@ -106,6 +108,7 @@ function MenuPageContent() {
           }
           return clean(dish.image_url) || clean(dish.image) || "";
         })(),
+        spiceLevel: Number(dish.spice_level ?? 0),
         hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
         isChefSpecial: dish.is_chef_special ?? false,
         isGuestFavorite: dish.is_guest_favorite ?? false,
@@ -144,9 +147,6 @@ function MenuPageContent() {
     return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
-  const normalizeCategory = (cat: string | null | undefined) => (cat || "").toLowerCase().replace(/\s+/g, " ").trim();
-  const toSingular = (v: string | null | undefined) => normalizeCategory(v).split(" ").map(w => { if (w.length <= 3) return w; if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y"; if (w.endsWith("ss")) return w; if (w.endsWith("s")) return w.slice(0, -1); return w; }).join(" ");
-  const isSameCategory = (l: string | null | undefined, r: string | null | undefined) => { const nl = normalizeCategory(l), nr = normalizeCategory(r); if (!nl || !nr) return false; if (nl === nr) return true; return toSingular(nl) === toSingular(nr); };
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
   const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
   const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc.includes(na) || na.includes(nc); }); }) || null;
@@ -166,7 +166,8 @@ function MenuPageContent() {
     const sl = searchQuery.toLowerCase().trim();
     const matchesSearch = !sl || name.includes(sl) || desc.includes(sl);
     const matchesCategory = sl ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
-    return matchesSearch && matchesCategory;
+    const matchesSpice = !showSpicyOnly || d.spiceLevel === 3;
+    return matchesSearch && matchesCategory && matchesSpice;
   }).map(d => ({ ...d, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }));
 
   const getGuestFavorites = () => {
@@ -273,7 +274,11 @@ function MenuPageContent() {
         <div className="relative flex-1 min-w-0">
           <h3 className={`font-serif leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 ${isSpecial ? "text-[17px]" : "text-[15px]"}`}>{dish.name}</h3>
           {dish.tasteDescription && <p className={`mt-0.5 italic text-[color:var(--brand-gold-muted)] line-clamp-1 ${isSpecial ? "text-[13px]" : "text-[12px]"}`}>{dish.tasteDescription}</p>}
-          {dish.hasSpiceIndicator && <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>🔥 Spicy</span>}
+          {dish.spiceLevel > 0 && (
+            <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>
+              {"🔥".repeat(dish.spiceLevel)} {dish.spiceLevel === 1 ? "Low" : dish.spiceLevel === 2 ? "Medium" : "High"}
+            </span>
+          )}
           <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>₹{dish.price}</p>
         </div>
         <div className="relative flex shrink-0 flex-col items-center">
@@ -382,6 +387,17 @@ function MenuPageContent() {
                     </button>
                   ))}
                 </div>
+                {/* Spice filter */}
+                <button
+                  onClick={() => setShowSpicyOnly(!showSpicyOnly)}
+                  aria-label={showSpicyOnly ? "Show all items" : "Show only high spice items"}
+                  className={`grid h-8 w-8 place-items-center rounded-full border transition-all ${showSpicyOnly
+                    ? "bg-orange-600 border-orange-500 text-white shadow-[0_0_12px_rgba(234,88,12,0.4)]"
+                    : "border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] hover:border-[color:var(--brand-gold)]/60"
+                    }`}
+                >
+                  <span className={showSpicyOnly ? "animate-pulse" : ""}>🔥</span>
+                </button>
                 {/* Cart button */}
                 <button onClick={() => setIsCartOpen(true)} aria-label={`View cart, ${totalItems} items`}
                   className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
@@ -461,20 +477,28 @@ function MenuPageContent() {
 
         {/* ── Loading state ── */}
         {isLoading && dishes.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20">
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <RefreshCw className="h-8 w-8 animate-spin text-[color:var(--brand-gold)] mb-3" />
             <p className="text-[13px] text-[color:var(--brand-gold-muted)]">Loading menu…</p>
           </div>
         )}
 
-        {/* ── Discovery sections (All + no search) ── */}
-        {activeCategory === "All" && !searchQuery && (
+        {/* ── Discovery sections (All + no search + no spice filter) ── */}
+        {activeCategory === "All" && !searchQuery && !showSpicyOnly && (
           <>
             {getTodaysSpecials().length > 0 && (
               <section className="mt-6">
-                <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("todaysSpecial") || "Today's Special"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Fresh from the kitchen today</p>
+                <div 
+                  onClick={() => router.push("/todays-special")}
+                  className="flex items-center justify-between px-4 cursor-pointer group"
+                >
+                  <div>
+                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("todaysSpecial") || "Today's Special"}</h2>
+                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Fresh from the kitchen today</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
+                    See All <ChevronRight className="h-3 w-3" />
+                  </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
                   {getTodaysSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
@@ -483,9 +507,17 @@ function MenuPageContent() {
             )}
             {getChefSpecials().length > 0 && (
               <section className="mt-6">
-                <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("chefFavourites") || "Chef's Favourites"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Hand-picked by our chef</p>
+                <div 
+                  onClick={() => router.push("/chefs-favourites")}
+                  className="flex items-center justify-between px-4 cursor-pointer group"
+                >
+                  <div>
+                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("chefFavourites") || "Chef's Favourites"}</h2>
+                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Hand-picked by our chef</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
+                    See All <ChevronRight className="h-3 w-3" />
+                  </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
                   {getChefSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
@@ -494,9 +526,17 @@ function MenuPageContent() {
             )}
             {getGuestFavorites().length > 0 && (
               <section className="mt-6">
-                <div className="px-4">
-                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)]">{t("mostLoved") || "Most Loved"}</h2>
-                  <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Guest favourites at Taksh</p>
+                <div 
+                  onClick={() => router.push("/most-loved")}
+                  className="flex items-center justify-between px-4 cursor-pointer group"
+                >
+                  <div>
+                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("mostLoved") || "Most Loved"}</h2>
+                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Guest favourites at Taksh</p>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
+                    See All <ChevronRight className="h-3 w-3" />
+                  </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
                   {getGuestFavorites().map(dish => <ScrollCard key={dish.id} dish={dish} showRating />)}

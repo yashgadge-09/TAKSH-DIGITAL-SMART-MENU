@@ -276,7 +276,9 @@ export async function getAllDishesAdmin(timestamp?: number) {
     query = query.neq('name_en', `CACHE_BUST_${timestamp}`);
   }
 
-  const { data, error } = await query.order('created_at', { ascending: true });
+  const { data, error } = await query
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
   if (error) throw error
   return data
 }
