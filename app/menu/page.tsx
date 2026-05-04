@@ -18,13 +18,7 @@ import { isSameCategory, normalizeCategory, toSingular } from "@/lib/utils";
 
 const PREVIEW_LIMIT = 6;
 
-const MAIN_PREVIEW_CATEGORIES = [
-  { label: "Breakfast", aliases: ["breakfast"] },
-  { label: "Tandoor Starters", aliases: ["tandoors", "tandoor starters", "tandoori starters", "tandoor starter", "tandoori starter"] },
-  { label: "Main Course", aliases: ["main course", "maincourse"] },
-  { label: "South Indian", aliases: ["south indian", "southindian"] },
-  { label: "Chinese", aliases: ["chinese"] },
-];
+
 
 type MostLovedRatingRow = { dishId: string; averageRating: number; ratingsCount: number };
 
@@ -100,11 +94,13 @@ function MenuPageContent() {
         tasteRaw: { en: dish.taste_en || dish.taste_description_en || "", hi: dish.taste_hi || dish.taste_description_hi || dish.taste_en || "", mr: dish.taste_mr || dish.taste_description_mr || dish.taste_en || "" },
         ingredientsRaw: { en: Array.isArray(dish.ingredients_en) ? dish.ingredients_en : [], hi: Array.isArray(dish.ingredients_hi) ? dish.ingredients_hi : [], mr: Array.isArray(dish.ingredients_mr) ? dish.ingredients_mr : [] },
         image: (() => {
-          if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
+          const PLACEHOLDER = "images.unsplash.com";
+          const clean = (url: string) => url && !url.includes(PLACEHOLDER) ? url : "";
+          if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return clean(dish.image_url[0]);
           if (typeof dish.image_url === "string" && dish.image_url.startsWith("[")) {
-            try { const p = JSON.parse(dish.image_url); if (Array.isArray(p) && p.length > 0) return p[0]; } catch { }
+            try { const p = JSON.parse(dish.image_url); if (Array.isArray(p) && p.length > 0) return clean(p[0]); } catch { }
           }
-          return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+          return clean(dish.image_url) || clean(dish.image) || "";
         })(),
         spiceLevel: Number(dish.spice_level ?? 0),
         hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
@@ -115,13 +111,18 @@ function MenuPageContent() {
       }));
       setDishes(mappedDishes);
       setMostLovedRatings(Array.isArray(liveMostLovedRatings) ? liveMostLovedRatings : []);
-      const categoryNames = Array.isArray(categoryData) ? categoryData.map((c: any) => String(c?.name || "").trim()).filter(Boolean) : [];
-      if (categoryNames.length > 0) {
-        setCategories(categoryNames);
-        const imgMap: Record<string, string | null> = {};
-        (categoryData as any[]).forEach((c: any) => { if (c?.name) imgMap[String(c.name).trim().toLowerCase()] = c.image_url || null; });
-        setCategoryImageMap(imgMap);
-      } else { const cats = new Set<string>(); mappedDishes.forEach((d: any) => { if (d.category) cats.add(d.category); }); setCategories(Array.from(cats)); }
+      const categoryNames = Array.isArray(categoryData) 
+        ? Array.from(new Set(categoryData.map((c: any) => String(c?.name || "").trim()).filter(Boolean)))
+        : [];
+      setCategories(categoryNames);
+      
+      const imgMap: Record<string, string | null> = {};
+      if (Array.isArray(categoryData)) {
+        categoryData.forEach((c: any) => { 
+          if (c?.name) imgMap[String(c.name).trim().toLowerCase()] = c.image_url || null; 
+        });
+      }
+      setCategoryImageMap(imgMap);
     } catch (err) { console.error("Failed to load dishes", err); }
     finally { setIsLoading(false); }
   };
@@ -147,16 +148,7 @@ function MenuPageContent() {
 
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
   const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
-  const resolveCategoryFromAliases = (aliases: string[]) => categories.find(c => { const nc = normalizeCategory(c); return aliases.some(a => { const na = normalizeCategory(a); return nc === na || nc === na + 's' || nc + 's' === na; }); }) || null;
-
-  const resolvedPreviewCategories = MAIN_PREVIEW_CATEGORIES.map(item => ({ label: item.label, categoryValue: resolveCategoryFromAliases(item.aliases) })).filter((item): item is { label: string; categoryValue: string } => Boolean(item.categoryValue));
-  const mappedCategoryValues = new Set(resolvedPreviewCategories.map(p => p.categoryValue));
-  const previewCategories = [...resolvedPreviewCategories];
-  categories.forEach(c => {
-    if (c.toLowerCase() !== "all" && !mappedCategoryValues.has(c)) {
-      previewCategories.push({ label: c, categoryValue: c });
-    }
-  });
+  const previewCategories = menuTabs.map(c => ({ label: c, categoryValue: c }));
 
   const filteredDishes = dishes.filter(d => {
     const name = (d.nameRaw[lang] || "").toLowerCase();
@@ -280,12 +272,23 @@ function MenuPageContent() {
           <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>₹{dish.price}</p>
         </div>
         <div className="relative flex shrink-0 flex-col items-center">
-          <div className={`overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
-            {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes("/video/upload/")) ? (
-              <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
+          <div className={`relative overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
+            {dish.image ? (
+              <>
+                {(dish.image.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image.includes("/video/upload/")) ? (
+                  <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
+                ) : (
+                  <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                )}
+                <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
+                  <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+                </div>
+              </>
             ) : (
-              <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
-                onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"; }} />
+              <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
+                <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+              </div>
             )}
           </div>
           <button
@@ -306,11 +309,22 @@ function MenuPageContent() {
       className="flex w-[170px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-20px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden">
-        {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes("/video/upload/")) ? (
-          <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
+        {dish.image ? (
+          <>
+            {(dish.image.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image.includes("/video/upload/")) ? (
+              <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
+            ) : (
+              <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            )}
+            <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
+              <span className="text-[12px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+            </div>
+          </>
         ) : (
-          <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
-            onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"; }} />
+          <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
+            <span className="text-[12px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+          </div>
         )}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-3">
@@ -464,7 +478,7 @@ function MenuPageContent() {
           <>
             {getTodaysSpecials().length > 0 && (
               <section className="mt-6">
-                <div 
+                <div
                   onClick={() => router.push("/todays-special")}
                   className="flex items-center justify-between px-4 cursor-pointer group"
                 >
@@ -483,7 +497,7 @@ function MenuPageContent() {
             )}
             {getChefSpecials().length > 0 && (
               <section className="mt-6">
-                <div 
+                <div
                   onClick={() => router.push("/chefs-favourites")}
                   className="flex items-center justify-between px-4 cursor-pointer group"
                 >
@@ -502,7 +516,7 @@ function MenuPageContent() {
             )}
             {getGuestFavorites().length > 0 && (
               <section className="mt-6">
-                <div 
+                <div
                   onClick={() => router.push("/most-loved")}
                   className="flex items-center justify-between px-4 cursor-pointer group"
                 >
@@ -545,14 +559,17 @@ function MenuPageContent() {
               );
             })
           ) : (
-            Object.entries(groupedDishes).map(([cat, catDishes]) => (
-              <div key={cat} className="mb-8" id={getCategorySectionId(cat)}>
-                <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] mb-4">{cat}</h2>
-                <div className="space-y-4">
-                  {catDishes.map(dish => <DishCard key={dish.id} dish={dish} />)}
+            Array.from(new Set([...menuTabs, ...Object.keys(groupedDishes)])).filter(cat => groupedDishes[cat] && groupedDishes[cat].length > 0).map(cat => {
+              const catDishes = groupedDishes[cat];
+              return (
+                <div key={cat} className="mb-8" id={getCategorySectionId(cat)}>
+                  <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] mb-4">{cat}</h2>
+                  <div className="space-y-4">
+                    {catDishes.map(dish => <DishCard key={dish.id} dish={dish} />)}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
 
           {!isLoading && filteredDishes.length === 0 && (

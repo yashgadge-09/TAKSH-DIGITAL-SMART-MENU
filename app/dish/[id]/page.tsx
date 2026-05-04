@@ -97,26 +97,26 @@ export default function DishDetailPage() {
         rawDish[`tasteDescription_${lang}`] ||
         (rawDish.taste_description?.[lang] ?? rawDish.tasteDescription?.[lang] ?? rawDish.taste_en ?? rawDish.tasteDescription?.en ?? ""),
       images: (() => {
-        if (Array.isArray(rawDish.image_url) && rawDish.image_url.length > 0) return rawDish.image_url;
+        const PLACEHOLDER = "images.unsplash.com";
+        const clean = (url: string) => url && !url.includes(PLACEHOLDER) ? url : "";
+        if (Array.isArray(rawDish.image_url) && rawDish.image_url.length > 0) {
+          const cleaned = rawDish.image_url.map(clean).filter(Boolean);
+          if (cleaned.length > 0) return cleaned;
+        }
         if (typeof rawDish.image_url === "string" && rawDish.image_url.startsWith("[")) {
           try {
             const parsed = JSON.parse(rawDish.image_url);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const cleaned = parsed.map(clean).filter(Boolean);
+              return cleaned.length > 0 ? cleaned : [""];
+            }
           } catch (e) {
-            return [rawDish.image_url];
+            return [clean(rawDish.image_url)];
           }
         }
 
-        const fallbackImage =
-          rawDish.image_url ||
-          rawDish.image ||
-          "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
-
-        return Array.isArray(fallbackImage)
-          ? (fallbackImage.length > 0
-            ? fallbackImage
-            : ["https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"])
-          : [fallbackImage];
+        const fallbackImage = clean(rawDish.image_url) || clean(rawDish.image) || "";
+        return [fallbackImage];
       })(),
       spiceLevel: Number(rawDish.spice_level ?? 0),
       hasSpiceIndicator: Number(rawDish.spice_level ?? 0) > 0,
@@ -253,7 +253,7 @@ export default function DishDetailPage() {
 
     const itemImage = (Array.isArray(dish.images) && dish.images.length > 0)
       ? dish.images[0]
-      : (dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop");
+      : (dish.image || "");
 
     for (let i = 0; i < qty; i++) {
       addItem({
@@ -309,10 +309,11 @@ export default function DishDetailPage() {
     recommendedDish?.name ||
     "";
 
-  const getRecommendationImage = (recommendedDish: any) =>
-    recommendedDish?.image ||
-    recommendedDish?.image_url ||
-    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+  const getRecommendationImage = (recommendedDish: any) => {
+    const PLACEHOLDER = "images.unsplash.com";
+    const raw = recommendedDish?.image || recommendedDish?.image_url || "";
+    return raw && !raw.includes(PLACEHOLDER) ? raw : "";
+  };
 
   const recommendationIds = new Set(recommendations.map((item) => item.id));
   const uniqueMoreLikeThisDishes = moreLikeThisDishes.filter(
@@ -355,24 +356,36 @@ export default function DishDetailPage() {
       >
         <div className="relative w-full max-w-[100vw] md:max-w-[min(50vw,50vh)]">
           <div className="relative aspect-square w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]">
-            {(dish.images[0]?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.images[0]?.includes('/video/upload/')) ? (
-              <video
-                src={dish.images[0]}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              />
+            {dish.images[0] ? (
+              <>
+                {(dish.images[0].match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.images[0].includes('/video/upload/')) ? (
+                  <video
+                    src={dish.images[0]}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={dish.images[0]}
+                    alt={dish.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                )}
+                <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg)] p-4 text-center pointer-events-none">
+                   <span className="text-[14px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+                </div>
+              </>
             ) : (
-              <img
-                src={dish.images[0]}
-                alt={dish.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'
-                }}
-              />
+              <div className="flex w-full h-full items-center justify-center bg-[color:var(--brand-bg)] p-4 text-center">
+                 <span className="text-[14px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+              </div>
             )}
             {/* Soft inner top gradient for sticky-controls legibility */}
             <div
@@ -568,15 +581,26 @@ export default function DishDetailPage() {
                   className="group flex w-[130px] shrink-0 flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
                 >
                   <div className="relative aspect-square w-full overflow-hidden">
-                    {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
-                      <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
+                    {getRecommendationImage(item) ? (
+                      <>
+                        {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
+                          <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
+                        ) : (
+                          <img
+                            src={String(getRecommendationImage(item))}
+                            alt={getRecommendationName(item)}
+                            className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+                          />
+                        )}
+                        <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
+                          <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+                        </div>
+                      </>
                     ) : (
-                      <img
-                        src={String(getRecommendationImage(item))}
-                        alt={getRecommendationName(item)}
-                        className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-                        onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop' }}
-                      />
+                      <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
+                        <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-col gap-0.5 px-2.5 py-2">
@@ -624,15 +648,26 @@ export default function DishDetailPage() {
                     className="group flex w-[140px] shrink-0 flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg)] ring-1 ring-[color:var(--brand-gold)]/15 transition hover:ring-[color:var(--brand-gold)]/40"
                   >
                     <div className="relative aspect-[4/3] w-full overflow-hidden">
-                      {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
-                        <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
+                      {getRecommendationImage(item) ? (
+                        <>
+                          {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
+                            <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
+                          ) : (
+                            <img
+                              src={String(getRecommendationImage(item))}
+                              alt={getRecommendationName(item)}
+                              className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+                            />
+                          )}
+                          <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
+                            <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+                          </div>
+                        </>
                       ) : (
-                        <img
-                          src={String(getRecommendationImage(item))}
-                          alt={getRecommendationName(item)}
-                          className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-                          onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop' }}
-                        />
+                        <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
+                          <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+                        </div>
                       )}
                     </div>
                     <div className="flex flex-col gap-1 px-2.5 py-2">
