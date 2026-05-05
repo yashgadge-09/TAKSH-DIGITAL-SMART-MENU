@@ -38,8 +38,8 @@ export function NotificationPrompt() {
           setShowPrompt(true);
         }
       } else {
-        // First time: show after 7 seconds of page load
-        if (now - startTime >= 7000) {
+        // First time: show after 60 seconds of page load
+        if (now - startTime >= 60000) {
           setShowPrompt(true);
         }
       }
