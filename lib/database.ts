@@ -1,7 +1,13 @@
 "use server"
 
 import { supabase } from './supabase'
+import { createClient } from '@supabase/supabase-js'
 import { unstable_cache } from 'next/cache'
+
+const adminSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE!
+)
 
 function normalizeImageUrl(imageUrl: unknown): string {
   if (typeof imageUrl === 'string' && imageUrl.startsWith('[')) {
@@ -267,7 +273,7 @@ export async function getDishById(id: string, timestamp?: number) {
 }
 
 export async function getAllDishesAdmin(timestamp?: number) {
-  let query = supabase
+  let query = adminSupabase
     .from('dishes')
     .select('*');
 
@@ -284,7 +290,7 @@ export async function getAllDishesAdmin(timestamp?: number) {
 }
 
 export async function addDish(dish: any) {
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from('dishes')
     .insert(dish)
     .select()
@@ -294,18 +300,18 @@ export async function addDish(dish: any) {
 }
 
 export async function updateDish(id: string, dish: any) {
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from('dishes')
     .update(dish)
     .eq('id', id)
     .select()
-    .single()
+    .maybeSingle()
   if (error) throw error
   return data
 }
 
 export async function deleteDish(id: string) {
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from('dishes')
     .delete()
     .eq('id', id)
@@ -316,7 +322,7 @@ export async function toggleAvailability(
   id: string,
   isAvailable: boolean
 ) {
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from('dishes')
     .update({ is_available: isAvailable })
     .eq('id', id)
@@ -333,17 +339,17 @@ export async function getCategories() {
 }
 
 export async function addCategory(name: string) {
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from('categories')
     .insert({ name })
     .select()
-    .single()
+    .maybeSingle()
   if (error) throw error
   return data
 }
 
 export async function deleteCategory(id: string) {
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from('categories')
     .delete()
     .eq('id', id)
@@ -351,12 +357,12 @@ export async function deleteCategory(id: string) {
 }
 
 export async function updateCategory(id: string, payload: { image_url?: string | null }) {
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from('categories')
     .update(payload)
     .eq('id', id)
     .select()
-    .single()
+    .maybeSingle()
   if (error) throw error
   return data
 }
@@ -372,7 +378,7 @@ export async function getPublicReviews() {
 }
 
 export async function getAllReviewsAdmin() {
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from('reviews')
     .select('*')
     .order('created_at', { ascending: false })
@@ -397,7 +403,7 @@ export async function toggleReviewVisibility(
   id: string,
   isPublic: boolean
 ) {
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from('reviews')
     .update({ is_public: isPublic })
     .eq('id', id)
@@ -405,7 +411,7 @@ export async function toggleReviewVisibility(
 }
 
 export async function trackMenuView() {
-  await supabase
+  await adminSupabase
     .from('menu_views')
     .insert({ page: 'menu' })
 }
@@ -415,7 +421,7 @@ export async function trackDishView(
   dishName: string,
   category: string
 ) {
-  await supabase
+  await adminSupabase
     .from('dish_views')
     .insert({
       dish_id: dishId,
@@ -430,7 +436,7 @@ export async function trackCartEvent(
   category: string,
   price: number
 ) {
-  await supabase
+  await adminSupabase
     .from('cart_events')
     .insert({
       dish_id: dishId,
@@ -454,7 +460,7 @@ export async function trackFavourite(
     updated_at: new Date().toISOString(),
   }
 
-  let { error } = await supabase
+  let { error } = await adminSupabase
     .from('favourites')
     .upsert(payload, {
       onConflict: 'dish_id,session_id',
@@ -464,7 +470,7 @@ export async function trackFavourite(
   // Backward compatibility for environments where newer columns are not applied yet.
   if (error?.code === '42703') {
     if (isActive) {
-      const fallbackUpsert = await supabase
+      const fallbackUpsert = await adminSupabase
         .from('favourites')
         .upsert(
           {
@@ -479,7 +485,7 @@ export async function trackFavourite(
         )
       error = fallbackUpsert.error
     } else {
-      const fallbackDelete = await supabase
+      const fallbackDelete = await adminSupabase
         .from('favourites')
         .delete()
         .eq('dish_id', dishId)
@@ -614,7 +620,7 @@ export async function submitDishRatingsFromOrder(
     updated_at: now,
   }))
 
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from('dish_ratings')
     .insert(payload)
 
@@ -636,30 +642,30 @@ export async function getMostLovedDishRatings(limit = 10) {
 
   const aggregate = new Map<string, { total: number; count: number; lastRatedAt: string }>()
 
-  ;(data || []).forEach((row: any) => {
-    const dishId = String(row?.dish_id || '').trim()
-    const rating = Number(row?.rating || 0)
-    const updatedAt = String(row?.updated_at || '')
+    ; (data || []).forEach((row: any) => {
+      const dishId = String(row?.dish_id || '').trim()
+      const rating = Number(row?.rating || 0)
+      const updatedAt = String(row?.updated_at || '')
 
-    if (!dishId) return
-    if (!Number.isFinite(rating) || rating < 1 || rating > 5) return
+      if (!dishId) return
+      if (!Number.isFinite(rating) || rating < 1 || rating > 5) return
 
-    const existing = aggregate.get(dishId)
-    if (!existing) {
+      const existing = aggregate.get(dishId)
+      if (!existing) {
+        aggregate.set(dishId, {
+          total: rating,
+          count: 1,
+          lastRatedAt: updatedAt,
+        })
+        return
+      }
+
       aggregate.set(dishId, {
-        total: rating,
-        count: 1,
-        lastRatedAt: updatedAt,
+        total: existing.total + rating,
+        count: existing.count + 1,
+        lastRatedAt: updatedAt > existing.lastRatedAt ? updatedAt : existing.lastRatedAt,
       })
-      return
-    }
-
-    aggregate.set(dishId, {
-      total: existing.total + rating,
-      count: existing.count + 1,
-      lastRatedAt: updatedAt > existing.lastRatedAt ? updatedAt : existing.lastRatedAt,
     })
-  })
 
   return Array.from(aggregate.entries())
     .map(([dishId, value]) => ({
@@ -790,29 +796,29 @@ export async function getAnalyticsData(days = 7) {
     favouritesAll,
     reviewsAll
   ] = await Promise.all([
-    supabase
+    adminSupabase
       .from('menu_views')
       .select('*', { count: 'exact' })
       .gte('created_at', todayISO),
-    supabase
+    adminSupabase
       .from('menu_views')
       .select('created_at')
       .gte('created_at', weekStartISO),
-    supabase
+    adminSupabase
       .from('dish_views')
       .select('dish_name, category, created_at')
       .gte('created_at', previousWeekStartISO),
-    supabase
+    adminSupabase
       .from('cart_events')
       .select('dish_name, category, price, created_at'),
-    supabase
+    adminSupabase
       .from('cart_events')
       .select('price')
       .gte('created_at', todayISO),
-    supabase
+    adminSupabase
       .from('favourites')
       .select('id, dish_name, created_at, session_id, is_active, updated_at'),
-    supabase
+    adminSupabase
       .from('reviews')
       .select('id, stars, is_public, text, reviewer, dishes, created_at')
   ])
@@ -825,7 +831,7 @@ export async function getAnalyticsData(days = 7) {
   let favouritesError = favouritesAll.error
 
   if (favouritesError && favouritesError.code === '42703') {
-    const fallbackFavourites = await supabase
+    const fallbackFavourites = await adminSupabase
       .from('favourites')
       .select('id, dish_name, created_at, session_id')
 
@@ -838,7 +844,7 @@ export async function getAnalyticsData(days = 7) {
   }
 
   if (favouritesError && favouritesError.code === '42703') {
-    const fallbackLegacy = await supabase
+    const fallbackLegacy = await adminSupabase
       .from('favourites')
       .select('id, dish_name, created_at')
 
@@ -916,8 +922,8 @@ export async function getAnalyticsData(days = 7) {
 
   const reviews = reviewsAll.data || []
   const avgRating = reviews.length > 0
-    ? reviews.reduce((sum, r) => sum + r.stars, 0) 
-      / reviews.length
+    ? reviews.reduce((sum, r) => sum + r.stars, 0)
+    / reviews.length
     : 0
 
   const dayBuckets = buildDayBuckets(safeDays)
