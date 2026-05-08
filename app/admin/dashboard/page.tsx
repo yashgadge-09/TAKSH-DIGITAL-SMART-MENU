@@ -36,7 +36,7 @@ export default function DashboardPage() {
   }, [])
 
   const menuViewsToday = analytics?.menuViewsToday ?? 0
-  const estimatedRevenueToday = analytics?.estimatedRevenueToday ?? 0
+
   const trendingDish = analytics?.topDishViews?.[0]?.name ?? "—"
   const trendingCount = analytics?.topDishViews?.[0]?.count ?? 0
 
@@ -50,7 +50,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Today's QR Scans */}
         <div className={metricCardClass}>
           <div className="flex items-start justify-between mb-4">
@@ -65,19 +65,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Estimated Revenue */}
-        <div className={metricCardClass}>
-          <div className="flex items-start justify-between mb-4">
-            <span className="text-[#8E6D4E] text-sm">Estimated revenue</span>
-            <Wallet className="w-5 h-5 text-[#A46833]" />
-          </div>
-          <div className="text-[#2C1810] font-bold text-4xl mb-1 leading-none">
-            {isLoading ? "..." : `₹${estimatedRevenueToday.toLocaleString("en-IN")}`}
-          </div>
-          <div className="text-[#8E6D4E] text-sm">
-            {isLoading ? "Loading..." : "Estimated from cart events"}
-          </div>
-        </div>
+
 
         {/* Trending Category */}
         <div className={metricCardClass}>
