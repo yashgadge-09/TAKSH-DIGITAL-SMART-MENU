@@ -31,3 +31,22 @@ export function getOrCreateSessionId() {
 export function getFavouriteSessionKey(sessionId: string, dishId: string) {
   return `taksh:favourited:${sessionId}:${dishId}`
 }
+
+export function shouldTrackClientEvent(eventKey: string, cooldownMs = 30000) {
+  if (typeof window === "undefined") return false
+
+  const key = `taksh:last-event:${eventKey}`
+  const now = Date.now()
+  const localPrev = Number(window.localStorage.getItem(key) || 0)
+  const sessionPrev = Number(window.sessionStorage.getItem(key) || 0)
+  const prev = Math.max(localPrev, sessionPrev)
+
+  if (Number.isFinite(prev) && now - prev <= cooldownMs) {
+    return false
+  }
+
+  const next = String(now)
+  window.localStorage.setItem(key, next)
+  window.sessionStorage.setItem(key, next)
+  return true
+}

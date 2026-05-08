@@ -3,11 +3,83 @@
 import { supabase } from './supabase'
 import { createClient } from '@supabase/supabase-js'
 import { unstable_cache } from 'next/cache'
+import { headers } from 'next/headers'
 
 const adminSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE!
 )
+
+function parseHostname(value: string | null | undefined) {
+  if (!value) return ''
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+
+  try {
+    if (trimmed.includes('://')) {
+      return new URL(trimmed).hostname.toLowerCase()
+    }
+  } catch {
+    return ''
+  }
+
+  const withoutPort = trimmed.split('/')[0]?.split(':')[0] || ''
+  return withoutPort.toLowerCase()
+}
+
+function isLocalHostname(hostname: string) {
+  if (!hostname) return false
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.endsWith('.localhost')
+  )
+}
+
+function matchesAllowedHost(hostname: string, allowedHost: string) {
+  if (!hostname || !allowedHost) return false
+  return hostname === allowedHost || hostname.endsWith(`.${allowedHost}`)
+}
+
+function getAllowedTrackingHosts() {
+  const rawHosts = [
+    process.env.ANALYTICS_ALLOWED_HOSTS,
+    process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_URL,
+  ]
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(','))
+    .map((value) => parseHostname(value))
+    .filter(Boolean)
+
+  return Array.from(new Set(rawHosts))
+}
+
+async function shouldTrackProductionTrafficOnly() {
+  const requestHeaders = await headers()
+  const candidates = [
+    requestHeaders.get('origin'),
+    requestHeaders.get('referer'),
+    requestHeaders.get('x-forwarded-host'),
+    requestHeaders.get('host'),
+  ]
+    .map((value) => parseHostname(value))
+    .filter(Boolean)
+
+  if (!candidates.length) return false
+  if (candidates.some((hostname) => isLocalHostname(hostname))) return false
+
+  const allowedHosts = getAllowedTrackingHosts()
+  if (!allowedHosts.length) return true
+
+  return candidates.some((hostname) =>
+    allowedHosts.some((allowedHost) => matchesAllowedHost(hostname, allowedHost))
+  )
+}
 
 function normalizeImageUrl(imageUrl: unknown): string {
   if (typeof imageUrl === 'string' && imageUrl.startsWith('[')) {
@@ -411,6 +483,7 @@ export async function toggleReviewVisibility(
 }
 
 export async function trackMenuView() {
+  if (!(await shouldTrackProductionTrafficOnly())) return
   await adminSupabase
     .from('menu_views')
     .insert({ page: 'menu' })
@@ -421,6 +494,7 @@ export async function trackDishView(
   dishName: string,
   category: string
 ) {
+  if (!(await shouldTrackProductionTrafficOnly())) return
   await adminSupabase
     .from('dish_views')
     .insert({
@@ -700,7 +774,7 @@ function buildDayBuckets(days: number) {
     date.setHours(0, 0, 0, 0)
     date.setDate(date.getDate() - offset)
 
-    const key = date.toISOString().slice(0, 10)
+    const key = formatLocalDayKey(date)
     const label = date.toLocaleDateString('en-US', { weekday: 'short' })
 
     buckets.push({
@@ -713,6 +787,13 @@ function buildDayBuckets(days: number) {
   }
 
   return buckets
+}
+
+function formatLocalDayKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function parseReviewDishes(value: unknown): string[] {
@@ -750,7 +831,9 @@ function parseReviewDishes(value: unknown): string[] {
 
 function normalizeDayKey(value: string | null | undefined) {
   if (!value) return ''
-  return value.slice(0, 10)
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10)
+  return formatLocalDayKey(parsed)
 }
 
 function toShortDate(value: string | null | undefined) {
@@ -783,18 +866,14 @@ export async function getAnalyticsData(days = 7) {
   weekStart.setDate(today.getDate() - (safeDays - 1))
   const weekStartISO = weekStart.toISOString()
 
-  const previousWeekStart = new Date(weekStart)
-  previousWeekStart.setDate(weekStart.getDate() - safeDays)
-  const previousWeekStartISO = previousWeekStart.toISOString()
-
   const [
     menuViewsToday,
-    menuViewsLast7,
-    dishViewsAll,
-    cartEventsAll,
+    menuViewsInRange,
+    dishViewsInRange,
+    cartEventsInRange,
     cartEventsToday,
-    favouritesAll,
-    reviewsAll
+    favouritesInRange,
+    reviewsInRange
   ] = await Promise.all([
     adminSupabase
       .from('menu_views')
@@ -807,33 +886,37 @@ export async function getAnalyticsData(days = 7) {
     adminSupabase
       .from('dish_views')
       .select('dish_name, category, created_at')
-      .gte('created_at', previousWeekStartISO),
+      .gte('created_at', weekStartISO),
     adminSupabase
       .from('cart_events')
-      .select('dish_name, category, price, created_at'),
+      .select('dish_name, category, price, created_at')
+      .gte('created_at', weekStartISO),
     adminSupabase
       .from('cart_events')
       .select('price')
       .gte('created_at', todayISO),
     adminSupabase
       .from('favourites')
-      .select('id, dish_name, created_at, session_id, is_active, updated_at'),
+      .select('id, dish_name, created_at, session_id, is_active, updated_at')
+      .gte('created_at', weekStartISO),
     adminSupabase
       .from('reviews')
       .select('id, stars, is_public, text, reviewer, dishes, created_at')
+      .gte('created_at', weekStartISO)
   ])
 
-  let favouritesRows = (favouritesAll.data || []).map((row: any) => ({
+  let favouritesRows = (favouritesInRange.data || []).map((row: any) => ({
     ...row,
     is_active: row.is_active ?? true,
     updated_at: row.updated_at ?? row.created_at,
   }))
-  let favouritesError = favouritesAll.error
+  let favouritesError = favouritesInRange.error
 
   if (favouritesError && favouritesError.code === '42703') {
     const fallbackFavourites = await adminSupabase
       .from('favourites')
       .select('id, dish_name, created_at, session_id')
+      .gte('created_at', weekStartISO)
 
     favouritesRows = (fallbackFavourites.data || []).map((row) => ({
       ...row,
@@ -847,6 +930,7 @@ export async function getAnalyticsData(days = 7) {
     const fallbackLegacy = await adminSupabase
       .from('favourites')
       .select('id, dish_name, created_at')
+      .gte('created_at', weekStartISO)
 
     favouritesRows = (fallbackLegacy.data || []).map((row) => ({
       ...row,
@@ -859,12 +943,12 @@ export async function getAnalyticsData(days = 7) {
 
   const queryErrors = [
     menuViewsToday.error,
-    menuViewsLast7.error,
-    dishViewsAll.error,
-    cartEventsAll.error,
+    menuViewsInRange.error,
+    dishViewsInRange.error,
+    cartEventsInRange.error,
     cartEventsToday.error,
     favouritesError,
-    reviewsAll.error,
+    reviewsInRange.error,
   ].filter(Boolean)
 
   const queryWarning = queryErrors.length
@@ -873,26 +957,19 @@ export async function getAnalyticsData(days = 7) {
 
   const dishViewCounts: Record<string, number> = {}
   const weeklyDishViewCounts: Record<string, { count: number; category: string }> = {}
-  const previousWeeklyDishCounts: Record<string, number> = {}
 
-  dishViewsAll.data?.forEach(view => {
+  dishViewsInRange.data?.forEach(view => {
     dishViewCounts[view.dish_name] =
       (dishViewCounts[view.dish_name] || 0) + 1
 
-    const dayKey = normalizeDayKey(view.created_at)
-    if (dayKey >= normalizeDayKey(weekStartISO)) {
-      weeklyDishViewCounts[view.dish_name] = {
-        count: (weeklyDishViewCounts[view.dish_name]?.count || 0) + 1,
-        category: view.category || 'General',
-      }
-    } else {
-      previousWeeklyDishCounts[view.dish_name] =
-        (previousWeeklyDishCounts[view.dish_name] || 0) + 1
+    weeklyDishViewCounts[view.dish_name] = {
+      count: (weeklyDishViewCounts[view.dish_name]?.count || 0) + 1,
+      category: view.category || 'General',
     }
   })
 
   const cartCounts: Record<string, number> = {}
-  cartEventsAll.data?.forEach(event => {
+  cartEventsInRange.data?.forEach(event => {
     cartCounts[event.dish_name] =
       (cartCounts[event.dish_name] || 0) + 1
   })
@@ -920,7 +997,7 @@ export async function getAnalyticsData(days = 7) {
     (sum, event) => sum + (event.price || 0), 0
   ) || 0
 
-  const reviews = reviewsAll.data || []
+  const reviews = reviewsInRange.data || []
   const avgRating = reviews.length > 0
     ? reviews.reduce((sum, r) => sum + r.stars, 0)
     / reviews.length
@@ -929,7 +1006,7 @@ export async function getAnalyticsData(days = 7) {
   const dayBuckets = buildDayBuckets(safeDays)
   const bucketMap = new Map(dayBuckets.map((bucket) => [bucket.key, bucket]))
 
-  menuViewsLast7.data?.forEach((event) => {
+  menuViewsInRange.data?.forEach((event) => {
     const key = normalizeDayKey(event.created_at)
     const bucket = bucketMap.get(key)
     if (bucket) bucket.scans += 1
@@ -952,7 +1029,7 @@ export async function getAnalyticsData(days = 7) {
     bucket.favourites += 1
   })
 
-  cartEventsAll.data?.forEach((event) => {
+  cartEventsInRange.data?.forEach((event) => {
     const key = normalizeDayKey(event.created_at)
     const bucket = bucketMap.get(key)
     if (bucket) bucket.carts += 1
@@ -973,13 +1050,12 @@ export async function getAnalyticsData(days = 7) {
     .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 5)
     .map(([name, value], index) => {
-      const prev = previousWeeklyDishCounts[name] || 0
       return {
         rank: index + 1,
         name,
         category: value.category || 'General',
         views: value.count,
-        trending: value.count >= prev ? 'up' : 'down',
+        trending: 'up',
         image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&h=100&fit=crop',
       }
     })
@@ -1064,7 +1140,7 @@ export async function getAnalyticsData(days = 7) {
     ratingDistribution,
     recentReviews,
     topRatedDishes,
-    totalScans: menuViewsLast7.data?.length || 0,
+    totalScans: menuViewsInRange.data?.length || 0,
     windowDays: safeDays,
     queryWarning,
   }
