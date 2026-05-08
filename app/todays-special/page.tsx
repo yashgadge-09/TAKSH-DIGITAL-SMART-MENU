@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChefHat, Plus, Star, RefreshCw, ShoppingCart } from "lucide-react";
 import { getAllDishes, trackMenuView } from "@/lib/database";
+import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
@@ -56,7 +57,9 @@ export default function TodaysSpecialPage() {
     };
 
     loadData();
-    void trackMenuView().catch(() => {});
+    if (shouldTrackClientEvent("menu-view", 30000)) {
+      void trackMenuView().catch(() => {});
+    }
   }, [lang]);
 
   const handleAddDishToCart = (dish: any) => {

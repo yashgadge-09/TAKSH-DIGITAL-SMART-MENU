@@ -324,7 +324,7 @@ export default function AnalyticsPage() {
               </p>
             </div>
             <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Menu Scans</p>
+              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Menu Scans ({rangeDays}D)</p>
               <p className="mt-1 text-2xl font-bold text-[#B9F4B1]">{isLoading ? "..." : analytics?.totalScans || "0"}</p>
             </div>
             <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
@@ -343,7 +343,7 @@ export default function AnalyticsPage() {
         ) : null}
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <PremiumPanel title="Weekly QR Scans" subtitle="Fri to Thu trendline" badge="+INSIGHTS">
+          <PremiumPanel title="Weekly QR Scans" subtitle={`Last ${rangeDays} days trendline`} badge="+INSIGHTS">
             <div className="h-72">
               {weeklyLineData.length ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -407,7 +407,7 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <PremiumPanel title="Most Added to Cart" subtitle="Top dishes by cart additions" badge="THIS WEEK">
+          <PremiumPanel title="Most Added to Cart" subtitle="Top dishes by cart additions" badge={`LAST ${rangeDays}D`}>
             <div className="h-72">
               {topCartBarData.length ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -442,7 +442,7 @@ export default function AnalyticsPage() {
             </div>
           </PremiumPanel>
 
-          <PremiumPanel title="Most Favourited" subtitle="Top dishes by favourites" badge="THIS WEEK">
+          <PremiumPanel title="Most Favourited" subtitle="Top dishes by favourites" badge={`LAST ${rangeDays}D`}>
             <div className="h-72">
               {topFavouritesBarData.length ? (
                 <ResponsiveContainer width="100%" height="100%">

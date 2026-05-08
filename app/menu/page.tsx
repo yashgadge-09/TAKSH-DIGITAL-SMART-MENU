@@ -10,7 +10,7 @@ import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
 import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView } from "@/lib/database";
-import { getOrCreateSessionId } from "@/lib/session";
+import { getOrCreateSessionId, shouldTrackClientEvent } from "@/lib/session";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 import { NotificationPrompt } from "@/components/NotificationPrompt";
@@ -134,11 +134,7 @@ function MenuPageContent() {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
     loadData();
-    const now = Date.now();
-    const key = "taksh:last-menu-view-ts";
-    const prev = Number(window.sessionStorage.getItem(key) || 0);
-    if (!Number.isFinite(prev) || now - prev > 30000) {
-      window.sessionStorage.setItem(key, String(now));
+    if (shouldTrackClientEvent("menu-view", 30000)) {
       void trackMenuView().catch(() => { });
     }
     const handleFocus = () => loadData();
