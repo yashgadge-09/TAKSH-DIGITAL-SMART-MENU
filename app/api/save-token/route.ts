@@ -13,12 +13,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'fcm_token is required' }, { status: 400 });
     }
 
+    // Validate FCM token format (should be a long string, typically 150+ chars)
+    if (typeof fcm_token !== 'string' || fcm_token.trim().length < 100) {
+      console.warn('Invalid FCM token format:', fcm_token?.substring(0, 50));
+      return NextResponse.json({ error: 'Invalid FCM token format' }, { status: 400 });
+    }
+
+    const trimmedToken = fcm_token.trim();
+
     // Check if this token already exists for this table in the last hour
     // To prevent multiple sessions from being created continuously
     const { data: existingSession, error: checkError } = await supabase
       .from('push_sessions')
       .select('id, session_start')
-      .eq('fcm_token', fcm_token)
+      .eq('fcm_token', trimmedToken)
       .order('session_start', { ascending: false })
       .limit(1)
       .single();
@@ -42,7 +50,7 @@ export async function POST(request: Request) {
       .from('push_sessions')
       .insert([
         {
-          fcm_token: fcm_token,
+          fcm_token: trimmedToken,
           session_start: now.toISOString(),
         }
       ]);
