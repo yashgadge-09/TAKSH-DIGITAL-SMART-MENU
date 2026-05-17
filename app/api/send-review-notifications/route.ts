@@ -54,9 +54,17 @@ export async function GET(request: Request) {
     } else if (firstSessions && firstSessions.length > 0) {
       for (const session of firstSessions) {
         if (!session.fcm_token) continue;
+        
+        // Validate token before attempting to send
+        if (typeof session.fcm_token !== 'string' || session.fcm_token.length < 100) {
+          console.warn(`Skipping invalid token for session ${session.id}`);
+          failureCount++;
+          continue;
+        }
+        
         try {
           await admin.messaging().send({
-            token: session.fcm_token,
+            token: session.fcm_token.trim(),
             notification: {
               title: "Thank you for dining with us! 🍽️",
               body: "Enjoyed your meal? Tap to share your experience ⭐"
@@ -99,9 +107,17 @@ export async function GET(request: Request) {
     } else if (secondSessions && secondSessions.length > 0) {
       for (const session of secondSessions) {
         if (!session.fcm_token) continue;
+        
+        // Validate token before attempting to send
+        if (typeof session.fcm_token !== 'string' || session.fcm_token.length < 100) {
+          console.warn(`Skipping invalid token for session ${session.id}`);
+          failureCount++;
+          continue;
+        }
+        
         try {
           await admin.messaging().send({
-            token: session.fcm_token,
+            token: session.fcm_token.trim(),
             notification: {
               title: "We miss your feedback! 🌟",
               body: "Your review takes just 10 seconds and helps so many people. Tap to share ❤️"
