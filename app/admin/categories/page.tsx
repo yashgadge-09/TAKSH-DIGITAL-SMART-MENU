@@ -428,7 +428,7 @@ function CategoriesPageContent() {
                     )}
                     <span className="text-[10px] font-medium text-[#B89A7D]">{isUploading ? "Uploading..." : "Add Image"}</span>
                     <input type="file" className="hidden" onChange={handleImageFileUpload}
-                      accept="image/*,image/gif,video/*" multiple disabled={isUploading} />
+                      accept="image/*,image/gif,.heic,.heif,video/*" multiple disabled={isUploading} />
                   </label>
                 </div>
 

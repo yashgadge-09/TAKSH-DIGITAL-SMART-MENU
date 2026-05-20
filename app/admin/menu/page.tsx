@@ -1181,7 +1181,7 @@ function MenuPageContent() {
                         type="file"
                         className="hidden"
                         onChange={handleFileUpload}
-                        accept="image/*,image/gif"
+                        accept="image/*,image/gif,.heic,.heif"
                         multiple
                         disabled={isUploading}
                       />
