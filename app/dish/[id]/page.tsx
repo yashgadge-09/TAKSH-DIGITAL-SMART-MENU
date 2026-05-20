@@ -79,6 +79,8 @@ export default function DishDetailPage() {
   const [qty, setQty] = useState(1);
   const [scrollY, setScrollY] = useState(0);
   const heroRef = useRef<HTMLDivElement>(null);
+  const heroCarouselRef = useRef<HTMLDivElement>(null);
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
 
   const dish = useMemo(() => {
     if (!rawDish) return null;
@@ -232,6 +234,13 @@ export default function DishDetailPage() {
     return () => { mounted = false; };
   }, [id]);
 
+  useEffect(() => {
+    setActiveHeroIndex(0);
+    if (heroCarouselRef.current) {
+      heroCarouselRef.current.scrollTo({ left: 0, behavior: 'instant' });
+    }
+  }, [dish?.id]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[color:var(--brand-bg)]">
@@ -328,6 +337,15 @@ export default function DishDetailPage() {
   const heroScale = 1 - fadeProgress * 0.08;
   const heroBlur = fadeProgress * 6;
   const total = dish.price * qty;
+  const heroImages = Array.isArray(dish.images) ? dish.images.filter(Boolean) : [];
+  const hasMultipleHeroImages = heroImages.length > 1;
+
+  const handleHeroCarouselScroll = () => {
+    const node = heroCarouselRef.current;
+    if (!node || node.clientWidth === 0) return;
+    const nextIndex = Math.round(node.scrollLeft / node.clientWidth);
+    if (nextIndex !== activeHeroIndex) setActiveHeroIndex(nextIndex);
+  };
 
   return (
     <main className="relative min-h-screen bg-[color:var(--brand-bg)] text-[color:var(--brand-gold-soft)] pb-32">
@@ -344,8 +362,7 @@ export default function DishDetailPage() {
       {/* Fixed top-aligned square hero (~50% of viewport), horizontally centered */}
       <div
         ref={heroRef}
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 top-0 z-0 flex justify-center"
+        className="fixed inset-x-0 top-0 z-0 flex justify-center"
         style={{
           opacity: heroOpacity,
           transform: `translate3d(0, ${-heroTranslate}px, 0) scale(${heroScale})`,
@@ -356,35 +373,53 @@ export default function DishDetailPage() {
       >
         <div className="relative w-full max-w-[100vw] md:max-w-[min(50vw,50vh)]">
           <div className="relative aspect-square w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]">
-            {dish.images[0] ? (
-              <>
-                {(dish.images[0].match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.images[0].includes('/video/upload/')) ? (
-                  <video
-                    src={dish.images[0]}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <img
-                    src={dish.images[0]}
-                    alt={dish.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                )}
-                <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg)] p-4 text-center pointer-events-none">
-                   <span className="text-[14px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-                </div>
-              </>
+            {heroImages.length > 0 ? (
+              <div
+                ref={heroCarouselRef}
+                onScroll={handleHeroCarouselScroll}
+                className="no-scrollbar flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+              >
+                {heroImages.map((mediaUrl: string, index: number) => (
+                  <div key={`${mediaUrl}-${index}`} className="relative h-full w-full shrink-0 snap-center">
+                    {(mediaUrl.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || mediaUrl.includes('/video/upload/')) ? (
+                      <video
+                        src={mediaUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={mediaUrl}
+                        alt={`${dish.name} image ${index + 1}`}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    )}
+                    <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg)] p-4 text-center pointer-events-none">
+                      <span className="text-[14px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="flex w-full h-full items-center justify-center bg-[color:var(--brand-bg)] p-4 text-center">
                  <span className="text-[14px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+              </div>
+            )}
+            {hasMultipleHeroImages && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex items-center justify-center gap-1.5">
+                {heroImages.map((_: string, index: number) => (
+                  <span
+                    key={`hero-dot-${index}`}
+                    className={`h-1.5 rounded-full transition-all ${index === activeHeroIndex ? 'w-5 bg-[color:var(--brand-gold)]' : 'w-1.5 bg-[color:var(--brand-gold)]/50'}`}
+                  />
+                ))}
               </div>
             )}
             {/* Soft inner top gradient for sticky-controls legibility */}
@@ -475,7 +510,7 @@ export default function DishDetailPage() {
         {/* Spacer that lets the top-anchored hero show through. */}
         <div
           aria-hidden="true"
-          className="h-[calc(100vw-80px)] w-full md:h-[calc(min(50vw,50vh)-80px)]"
+          className="pointer-events-none h-[calc(100vw-80px)] w-full md:h-[calc(min(50vw,50vh)-80px)]"
         />
 
         {/* Veg indicator */}
