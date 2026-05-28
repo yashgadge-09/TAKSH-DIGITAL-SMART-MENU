@@ -68,8 +68,13 @@ export function NotificationPrompt() {
       const permission = await Notification.requestPermission();
 
       if (permission === "granted") {
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          scope: '/'
+        });
+        await navigator.serviceWorker.ready;
         const token = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+          serviceWorkerRegistration: registration
         });
 
         if (token) {
