@@ -15,7 +15,8 @@ async function sendOneSignalNotification(playerId: string, title: string, body: 
     },
     body: JSON.stringify({
       app_id: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
-      include_player_ids: [playerId],
+      include_aliases: { onesignal_id: [playerId] },
+      target_channel: 'push',
       headings: { en: title },
       contents: { en: body },
       url: url,
@@ -23,6 +24,7 @@ async function sendOneSignalNotification(playerId: string, title: string, body: 
     })
   });
   const data = await response.json();
+  console.log('OneSignal response:', JSON.stringify(data));
   if (data.errors) throw new Error(JSON.stringify(data.errors));
   return data;
 }
