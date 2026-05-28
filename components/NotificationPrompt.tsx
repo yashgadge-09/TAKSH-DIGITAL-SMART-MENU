@@ -1,97 +1,67 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getMessaging, getToken } from "firebase/messaging";
+import OneSignal from "react-onesignal";
 
 export function NotificationPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    console.log("Card component mounted");
-    const startTime = Date.now();
+    const init = async () => {
+      if (initialized) return;
+      try {
+        await OneSignal.init({
+          appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!,
+          allowLocalhostAsSecureOrigin: true,
+        });
+        setInitialized(true);
+      } catch (e) {
+        console.error("OneSignal init error:", e);
+      }
+    };
+    init();
+  }, []);
 
+  useEffect(() => {
+    const startTime = Date.now();
     const interval = setInterval(() => {
-      if (!("Notification" in window)) {
-        return;
-      }
-      if (Notification.permission === "denied") {
-        return; // Don't show if denied
-      }
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "denied") return;
 
       const accepted = sessionStorage.getItem("notification_accepted");
-      if (accepted === "true") {
-        return; // Never show if they accepted this session
-      }
+      if (accepted === "true") return;
 
       const dismissCount = parseInt(sessionStorage.getItem("notification_dismiss_count") || "0", 10);
-      if (dismissCount >= 3) {
-        return; // Stop after 3 dismissals in this session
-      }
+      if (dismissCount >= 3) return;
 
       const lastDismissedTime = sessionStorage.getItem("notification_last_dismissed_time");
       const now = Date.now();
 
       if (lastDismissedTime) {
-        // Re-show after 60 seconds following a dismissal
-        if (now - parseInt(lastDismissedTime, 10) >= 60000) {
-          setShowPrompt(true);
-        }
+        if (now - parseInt(lastDismissedTime, 10) >= 60000) setShowPrompt(true);
       } else {
-        // First time: show after 60 seconds of page load
-        if (now - startTime >= 60000) {
-          setShowPrompt(true);
-        }
+        if (now - startTime >= 60000) setShowPrompt(true);
       }
     }, 1000);
-
     return () => clearInterval(interval);
   }, []);
 
   const handleAccept = async () => {
     setShowPrompt(false);
     sessionStorage.setItem("notification_accepted", "true");
-
     try {
-      // Parse firebase config from env
-      const configString = process.env.NEXT_PUBLIC_FIREBASE_CONFIG;
-      if (!configString || configString === "{}" || configString === '""') {
-        console.warn("Firebase configuration is missing in environment variables.");
-        return;
-      }
-
-      const firebaseConfig = JSON.parse(configString);
-
-      const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-      const messaging = getMessaging(app);
-
-      const permission = await Notification.requestPermission();
-
-      if (permission === "granted") {
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/'
+      await OneSignal.Notifications.requestPermission();
+      const playerId = await OneSignal.User.PushSubscription.id;
+      if (playerId) {
+        await fetch("/api/save-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fcm_token: playerId }),
         });
-        await navigator.serviceWorker.ready;
-        const token = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-          serviceWorkerRegistration: registration
-        });
-
-        if (token) {
-          // POST to our API
-          await fetch("/api/save-token", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              fcm_token: token
-            }),
-          });
-        }
       }
     } catch (error) {
-      console.error("Error setting up notifications:", error);
+      console.error("OneSignal error:", error);
     }
   };
 
@@ -114,11 +84,9 @@ export function NotificationPrompt() {
         <p className="text-[color:var(--brand-gold-muted)] text-[12px] italic opacity-70 mb-4">
           Join 100+ happy diners who shared their experience
         </p>
-
         <p className="text-[color:var(--brand-gold-muted)] text-[11px] opacity-60 mb-2 font-medium tracking-wide">
           ⏰ Only takes 10 seconds!
         </p>
-
         <div className="flex flex-col items-center gap-2">
           <button
             onClick={handleAccept}
