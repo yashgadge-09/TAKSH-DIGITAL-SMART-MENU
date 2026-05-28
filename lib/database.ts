@@ -2,7 +2,7 @@
 
 import { supabase } from './supabase'
 import { createClient } from '@supabase/supabase-js'
-import { unstable_cache } from 'next/cache'
+import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
 
 const adminSupabase = createClient(
@@ -368,6 +368,7 @@ export async function addDish(dish: any) {
     .select()
     .single()
   if (error) throw error
+  revalidateTag('dishes')
   return data
 }
 
@@ -379,6 +380,7 @@ export async function updateDish(id: string, dish: any) {
     .select()
     .maybeSingle()
   if (error) throw error
+  revalidateTag('dishes')
   return data
 }
 
@@ -388,6 +390,7 @@ export async function deleteDish(id: string) {
     .delete()
     .eq('id', id)
   if (error) throw error
+  revalidateTag('dishes')
 }
 
 export async function toggleAvailability(
@@ -399,6 +402,7 @@ export async function toggleAvailability(
     .update({ is_available: isAvailable })
     .eq('id', id)
   if (error) throw error
+  revalidateTag('dishes')
 }
 
 export async function getCategories() {
