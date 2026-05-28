@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     }
 
     // Validate FCM token format (should be a long string, typically 150+ chars)
-    if (typeof fcm_token !== 'string' || fcm_token.trim().length < 100) {
+    if (typeof fcm_token !== 'string' || fcm_token.trim().length < 10) {
       console.warn('Invalid FCM token format:', fcm_token?.substring(0, 50));
       return NextResponse.json({ error: 'Invalid FCM token format' }, { status: 400 });
     }
