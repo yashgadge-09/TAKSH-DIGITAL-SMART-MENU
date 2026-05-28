@@ -174,7 +174,11 @@ function CategoriesPageContent() {
           existingAll = await addCategory('All')
         }
         if (primary) {
-          await updateCategory(existingAll.id, { image_url: primary })
+          if (existingAll) {
+            await updateCategory(existingAll.id, { image_url: primary })
+          } else {
+            console.warn('Could not resolve existing All category id to update')
+          }
         }
       } else {
         await updateCategory(editingImageCategory.id, { image_url: primary })
@@ -428,7 +432,7 @@ function CategoriesPageContent() {
                     )}
                     <span className="text-[10px] font-medium text-[#B89A7D]">{isUploading ? "Uploading..." : "Add Image"}</span>
                     <input type="file" className="hidden" onChange={handleImageFileUpload}
-                      accept="image/*,image/gif,video/*" multiple disabled={isUploading} />
+                      accept="image/*,image/gif,.heic,.heif,.jpg,.jpeg,video/*" multiple disabled={isUploading} />
                   </label>
                 </div>
 

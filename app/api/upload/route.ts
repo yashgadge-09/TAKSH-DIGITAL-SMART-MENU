@@ -1,12 +1,32 @@
 import { NextResponse } from 'next/server';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import heicConvert from 'heic-convert';
 import sharp from 'sharp';
 
 export const runtime = 'nodejs';
 
 const MAX_DIMENSION = 1600;
 const WEBP_QUALITY = 85;
+const HEIC_MIME_TYPES = new Set([
+  'image/heic',
+  'image/heif',
+  'image/heic-sequence',
+  'image/heif-sequence',
+]);
+
+function isHeicLikeFile(file: File): boolean {
+  const type = (file.type || '').toLowerCase();
+  if (HEIC_MIME_TYPES.has(type)) return true;
+
+  const name = (file.name || '').toLowerCase();
+  return name.endsWith('.heic') || name.endsWith('.heif');
+}
+
+function isSupportedImageUpload(file: File): boolean {
+  const type = (file.type || '').toLowerCase();
+  return type.startsWith('image/') || isHeicLikeFile(file);
+}
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -45,12 +65,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    if (!file.type.startsWith('image/')) {
+    if (!isSupportedImageUpload(file)) {
       return NextResponse.json({ error: 'Only image uploads are supported' }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    let buffer = Buffer.from(bytes);
+
+    if (isHeicLikeFile(file)) {
+      try {
+        const converted = await heicConvert({
+          buffer,
+          format: 'JPEG',
+          quality: 0.9,
+        });
+        buffer = Buffer.from(converted);
+      } catch (error) {
+        console.error('HEIC conversion failed:', error);
+        return NextResponse.json({ error: 'Invalid HEIC/HEIF image file' }, { status: 400 });
+      }
+    }
+
     const resizedWebp = await sharp(buffer)
       .resize({
         width: MAX_DIMENSION,
