@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import OneSignal from "react-onesignal";
+import { supabase } from "@/lib/supabase";
 
 export function NotificationPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
@@ -11,19 +12,23 @@ export function NotificationPrompt() {
     const init = async () => {
       if (initialized) return;
       try {
+        console.log("Initializing OneSignal...");
         await OneSignal.init({
           appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!,
           allowLocalhostAsSecureOrigin: true,
         });
         setInitialized(true);
+        console.log("OneSignal initialized successfully!");
       } catch (e) {
         console.error("OneSignal init error:", e);
       }
     };
     init();
-  }, []);
+  }, [initialized]);
 
   useEffect(() => {
+    if (!initialized) return;
+
     const startTime = Date.now();
     const interval = setInterval(() => {
       if (!("Notification" in window)) return;
@@ -45,20 +50,44 @@ export function NotificationPrompt() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [initialized]);
 
   const handleAccept = async () => {
     setShowPrompt(false);
     sessionStorage.setItem("notification_accepted", "true");
     try {
+      console.log("Requesting OneSignal notification permission...");
       await OneSignal.Notifications.requestPermission();
-      const playerId = await OneSignal.User.PushSubscription.id;
+      console.log("OneSignal permission requested.");
+
+      let playerId = null;
+      let attempts = 0;
+      console.log("Waiting for OneSignal Player ID registration...");
+      while (!playerId && attempts < 10) {
+        await new Promise(res => setTimeout(res, 500));
+        playerId = OneSignal.User.PushSubscription.id;
+        attempts++;
+        console.log(`Player ID retrieval attempt ${attempts}:`, playerId);
+      }
+
       if (playerId) {
-        await fetch("/api/save-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fcm_token: playerId }),
-        });
+        console.log("Saving OneSignal Player ID to Supabase:", playerId);
+        const { error } = await supabase
+          .from('push_sessions')
+          .insert({
+            player_id: playerId,
+            session_start: new Date().toISOString(),
+            notification_sent: false,
+            second_notification_sent: false,
+          });
+
+        if (error) {
+          console.error('Supabase insert error:', error);
+        } else {
+          console.log("Push session saved successfully to Supabase!");
+        }
+      } else {
+        console.error("Failed to retrieve OneSignal Player ID after 10 attempts (got null/undefined).");
       }
     } catch (error) {
       console.error("OneSignal error:", error);

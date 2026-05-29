@@ -46,15 +46,15 @@ export async function GET(request: Request) {
     // First notification — 30 mins
     const { data: firstSessions } = await supabase
       .from('push_sessions')
-      .select('id, fcm_token')
+      .select('id, player_id')
       .eq('notification_sent', false)
       .lt('session_start', thirtyMinsAgo);
 
     for (const session of firstSessions || []) {
-      if (!session.fcm_token) continue;
+      if (!session.player_id) continue;
       try {
         await sendOneSignalNotification(
-          session.fcm_token,
+          session.player_id,
           "Thank you for dining with us! 🍽️",
           "Enjoyed your meal? Tap to share your experience ⭐",
           `https://tastefy.food/api/review-click?session=${session.id}`
@@ -73,17 +73,17 @@ export async function GET(request: Request) {
     // Second notification — 45 mins
     const { data: secondSessions } = await supabase
       .from('push_sessions')
-      .select('id, fcm_token')
+      .select('id, player_id')
       .eq('notification_sent', true)
       .eq('second_notification_sent', false)
       .eq('review_clicked', false)
       .lt('session_start', fortyFiveMinsAgo);
 
     for (const session of secondSessions || []) {
-      if (!session.fcm_token) continue;
+      if (!session.player_id) continue;
       try {
         await sendOneSignalNotification(
-          session.fcm_token,
+          session.player_id,
           "We miss your feedback! 🌟",
           "Your review takes just 10 seconds and helps so many people ❤️",
           `https://tastefy.food/api/review-click?session=${session.id}`
