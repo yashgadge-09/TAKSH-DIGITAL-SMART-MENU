@@ -37,12 +37,12 @@ export async function GET(request: Request) {
 
   try {
     const now = Date.now();
-    const thirtyMinsAgo = new Date(now - 30 * 60 * 1000).toISOString();
-    const fortyFiveMinsAgo = new Date(now - 45 * 60 * 1000).toISOString();
+    const thirtyMinsAgo = new Date(now - 1 * 60 * 1000).toISOString(); // Shrunk to 1 minute for testing
+    const fortyFiveMinsAgo = new Date(now - 2 * 60 * 1000).toISOString(); // Shrunk to 2 minutes for testing
     let successCount = 0;
     let failureCount = 0;
 
-    // First notification — 30 mins
+    // First notification — 1 min
     const { data: firstSessions } = await supabase
       .from('push_sessions')
       .select('id, player_id')
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Second notification — 45 mins
+    // Second notification — 2 mins
     const { data: secondSessions } = await supabase
       .from('push_sessions')
       .select('id, player_id')
