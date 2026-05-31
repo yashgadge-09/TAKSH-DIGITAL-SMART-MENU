@@ -44,9 +44,9 @@ export async function GET(request: Request) {
 
   try {
     const now = Date.now();
-    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const thirtyMinsAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // Shrunk to 2 minutes for testing
     const ninetyMinsAgo = new Date(Date.now() - 90 * 60 * 1000).toISOString();
-    const fortyFiveMinsAgo = new Date(now - 2 * 60 * 1000).toISOString(); // Shrunk to 2 minutes for testing
+    const fortyFiveMinsAgo = new Date(now - 3 * 60 * 1000).toISOString(); // Shrunk to 3 minutes for testing
     let successCount = 0;
     let failureCount = 0;
 
