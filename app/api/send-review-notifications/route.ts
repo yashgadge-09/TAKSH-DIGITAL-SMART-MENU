@@ -15,11 +15,18 @@ async function sendOneSignalNotification(playerId: string, title: string, body: 
     },
     body: JSON.stringify({
       app_id: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
-      include_subscription_ids: [playerId],
+      include_aliases: { onesignal_id: [playerId] },
+      target_channel: 'push',
       headings: { en: title },
       contents: { en: body },
       url: url,
       chrome_web_icon: 'https://tastefy.food/apple-icon.png',
+      chrome_web_badge: 'https://tastefy.food/apple-icon.png',
+      android_sound: 'notification',
+      ios_sound: 'notification.wav',
+      android_visibility: 1,
+      priority: 10,
+      ttl: 3600,
     })
   });
   const data = await response.json();
@@ -37,19 +44,22 @@ export async function GET(request: Request) {
 
   try {
     const now = Date.now();
-    const thirtyMinsAgo = new Date(now - 1 * 60 * 1000).toISOString(); // Shrunk to 1 minute for testing
+    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const ninetyMinsAgo = new Date(Date.now() - 90 * 60 * 1000).toISOString();
     const fortyFiveMinsAgo = new Date(now - 2 * 60 * 1000).toISOString(); // Shrunk to 2 minutes for testing
     let successCount = 0;
     let failureCount = 0;
 
-    // First notification — 1 min
-    const { data: firstSessions } = await supabase
+    // First notification
+    const { data: sessions } = await supabase
       .from('push_sessions')
-      .select('id, player_id')
+      .select('*')
       .eq('notification_sent', false)
-      .lt('session_start', thirtyMinsAgo);
+      .not('player_id', 'is', null)
+      .lte('session_start', thirtyMinsAgo)
+      .gte('session_start', ninetyMinsAgo);
 
-    for (const session of firstSessions || []) {
+    for (const session of sessions || []) {
       if (!session.player_id) continue;
       try {
         await sendOneSignalNotification(

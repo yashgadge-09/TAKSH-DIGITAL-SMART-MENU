@@ -16,6 +16,14 @@ export function NotificationPrompt() {
         await OneSignal.init({
           appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!,
           allowLocalhostAsSecureOrigin: true,
+          serviceWorkerParam: { scope: '/' },
+          serviceWorkerPath: '/OneSignalSDKWorker.js',
+          notifyButton: {
+            enable: false,
+          },
+        });
+        OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event) => {
+          event.notification.display();
         });
         setInitialized(true);
         console.log("OneSignal initialized successfully!");
@@ -62,32 +70,34 @@ export function NotificationPrompt() {
 
       let playerId = null;
       let attempts = 0;
-      console.log("Waiting for OneSignal Player ID registration...");
       while (!playerId && attempts < 10) {
         await new Promise(res => setTimeout(res, 500));
         playerId = OneSignal.User.PushSubscription.id;
         attempts++;
-        console.log(`Player ID retrieval attempt ${attempts}:`, playerId);
       }
 
-      if (playerId) {
-        console.log("Saving OneSignal Player ID to Supabase:", playerId);
-        const { error } = await supabase
-          .from('push_sessions')
-          .insert({
-            player_id: playerId,
-            session_start: new Date().toISOString(),
-            notification_sent: false,
-            second_notification_sent: false,
-          });
+      if (!playerId) {
+        console.error('OneSignal Player ID not available after 10 attempts');
+        return;
+      }
 
-        if (error) {
-          console.error('Supabase insert error:', error);
-        } else {
-          console.log("Push session saved successfully to Supabase!");
-        }
-      } else {
-        console.error("Failed to retrieve OneSignal Player ID after 10 attempts (got null/undefined).");
+      console.log('OneSignal Player ID:', playerId);
+
+      // Save to localStorage for in-app fallback
+      localStorage.setItem('onesignal_player_id', playerId);
+
+      // Save to Supabase
+      const { error } = await supabase
+        .from('push_sessions')
+        .insert({
+          player_id: playerId,
+          session_start: new Date().toISOString(),
+          notification_sent: false,
+          second_notification_sent: false,
+        });
+
+      if (error) {
+        console.error('Supabase insert error:', error);
       }
     } catch (error) {
       console.error("OneSignal error:", error);
