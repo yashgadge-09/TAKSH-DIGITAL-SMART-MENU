@@ -15,8 +15,7 @@ async function sendOneSignalNotification(playerId: string, title: string, body: 
     },
     body: JSON.stringify({
       app_id: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
-      include_aliases: { onesignal_id: [playerId] },
-      target_channel: 'push',
+      include_subscription_ids: [playerId],
       headings: { en: title },
       contents: { en: body },
       url: url,

@@ -5,7 +5,6 @@ import { CartProvider } from '@/context/CartContext'
 import { LanguageProvider } from '@/context/LanguageContext'
 import { Toaster } from 'sonner'
 import { SplashScreen } from '@/components/SplashScreen'
-import ReviewReminderPopup from '@/components/ReviewReminderPopup'
 import './globals.css'
 
 const inter = Inter({
@@ -71,7 +70,6 @@ export default function RootLayout({
           </CartProvider>
         </LanguageProvider>
         <Analytics />
-        <ReviewReminderPopup />
       </body>
     </html>
   )
