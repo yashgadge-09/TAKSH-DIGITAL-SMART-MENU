@@ -50,7 +50,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         height: completedCrop.height * scaleY,
       }
 
-      const croppedBlob = await getCroppedImg(imageSrc, pixelCrop, 0)
+      const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(imageSrc)}`;
+      const croppedBlob = await getCroppedImg(proxiedUrl, pixelCrop, 0)
       if (croppedBlob) {
         onCropComplete(croppedBlob)
       }
@@ -60,6 +61,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       setIsProcessing(false)
     }
   }
+
+  const proxiedImageSrc = `/api/proxy-image?url=${encodeURIComponent(imageSrc)}`;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -71,7 +74,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           </button>
         </div>
         
-        <div className="relative w-full max-h-[65vh] overflow-y-auto bg-black/5 flex justify-center p-4">
+        <div className="relative w-full max-h-[65vh] overflow-y-auto bg-black/5 flex items-center justify-center p-4">
           <ReactCrop
             crop={crop}
             onChange={(_, percentCrop) => setCrop(percentCrop)}
@@ -82,10 +85,10 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             <img
               ref={imgRef}
               alt="Crop"
-              src={imageSrc}
+              src={proxiedImageSrc}
               crossOrigin="anonymous"
-              style={{ maxWidth: '100%', maxHeight: '60vh', width: 'auto', height: 'auto', display: 'block' }}
-              className="shadow-md"
+              style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }}
+              className="shadow-md block"
             />
           </ReactCrop>
         </div>
