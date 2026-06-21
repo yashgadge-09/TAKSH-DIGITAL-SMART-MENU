@@ -1369,3 +1369,144 @@ export async function rejectOrder(
 
   return { orderId, status: 'rejected' }
 }
+
+export async function generateBill({
+  sessionId,
+}: {
+  sessionId: string
+}): Promise<{ billId: string; total: number }> {
+  if (!sessionId) throw new Error('sessionId is required')
+
+  // Load session + restaurant + table for the bill header
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id, table_id')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+
+  // Guard: if already billed, return the existing bill (no duplicate rows/jobs)
+  if (session.status === 'bill_generated') {
+    const { data: existing } = await adminSupabase
+      .from('bills')
+      .select('id, total')
+      .eq('session_id', sessionId)
+      .order('generated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (existing) return { billId: existing.id, total: Number(existing.total) }
+  }
+
+  // Billable orders only — rejected never appears on the bill
+  const { data: orders, error: ordersError } = await adminSupabase
+    .from('orders')
+    .select('id, round_number, placed_at, customer_id')
+    .eq('session_id', sessionId)
+    .neq('status', 'rejected')
+    .order('round_number', { ascending: true })
+  if (ordersError) throw new Error('Failed to load orders')
+  if (!orders?.length) throw new Error('No billable orders for this session')
+
+  const orderIds = orders.map((o) => o.id)
+  const { data: items, error: itemsError } = await adminSupabase
+    .from('order_items')
+    .select('order_id, name, price, quantity')
+    .in('order_id', orderIds)
+  if (itemsError) throw new Error('Failed to load order items')
+  if (!items?.length) throw new Error('No items to bill')
+
+  // Group items by their parent order's round
+  const orderById = new Map(orders.map((o) => [o.id, o]))
+  const roundsMap = new Map<
+    number,
+    { number: number; time: string; items: { name: string; qty: number; price: number }[] }
+  >()
+  let subtotal = 0
+  for (const item of items) {
+    const parent = orderById.get(item.order_id)
+    if (!parent) continue
+    const round = parent.round_number
+    if (!roundsMap.has(round)) {
+      roundsMap.set(round, {
+        number: round,
+        time: formatTimeIST(parent.placed_at),
+        items: [],
+      })
+    }
+    roundsMap.get(round)!.items.push({
+      name: item.name,
+      qty: item.quantity,
+      price: Number(item.price),
+    })
+    subtotal += Number(item.price) * item.quantity
+  }
+  const rounds = Array.from(roundsMap.values()).sort((a, b) => a.number - b.number)
+
+  const gstRate = 5
+  const gstAmount = Math.round(subtotal * gstRate) / 100
+  const total = subtotal + gstAmount
+
+  // Customer name = most recent order's customer
+  const latestOrder = [...orders].sort(
+    (a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime()
+  )[0]
+  let customerName = ''
+  if (latestOrder?.customer_id) {
+    const { data: customer } = await adminSupabase
+      .from('customers')
+      .select('name')
+      .eq('id', latestOrder.customer_id)
+      .maybeSingle()
+    customerName = customer?.name ?? ''
+  }
+
+  const { data: restaurant } = await adminSupabase
+    .from('restaurants')
+    .select('name, address, gstin, upi_id')
+    .eq('id', session.restaurant_id)
+    .maybeSingle()
+
+  const { data: table } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', session.table_id)
+    .maybeSingle()
+
+  // Persist the bill
+  const { data: bill, error: billError } = await adminSupabase
+    .from('bills')
+    .insert({ session_id: sessionId, subtotal, gst_amount: gstAmount, total })
+    .select('id')
+    .single()
+  if (billError || !bill) throw new Error('Failed to create bill')
+
+  // Queue the bill print job
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'bill',
+    status: 'pending',
+    payload: {
+      restaurantName: restaurant?.name ?? '',
+      address: restaurant?.address ?? '',
+      gstin: restaurant?.gstin ?? '',
+      upiId: restaurant?.upi_id ?? '',
+      tableNumber: table?.table_number ?? null,
+      customerName,
+      rounds,
+      subtotal,
+      gstRate,
+      gstAmount,
+      total,
+    },
+  })
+  if (printError) throw new Error('Failed to queue bill print job')
+
+  // Flip the session
+  const { error: sessionUpdateError } = await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'bill_generated' })
+    .eq('id', sessionId)
+  if (sessionUpdateError) throw new Error('Failed to update session status')
+
+  return { billId: bill.id, total }
+}
