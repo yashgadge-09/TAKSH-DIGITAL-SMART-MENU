@@ -1267,3 +1267,105 @@ export async function placeOrder({
 
   return { orderId: order.id, roundNumber }
 }
+
+function formatTimeIST(value: string | Date): string {
+  return new Date(value).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Kolkata',
+  })
+}
+
+export async function approveOrder(
+  orderId: string
+): Promise<{ orderId: string; status: 'approved' }> {
+  if (!orderId) throw new Error('orderId is required')
+
+  // Load order + idempotency guard
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .select('id, status, round_number, session_id, placed_at')
+    .eq('id', orderId)
+    .single()
+  if (orderError || !order) throw new Error('Order not found')
+
+  // Idempotent no-op on double-tap; reject conflicting states so we never
+  // create a second KOT or "approve" something already rejected/served.
+  if (order.status === 'approved') return { orderId, status: 'approved' }
+  if (order.status !== 'pending_approval') {
+    throw new Error(`Cannot approve order in status '${order.status}'`)
+  }
+
+  // Resolve restaurant_id + table_number via session → table
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('restaurant_id, table_id')
+    .eq('id', order.session_id)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+
+  const { data: table, error: tableError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', session.table_id)
+    .single()
+  if (tableError || !table) throw new Error('Table not found')
+
+  // Load items for the KOT payload
+  const { data: items, error: itemsError } = await adminSupabase
+    .from('order_items')
+    .select('name, quantity')
+    .eq('order_id', orderId)
+  if (itemsError || !items?.length) throw new Error('Order has no items')
+
+  // Flip status first so a concurrent call sees it as no longer pending
+  const { error: updateError } = await adminSupabase
+    .from('orders')
+    .update({ status: 'approved' })
+    .eq('id', orderId)
+  if (updateError) throw new Error('Failed to approve order')
+
+  // approveOrder is the ONLY creator of a KOT print job
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'kot',
+    status: 'pending',
+    payload: {
+      tableNumber: table.table_number,
+      roundNumber: order.round_number,
+      time: formatTimeIST(order.placed_at),
+      items: items.map((i) => ({ name: i.name, qty: i.quantity })),
+    },
+  })
+  if (printError) throw new Error('Failed to queue KOT print job')
+
+  return { orderId, status: 'approved' }
+}
+
+export async function rejectOrder(
+  orderId: string
+): Promise<{ orderId: string; status: 'rejected' }> {
+  if (!orderId) throw new Error('orderId is required')
+
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .select('id, status')
+    .eq('id', orderId)
+    .single()
+  if (orderError || !order) throw new Error('Order not found')
+
+  // Idempotent no-op on double-tap; never creates a print job either way.
+  if (order.status === 'rejected') return { orderId, status: 'rejected' }
+  if (order.status !== 'pending_approval') {
+    throw new Error(`Cannot reject order in status '${order.status}'`)
+  }
+
+  const { error: updateError } = await adminSupabase
+    .from('orders')
+    .update({ status: 'rejected' })
+    .eq('id', orderId)
+  if (updateError) throw new Error('Failed to reject order')
+
+  return { orderId, status: 'rejected' }
+}
