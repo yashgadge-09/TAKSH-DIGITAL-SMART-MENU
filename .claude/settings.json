@@ -4,5 +4,19 @@
     "vercel@claude-plugins-official": true,
     "github@claude-plugins-official": true,
     "cloudflare@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Edit(*)",
+      "Write(*)",
+      "Bash(*)",
+      "Skill(update-config)",
+      "Skill(self_review)",
+      "Skill(code-review)",
+      "Skill(security-review)",
+      "Skill(test_feature)",
+      "Skill(verify)",
+      "Skill(run)"
+    ]
   }
 }
