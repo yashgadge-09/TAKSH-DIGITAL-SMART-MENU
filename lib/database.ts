@@ -1221,15 +1221,29 @@ export async function placeOrder({
     throw new Error('sessionId, customerId, restaurantId, and items are required')
   }
 
-  // Snapshot dish name + price at order time
+  // Snapshot dish name + price at order time.
+  // Use the public anon client — dishes are public-readable via RLS, no service-role needed.
   const dishIds = items.map((i) => i.dishId)
-  const { data: dishes, error: dishError } = await adminSupabase
+  const { data: dishes, error: dishError } = await supabase
     .from('dishes')
     .select('id, name_en, price')
     .in('id', dishIds)
   if (dishError || !dishes?.length) throw new Error('Failed to fetch dish details')
 
   const dishMap = new Map(dishes.map((d) => [d.id, d]))
+
+  // Validate ALL dish IDs before any insert — prevents orphaned orders rows.
+  // If any dishId is absent from the DB result, throw here before touching orders.
+  const validatedItems = items.map((item) => {
+    const dish = dishMap.get(item.dishId)
+    if (!dish) throw new Error(`Dish ${item.dishId} not found`)
+    return {
+      dish_id: item.dishId,
+      name: dish.name_en,
+      price: dish.price,
+      quantity: item.quantity,
+    }
+  })
 
   // Compute round number: max existing round for this session + 1
   const { data: lastOrder } = await adminSupabase
@@ -1241,7 +1255,8 @@ export async function placeOrder({
     .maybeSingle()
   const roundNumber = (lastOrder?.round_number ?? 0) + 1
 
-  // Insert order — status must be explicit; do not rely on column default
+  // Insert order — all dishes validated above, no orphan risk remains.
+  // Status must be explicit; do not rely on column default.
   const { data: order, error: orderError } = await adminSupabase
     .from('orders')
     .insert({ session_id: sessionId, customer_id: customerId, round_number: roundNumber, status: 'pending_approval' })
@@ -1249,32 +1264,31 @@ export async function placeOrder({
     .single()
   if (orderError || !order) throw new Error('Failed to create order')
 
-  // Insert order_items with snapshotted name/price
-  const orderItems = items.map((item) => {
-    const dish = dishMap.get(item.dishId)
-    if (!dish) throw new Error(`Dish ${item.dishId} not found`)
-    return {
-      order_id: order.id,
-      dish_id: item.dishId,
-      name: dish.name_en,
-      price: dish.price,
-      quantity: item.quantity,
-    }
-  })
+  // Attach order_id now that we have it, then persist all items.
+  const orderItems = validatedItems.map((item) => ({ ...item, order_id: order.id }))
 
   const { error: itemsError } = await adminSupabase.from('order_items').insert(orderItems)
-  if (itemsError) throw new Error('Failed to save order items')
+  if (itemsError) {
+    // Best-effort rollback: delete the orphaned orders row so the admin queue
+    // and round_number counter stay clean. Do not suppress the original error.
+    await adminSupabase.from('orders').delete().eq('id', order.id)
+    throw new Error('Failed to save order items')
+  }
 
   return { orderId: order.id, roundNumber }
 }
 
 function formatTimeIST(value: string | Date): string {
-  return new Date(value).toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Kolkata',
-  })
+  // Deterministic HH:MM in IST (UTC+5:30) — avoids toLocaleTimeString ICU
+  // variance across Node.js builds, ensuring KOT/bill payloads always match
+  // the print-bridge contract /^\d{2}:\d{2}$/.
+  const d = new Date(value)
+  const utcMs = d.getTime() + d.getTimezoneOffset() * 60000
+  const istMs = utcMs + 5.5 * 3600000
+  const ist = new Date(istMs)
+  const hh = String(ist.getUTCHours()).padStart(2, '0')
+  const mm = String(ist.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }
 
 export async function approveOrder(
