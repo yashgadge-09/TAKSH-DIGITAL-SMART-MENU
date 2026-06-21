@@ -40,8 +40,10 @@ There **is** a deployed, ACTIVE Supabase edge function `create-or-join-session` 
 - Cross-check: result shape matches the edge fn so existing/early clients stay compatible.
 
 ## Definition of Done
-- [ ] Creates session + 4-digit PIN when none active
-- [ ] `requiresPin` path when active + no pin
-- [ ] Correct-PIN and incorrect-PIN paths
-- [ ] No duplicate active session per table
-- [ ] Edge function `create-or-join-session` flagged for decommission in T16 (no client calls it)
+- [x] Creates session + 4-digit PIN when none active
+- [x] `requiresPin` path when active + no pin
+- [x] Correct-PIN and incorrect-PIN paths
+- [x] No duplicate active session per table (query filters `status='active'`, one result via `maybeSingle`)
+- [x] Edge function `create-or-join-session` flagged for decommission in T16 (no client calls it)
+
+**Implemented:** `lib/database.ts:1160` — `createOrJoinSession` + `SessionResult` discriminated union type. Applied 2026-06-21.
