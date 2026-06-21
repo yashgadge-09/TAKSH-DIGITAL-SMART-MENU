@@ -1205,3 +1205,65 @@ export async function createOrJoinSession({
 
   throw new Error('Incorrect PIN')
 }
+
+export async function placeOrder({
+  sessionId,
+  customerId,
+  restaurantId,
+  items,
+}: {
+  sessionId: string
+  customerId: string
+  restaurantId: string
+  items: { dishId: string; quantity: number }[]
+}): Promise<{ orderId: string; roundNumber: number }> {
+  if (!sessionId || !customerId || !restaurantId || !items?.length) {
+    throw new Error('sessionId, customerId, restaurantId, and items are required')
+  }
+
+  // Snapshot dish name + price at order time
+  const dishIds = items.map((i) => i.dishId)
+  const { data: dishes, error: dishError } = await adminSupabase
+    .from('dishes')
+    .select('id, name_en, price')
+    .in('id', dishIds)
+  if (dishError || !dishes?.length) throw new Error('Failed to fetch dish details')
+
+  const dishMap = new Map(dishes.map((d) => [d.id, d]))
+
+  // Compute round number: max existing round for this session + 1
+  const { data: lastOrder } = await adminSupabase
+    .from('orders')
+    .select('round_number')
+    .eq('session_id', sessionId)
+    .order('round_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const roundNumber = (lastOrder?.round_number ?? 0) + 1
+
+  // Insert order — status must be explicit; do not rely on column default
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .insert({ session_id: sessionId, customer_id: customerId, round_number: roundNumber, status: 'pending_approval' })
+    .select('id')
+    .single()
+  if (orderError || !order) throw new Error('Failed to create order')
+
+  // Insert order_items with snapshotted name/price
+  const orderItems = items.map((item) => {
+    const dish = dishMap.get(item.dishId)
+    if (!dish) throw new Error(`Dish ${item.dishId} not found`)
+    return {
+      order_id: order.id,
+      dish_id: item.dishId,
+      name: dish.name_en,
+      price: dish.price,
+      quantity: item.quantity,
+    }
+  })
+
+  const { error: itemsError } = await adminSupabase.from('order_items').insert(orderItems)
+  if (itemsError) throw new Error('Failed to save order items')
+
+  return { orderId: order.id, roundNumber }
+}

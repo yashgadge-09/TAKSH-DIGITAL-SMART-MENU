@@ -23,7 +23,9 @@ Persist a customer's order as **`pending_approval`**, snapshotting live name/pri
 - **`select count(*) from print_jobs` is unchanged** (zero created).
 
 ## Definition of Done
-- [ ] Order saved as `pending_approval`
-- [ ] `round_number` increments per session
-- [ ] name/price snapshotted into `order_items`
-- [ ] **Zero `print_jobs` created by this function**
+- [x] Order saved as `pending_approval` (explicit — does not rely on column default)
+- [x] `round_number` increments per session (max existing + 1, starts at 1)
+- [x] name/price snapshotted into `order_items` from `dishes.name_en` / `dishes.price` at call time
+- [x] **Zero `print_jobs` created by this function**
+
+**Implemented:** `lib/database.ts:1209` — `placeOrder`. Applied 2026-06-21.
