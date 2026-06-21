@@ -1149,3 +1149,59 @@ export async function getAnalyticsData(days = 7) {
     queryWarning,
   }
 }
+
+// ─── Ordering system ────────────────────────────────────────────────────────
+
+export type SessionResult =
+  | { exists: false; sessionId: string; tableNumber: number; pin: string }
+  | { exists: true; requiresPin: true }
+  | { exists: true; requiresPin?: false; sessionId: string; tableNumber: number; pin: string }
+
+export async function createOrJoinSession({
+  restaurantId,
+  tableId,
+  pinAttempt,
+}: {
+  restaurantId: string
+  tableId: string
+  pinAttempt?: string | number
+}): Promise<SessionResult> {
+  if (!restaurantId || !tableId) throw new Error('restaurantId and tableId are required')
+
+  const { data: tableRow, error: tableError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', tableId)
+    .single()
+
+  if (tableError || !tableRow) throw new Error('Table not found')
+  const tableNumber: number = tableRow.table_number
+
+  const { data: activeSession } = await adminSupabase
+    .from('table_sessions')
+    .select('id, pin')
+    .eq('table_id', tableId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!activeSession) {
+    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    const { data: newSession, error: insertError } = await adminSupabase
+      .from('table_sessions')
+      .insert({ restaurant_id: restaurantId, table_id: tableId, pin, status: 'active' })
+      .select('id')
+      .single()
+    if (insertError || !newSession) throw new Error('Failed to create session')
+    return { exists: false, sessionId: newSession.id, tableNumber, pin }
+  }
+
+  if (pinAttempt === undefined || pinAttempt === null || pinAttempt === '') {
+    return { exists: true, requiresPin: true }
+  }
+
+  if (String(pinAttempt).trim() === activeSession.pin) {
+    return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
+  }
+
+  throw new Error('Incorrect PIN')
+}
