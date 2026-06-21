@@ -17,6 +17,7 @@ All schema changes are tracked in `supabase/migrations/` as timestamped SQL file
 2026042404_notification_queue.sql              — notification_queue table
 2026042405_push_subscriptions.sql              — push_subscriptions table
 2026042501_add_todays_special.sql              — is_todays_special column on dishes
+2026062101_ordering_system.sql                 — ordering system: restaurants/tables/sessions/customers/orders/order_items/bills/print_jobs; fixes orders.status default → 'pending_approval' + adds status check constraint
 ```
 
 To create a new migration:
