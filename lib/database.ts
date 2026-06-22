@@ -1524,3 +1524,41 @@ export async function generateBill({
 
   return { billId: bill.id, total }
 }
+
+export interface TableEntry {
+  restaurantId: string
+  tableId: string
+  tableNumber: number
+  slug: string
+  restaurantName: string
+}
+
+export async function getTableEntry(
+  slug: string,
+  tableNumber: number
+): Promise<TableEntry | null> {
+  const { data: restaurant } = await adminSupabase
+    .from('restaurants')
+    .select('id, name')
+    .eq('slug', slug)
+    .maybeSingle()
+
+  if (!restaurant) return null
+
+  const { data: table } = await adminSupabase
+    .from('restaurant_tables')
+    .select('id, table_number')
+    .eq('restaurant_id', restaurant.id)
+    .eq('table_number', tableNumber)
+    .maybeSingle()
+
+  if (!table) return null
+
+  return {
+    restaurantId: restaurant.id,
+    tableId: table.id,
+    tableNumber: table.table_number,
+    slug,
+    restaurantName: restaurant.name,
+  }
+}
