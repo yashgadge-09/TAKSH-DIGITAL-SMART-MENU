@@ -74,3 +74,32 @@ All keys are defined in the `translations` object inside `LanguageContext.tsx`. 
 ### Usage
 
 `<LanguageProvider>` is in `app/layout.tsx`. Access via `useLanguage()`. Throws if used outside `LanguageProvider`.
+
+---
+
+## `TableSessionContext.tsx` (T06)
+
+Holds the resolved table identity after a guest scans a per-table QR code (`/[slug]/table/[number]`).
+
+### API
+
+```ts
+const table = useTableSession()
+// Returns TableSessionValue | null
+// null = guest is on /menu without a QR scan (off-table browsing)
+```
+
+### Shape
+
+```ts
+interface TableSessionValue {
+  restaurantId: string   // UUID from restaurants table
+  tableId: string        // UUID from restaurant_tables table
+  tableNumber: number    // e.g. 3
+  slug: string           // e.g. "taksh"
+}
+```
+
+### Usage
+
+`<TableSessionProvider value={...}>` is rendered by `app/[slug]/table/[number]/page.tsx` wrapping `<MenuPage />`. It is **NOT** in the root layout — only present under the table route. Always null-check before using: ordering components (`OrderFlow`) show a "scan QR" prompt when `useTableSession()` returns `null`.

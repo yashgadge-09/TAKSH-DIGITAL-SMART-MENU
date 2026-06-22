@@ -100,6 +100,14 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 **Analytics**
 - `getAnalyticsData(days)` — aggregates `menu_views`, `dish_views`, `cart_events`, `favourites`, `reviews` into dashboard-ready shape
 
+**Ordering (T02–T05)**
+- `createOrJoinSession({ restaurantId, tableId, pinAttempt? })` → `SessionResult` — creates a new table session with a 4-digit PIN, or joins an existing one by PIN. **Throws** on wrong PIN or missing table (never returns an error variant — callers must `try/catch`).
+- `placeOrder({ sessionId, customerId, restaurantId, items })` → `{ orderId, roundNumber }` — inserts order as `pending_approval` with snapshotted item names/prices. Does **not** create a KOT print job.
+- `approveOrder(orderId)` — transitions order to `approved` and creates a `kot` print job.
+- `rejectOrder(orderId)` — transitions order to `rejected`.
+- `generateBill(sessionId)` — aggregates all approved order rounds, computes GST, inserts `bills` row, queues a `bill` print job, flips session to `bill_generated`.
+- `getTableEntry(slug, tableNumber)` → `TableEntry | null` (T06) — resolves restaurant slug + table number into `{ restaurantId, tableId, tableNumber, slug, restaurantName }`. Used by `app/[slug]/table/[number]/page.tsx` only.
+
 ---
 
 ### Supabase RPC Functions (PostgreSQL)
