@@ -10,7 +10,8 @@ All routes use Next.js 16 App Router. The root `page.tsx` immediately redirects 
 
 | Route | File | Notes |
 |---|---|---|
-| `/menu` | `app/menu/page.tsx` | Main catalog — server component, fetches all dishes |
+| `/menu` | `app/menu/page.tsx` | Main catalog — `"use client"`, fetches all dishes |
+| `/[slug]/table/[number]` | `app/[slug]/table/[number]/page.tsx` | T06 — QR table entry; resolves restaurant+table, wraps `<MenuPage />` in `<TableSessionProvider>` |
 | `/category/[name]` | `app/category/[name]/page.tsx` | Dynamic category view |
 | `/dish/[id]` | `app/dish/[id]/page.tsx` | Dish detail with recommendations |
 | `/chefs-favourites` | `app/chefs-favourites/page.tsx` | `is_chef_special = true` dishes |

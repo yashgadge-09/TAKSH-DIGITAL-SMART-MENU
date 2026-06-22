@@ -13,8 +13,9 @@ components/
 ├── ImageCropperModal.tsx
 ├── LanguageSwitcher.tsx
 ├── NotificationPrompt.tsx
+├── OrderFlow.tsx        # T07 — Place Order modal (session/PIN flow)
 ├── OrderLikeModal.tsx
-├── OrderSummarySheet.tsx
+├── OrderSummarySheet.tsx  # legacy "show to waiter" — no longer in the order path
 ├── RateUsCard.tsx
 ├── ReviewModal.tsx
 ├── SplashScreen.tsx
@@ -37,10 +38,18 @@ Do not hand-edit these files unless patching a specific behavior — regenerate 
 ## Feature Components
 
 ### `CartDrawer.tsx`
-Floating cart drawer. Reads from `CartContext` (`useCart()`). Shows item list, quantity controls, subtotal. Contains the "Place Order" CTA that opens `OrderSummarySheet`. No server calls — purely context-driven.
+Floating cart drawer. Reads from `CartContext` (`useCart()`). Shows item list, quantity controls, subtotal. CTA is **"PLACE ORDER"** (T07) — calls `onShowOrder` prop which opens `OrderFlow`. No server calls — purely context-driven.
+
+### `OrderFlow.tsx` (T07)
+Modal that owns the Place Order → session/PIN flow. View state machine: `idle → show-pin | enter-pin → checkout`.
+- Reads `useTableSession()` — if `null` (off-table), shows a "scan QR" prompt instead of calling any server action.
+- Calls `createOrJoinSession` server action; wraps in `try/catch` — thrown "Incorrect PIN" shown inline.
+- OTP-style 4-box PIN input with auto-focus-advance and backspace navigation.
+- `isSubmitting` guard prevents duplicate session creation on double-tap.
+- `checkout` stage is a placeholder — T08 (`CheckoutForm`) fills it in.
 
 ### `OrderSummarySheet.tsx`
-Bottom sheet shown after "Place Order". Summarizes the cart, collects table number. On confirm, triggers `OrderLikeModal` (rate your dishes) and schedules a review notification via `/api/send-review-notifications`.
+**Legacy** — the old "show this screen to the waiter" bill UI. No longer part of the guest ordering path (replaced by `OrderFlow` in T07). File kept in repo; not imported by `app/menu/page.tsx`.
 
 ### `OrderLikeModal.tsx`
 Post-order modal asking guests which dishes they liked. Selected dishes are saved as favourites via `trackLikedDishesFromOrder()`. Also collects per-dish star ratings for `dish_ratings` table.
