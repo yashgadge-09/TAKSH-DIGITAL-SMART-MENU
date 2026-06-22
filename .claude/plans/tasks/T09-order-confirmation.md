@@ -37,11 +37,16 @@ Final screen after placing an order: confirm success, list the ordered items, pr
 - (If Realtime wired) admin approves → pill flips to "Sent to kitchen".
 
 ## Definition of Done
-- [ ] `confirmation` view added to `OrderFlow`; `confirmedPin` + `confirmedItems` stored on both create & join paths
-- [ ] items + totals shown from the snapshot
-- [ ] prominent PIN reminder + reorder instructions
-- [ ] `onOrderConfirmed` prop wired `menu/page.tsx → OrderFlow`; `OrderLikeModal` re-triggers once with snapshot items (T07's deferred feedback restored)
-- [ ] confirmation close sequence doesn't stack modals
-- [ ] (optional) live pending→approved status, only if anon RLS allows
-- [ ] `components/CLAUDE.md` updated (OrderConfirmation + OrderFlow changes)
-- [ ] Build clean (`npm run build`)
+- [x] `confirmation` view added to `OrderFlow`; `confirmedPin` + `confirmedItems` stored on both create & join paths (done in T08)
+- [x] items + totals shown from the snapshot (`OrderConfirmation` items list with qty × price + subtotal row)
+- [x] prominent PIN reminder (individual digit boxes) + reorder instructions
+- [x] `onOrderConfirmed` prop wired `menu/page.tsx → OrderFlow`; `OrderLikeModal` re-triggers once with snapshot items (T07's deferred feedback restored)
+- [x] confirmation close sequence (Done/X/overlay all fire `handleDone` → `onOrderConfirmed` → `handleClose`) — OrderLikeModal opens after OrderFlow closes, no stacking
+- [ ] (optional, v2) live pending→approved status — skipped; no anon SELECT policy on `orders` confirmed
+- [x] `components/CLAUDE.md` updated (OrderConfirmation + OrderFlow changes)
+- [x] Build clean (`npm run build`)
+
+**Implemented 2026-06-22:**
+- `components/OrderConfirmation.tsx` — new; items list with qty × price + subtotal; PIN digit boxes; reorder hint; Done button calls `onDone`
+- `components/OrderFlow.tsx` — T08 placeholder replaced with `<OrderConfirmation>`; `handleDone` defined once (fires `onOrderConfirmed` + `handleClose`); all close paths (Done, X, overlay) call `handleDone`; `CheckCircle2` import removed (moved into `OrderConfirmation`)
+- `components/CLAUDE.md` — `OrderConfirmation` documented; file tree + `OrderFlow` description updated

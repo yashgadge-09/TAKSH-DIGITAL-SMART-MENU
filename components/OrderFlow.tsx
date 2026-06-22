@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, QrCode, Lock, Loader2, CheckCircle2 } from "lucide-react";
+import { X, QrCode, Lock, Loader2 } from "lucide-react";
 import { useTableSession } from "@/context/TableSessionContext";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { createOrJoinSession } from "@/lib/database";
 import { CheckoutForm } from "@/components/CheckoutForm";
+import { OrderConfirmation } from "@/components/OrderConfirmation";
 
 type View = "idle" | "show-pin" | "enter-pin" | "checkout" | "confirmation";
 
@@ -235,41 +236,22 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     );
   }
 
-  // ── confirmation — T09 fills this in ──
+  // ── confirmation ──
   if (view === "confirmation") {
+    const handleDone = () => {
+      onOrderConfirmed?.(confirmedItems);
+      handleClose();
+    };
     return (
-      <Overlay onClose={() => {
-        onOrderConfirmed?.(confirmedItems);
-        handleClose();
-      }}>
+      <Overlay onClose={handleDone}>
         <Sheet>
-          <CloseBtn onClose={() => {
-            onOrderConfirmed?.(confirmedItems);
-            handleClose();
-          }} />
-          <div className="flex flex-col items-center gap-4 py-4 text-center">
-            <CheckCircle2 size={40} className="text-[color:var(--brand-gold)]" />
-            <div className="space-y-1">
-              <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Order Placed!</h2>
-              <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
-                Table {confirmedTableNumber ?? table?.tableNumber} · Your order is being reviewed.
-              </p>
-            </div>
-            {confirmedPin && (
-              <div className="w-full rounded-xl border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-gold)]/5 px-4 py-3 text-center">
-                <p className="text-[11px] uppercase tracking-wide text-[color:var(--brand-gold-soft)]/50 mb-1">Your table PIN</p>
-                <p className="font-serif text-2xl font-bold tracking-[0.25em] text-[color:var(--brand-gold)]">{confirmedPin}</p>
-                <p className="text-[11px] text-[color:var(--brand-gold-soft)]/40 mt-1">Remember this to order more</p>
-              </div>
-            )}
-            <button
-              onClick={() => { onOrderConfirmed?.(confirmedItems); handleClose(); }}
-              className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-bold text-[color:var(--brand-bg-deep)] shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99]"
-              style={{ background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)" }}
-            >
-              Done
-            </button>
-          </div>
+          <CloseBtn onClose={handleDone} />
+          <OrderConfirmation
+            items={confirmedItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price }))}
+            pin={confirmedPin}
+            tableNumber={confirmedTableNumber ?? table?.tableNumber ?? 0}
+            onDone={handleDone}
+          />
         </Sheet>
       </Overlay>
     );

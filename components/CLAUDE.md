@@ -9,12 +9,13 @@ components/
 ├── ui/                  # shadcn/ui primitives
 ├── AdminSidebar.tsx
 ├── CartDrawer.tsx
-├── CheckoutForm.tsx     # T08 — name/phone form; calls findOrCreateCustomer + placeOrder
+├── CheckoutForm.tsx       # T08 — name/phone form; calls findOrCreateCustomer + placeOrder
 ├── DishShareModal.tsx
 ├── ImageCropperModal.tsx
 ├── LanguageSwitcher.tsx
 ├── NotificationPrompt.tsx
-├── OrderFlow.tsx        # T07/T08 — Place Order modal (session/PIN/checkout/confirmation)
+├── OrderConfirmation.tsx  # T09 — success screen with items list, PIN reminder, reorder hint
+├── OrderFlow.tsx          # T07–T09 — Place Order modal (session/PIN/checkout/confirmation)
 ├── OrderLikeModal.tsx
 ├── OrderSummarySheet.tsx  # legacy "show to waiter" — no longer in the order path
 ├── RateUsCard.tsx
@@ -49,7 +50,14 @@ Customer info form rendered by `OrderFlow` in the `checkout` view. Props: `{ ses
 - Error path: thrown message shown inline, cart not cleared, form re-submittable.
 - `isSubmitting` guard prevents double-submit.
 
-### `OrderFlow.tsx` (T07/T08)
+### `OrderConfirmation.tsx` (T09)
+Success screen rendered by `OrderFlow` in the `confirmation` view. Props: `{ items, pin, tableNumber, onDone }`.
+- Shows ordered items with qty × price and a subtotal.
+- Prominent PIN reminder (individual digit boxes, matching `show-pin` style) — displayed on both create and join paths.
+- Reorder hint with QR code icon.
+- Done button fires `onDone` (OrderFlow then calls `onOrderConfirmed?(items)` → opens `OrderLikeModal`, and closes the modal).
+
+### `OrderFlow.tsx` (T07–T09)
 Modal that owns the full Place Order flow. View state machine: `idle → show-pin | enter-pin → checkout → confirmation`.
 - Reads `useTableSession()` — if `null` (off-table), shows a "scan QR" prompt instead of calling any server action.
 - Calls `createOrJoinSession` server action; wraps in `try/catch` — thrown "Incorrect PIN" shown inline.
