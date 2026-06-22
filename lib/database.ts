@@ -1562,3 +1562,42 @@ export async function getTableEntry(
     restaurantName: restaurant.name,
   }
 }
+
+export async function findOrCreateCustomer({
+  restaurantId,
+  name,
+  phone,
+  wantsWhatsapp,
+}: {
+  restaurantId: string
+  name: string
+  phone?: string
+  wantsWhatsapp?: boolean
+}): Promise<{ customerId: string }> {
+  if (!restaurantId || !name?.trim()) throw new Error('restaurantId and name are required')
+
+  const normalizedPhone = phone?.trim() || null
+
+  if (normalizedPhone) {
+    const { data: existing } = await adminSupabase
+      .from('customers')
+      .select('id')
+      .eq('restaurant_id', restaurantId)
+      .eq('phone', normalizedPhone)
+      .maybeSingle()
+    if (existing) return { customerId: existing.id }
+  }
+
+  const { data: customer, error } = await adminSupabase
+    .from('customers')
+    .insert({
+      restaurant_id: restaurantId,
+      name: name.trim(),
+      phone: normalizedPhone,
+      whatsapp_opted_in: wantsWhatsapp ?? false,
+    })
+    .select('id')
+    .single()
+  if (error || !customer) throw new Error('Failed to create customer')
+  return { customerId: customer.id }
+}

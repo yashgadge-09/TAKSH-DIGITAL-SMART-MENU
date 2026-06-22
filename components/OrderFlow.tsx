@@ -3,25 +3,29 @@
 import { useState, useRef } from "react";
 import { X, QrCode, Lock, Loader2, CheckCircle2 } from "lucide-react";
 import { useTableSession } from "@/context/TableSessionContext";
-import { useCart } from "@/context/CartContext";
+import { useCart, type CartItem } from "@/context/CartContext";
 import { createOrJoinSession } from "@/lib/database";
+import { CheckoutForm } from "@/components/CheckoutForm";
 
-type View = "idle" | "show-pin" | "enter-pin" | "checkout";
+type View = "idle" | "show-pin" | "enter-pin" | "checkout" | "confirmation";
 
 interface OrderFlowProps {
   isOpen: boolean;
   onClose: () => void;
+  onOrderConfirmed?: (items: CartItem[]) => void;
 }
 
-export function OrderFlow({ isOpen, onClose }: OrderFlowProps) {
+export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps) {
   const table = useTableSession();
-  const { items, totalPrice } = useCart();
+  const { items, totalPrice, clearCart } = useCart();
   const [view, setView] = useState<View>("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [displayPin, setDisplayPin] = useState("");
   const [pinInputs, setPinInputs] = useState(["", "", "", ""]);
   const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null);
   const [confirmedTableNumber, setConfirmedTableNumber] = useState<number | null>(null);
+  const [confirmedPin, setConfirmedPin] = useState("");
+  const [confirmedItems, setConfirmedItems] = useState<CartItem[]>([]);
   const [pinError, setPinError] = useState("");
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -34,6 +38,8 @@ export function OrderFlow({ isOpen, onClose }: OrderFlowProps) {
     setPinInputs(["", "", "", ""]);
     setConfirmedSessionId(null);
     setConfirmedTableNumber(null);
+    setConfirmedPin("");
+    setConfirmedItems([]);
     setPinError("");
     onClose();
   };
@@ -71,6 +77,7 @@ export function OrderFlow({ isOpen, onClose }: OrderFlowProps) {
       const result = await createOrJoinSession({ restaurantId: table.restaurantId, tableId: table.tableId });
       if (!result.exists) {
         setDisplayPin(result.pin);
+        setConfirmedPin(result.pin);
         setConfirmedSessionId(result.sessionId);
         setConfirmedTableNumber(result.tableNumber);
         setView("show-pin");
@@ -112,6 +119,7 @@ export function OrderFlow({ isOpen, onClose }: OrderFlowProps) {
       if (result.exists && !result.requiresPin) {
         setConfirmedSessionId(result.sessionId);
         setConfirmedTableNumber(result.tableNumber);
+        setConfirmedPin(result.pin);
         setView("checkout");
       } else {
         setPinError("Unexpected response. Please try again.");
@@ -206,22 +214,61 @@ export function OrderFlow({ isOpen, onClose }: OrderFlowProps) {
     );
   }
 
-  // ── checkout — T08 fills this in ──
+  // ── checkout ──
   if (view === "checkout" && confirmedSessionId) {
     return (
       <Overlay onClose={handleClose}>
         <Sheet>
           <CloseBtn onClose={handleClose} />
+          <CheckoutForm
+            sessionId={confirmedSessionId}
+            restaurantId={table.restaurantId}
+            items={items}
+            onPlaced={({ items: snapshot, orderId: _orderId }) => {
+              setConfirmedItems(snapshot);
+              clearCart();
+              setView("confirmation");
+            }}
+          />
+        </Sheet>
+      </Overlay>
+    );
+  }
+
+  // ── confirmation — T09 fills this in ──
+  if (view === "confirmation") {
+    return (
+      <Overlay onClose={() => {
+        onOrderConfirmed?.(confirmedItems);
+        handleClose();
+      }}>
+        <Sheet>
+          <CloseBtn onClose={() => {
+            onOrderConfirmed?.(confirmedItems);
+            handleClose();
+          }} />
           <div className="flex flex-col items-center gap-4 py-4 text-center">
             <CheckCircle2 size={40} className="text-[color:var(--brand-gold)]" />
             <div className="space-y-1">
-              <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">
-                Table {confirmedTableNumber ?? table.tableNumber} · Confirmed
-              </h2>
+              <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Order Placed!</h2>
               <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
-                Checkout form coming in T08.
+                Table {confirmedTableNumber ?? table?.tableNumber} · Your order is being reviewed.
               </p>
             </div>
+            {confirmedPin && (
+              <div className="w-full rounded-xl border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-gold)]/5 px-4 py-3 text-center">
+                <p className="text-[11px] uppercase tracking-wide text-[color:var(--brand-gold-soft)]/50 mb-1">Your table PIN</p>
+                <p className="font-serif text-2xl font-bold tracking-[0.25em] text-[color:var(--brand-gold)]">{confirmedPin}</p>
+                <p className="text-[11px] text-[color:var(--brand-gold-soft)]/40 mt-1">Remember this to order more</p>
+              </div>
+            )}
+            <button
+              onClick={() => { onOrderConfirmed?.(confirmedItems); handleClose(); }}
+              className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-bold text-[color:var(--brand-bg-deep)] shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99]"
+              style={{ background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)" }}
+            >
+              Done
+            </button>
           </div>
         </Sheet>
       </Overlay>
