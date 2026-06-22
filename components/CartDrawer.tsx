@@ -206,7 +206,7 @@ export function CartDrawer({
               }}
             >
               <span className="text-[15px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
-                SHOW ORDER TO WAITER - ₹{finalTotal}
+                PLACE ORDER · ₹{finalTotal}
               </span>
             </button>
           </div>

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Plus, ChefHat } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
-import { OrderSummarySheet } from "@/components/OrderSummarySheet";
+import { OrderFlow } from "@/components/OrderFlow";
 import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
@@ -44,7 +44,7 @@ function MenuPageContent() {
   }, [activeCategory, pathname, router, searchParams]);
 
   const [isCartOpen, setIsCartOpen] = useState(searchParams.get("cart") === "open");
-  const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState(false);
+  const [isOrderFlowOpen, setIsOrderFlowOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [lastAddedCategory, setLastAddedCategory] = useState<string | null>(null);
@@ -619,11 +619,9 @@ function MenuPageContent() {
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)}
         recommendations={sameCategoryRecommendations}
         onAddRecommendation={dish => handleAddDishToCart(dish)}
-        onShowOrder={() => { setIsCartOpen(false); setIsOrderSummaryOpen(true); }} />
+        onShowOrder={() => { setIsCartOpen(false); setIsOrderFlowOpen(true); }} />
 
-      <OrderSummarySheet isOpen={isOrderSummaryOpen} onClose={() => setIsOrderSummaryOpen(false)}
-        onEdit={() => { setIsOrderSummaryOpen(false); setIsCartOpen(true); }}
-        onConfirmOrder={handleOrderConfirmed} />
+      <OrderFlow isOpen={isOrderFlowOpen} onClose={() => setIsOrderFlowOpen(false)} />
 
       <OrderLikeModal isOpen={isOrderRatingOpen} orderedItems={lastConfirmedOrderItems}
         isSubmitting={isSavingDishRatings} onSkip={closeOrderRatingModal} onSubmit={handleDishRatingsSubmit} />
