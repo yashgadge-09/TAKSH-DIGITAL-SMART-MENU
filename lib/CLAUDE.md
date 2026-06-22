@@ -107,6 +107,7 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 - `rejectOrder(orderId)` — transitions order to `rejected`.
 - `generateBill(sessionId)` — aggregates all approved order rounds, computes GST, inserts `bills` row, queues a `bill` print job, flips session to `bill_generated`.
 - `getTableEntry(slug, tableNumber)` → `TableEntry | null` (T06) — resolves restaurant slug + table number into `{ restaurantId, tableId, tableNumber, slug, restaurantName }`. Used by `app/[slug]/table/[number]/page.tsx` only.
+- `findOrCreateCustomer({ restaurantId, name, phone?, wantsWhatsapp? })` → `{ customerId }` (T08) — looks up an existing `customers` row by `(restaurant_id, phone)` and reuses it, or inserts a new one. `whatsapp_opted_in` column is set on insert. Uses `adminSupabase` (RLS bypassed). Called by `CheckoutForm` before `placeOrder`.
 
 ---
 

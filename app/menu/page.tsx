@@ -621,7 +621,7 @@ function MenuPageContent() {
         onAddRecommendation={dish => handleAddDishToCart(dish)}
         onShowOrder={() => { setIsCartOpen(false); setIsOrderFlowOpen(true); }} />
 
-      <OrderFlow isOpen={isOrderFlowOpen} onClose={() => setIsOrderFlowOpen(false)} />
+      <OrderFlow isOpen={isOrderFlowOpen} onClose={() => setIsOrderFlowOpen(false)} onOrderConfirmed={handleOrderConfirmed} />
 
       <OrderLikeModal isOpen={isOrderRatingOpen} orderedItems={lastConfirmedOrderItems}
         isSubmitting={isSavingDishRatings} onSkip={closeOrderRatingModal} onSubmit={handleDishRatingsSubmit} />

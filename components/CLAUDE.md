@@ -9,11 +9,12 @@ components/
 ├── ui/                  # shadcn/ui primitives
 ├── AdminSidebar.tsx
 ├── CartDrawer.tsx
+├── CheckoutForm.tsx     # T08 — name/phone form; calls findOrCreateCustomer + placeOrder
 ├── DishShareModal.tsx
 ├── ImageCropperModal.tsx
 ├── LanguageSwitcher.tsx
 ├── NotificationPrompt.tsx
-├── OrderFlow.tsx        # T07 — Place Order modal (session/PIN flow)
+├── OrderFlow.tsx        # T07/T08 — Place Order modal (session/PIN/checkout/confirmation)
 ├── OrderLikeModal.tsx
 ├── OrderSummarySheet.tsx  # legacy "show to waiter" — no longer in the order path
 ├── RateUsCard.tsx
@@ -40,13 +41,23 @@ Do not hand-edit these files unless patching a specific behavior — regenerate 
 ### `CartDrawer.tsx`
 Floating cart drawer. Reads from `CartContext` (`useCart()`). Shows item list, quantity controls, subtotal. CTA is **"PLACE ORDER"** (T07) — calls `onShowOrder` prop which opens `OrderFlow`. No server calls — purely context-driven.
 
-### `OrderFlow.tsx` (T07)
-Modal that owns the Place Order → session/PIN flow. View state machine: `idle → show-pin | enter-pin → checkout`.
+### `CheckoutForm.tsx` (T08)
+Customer info form rendered by `OrderFlow` in the `checkout` view. Props: `{ sessionId, restaurantId, items, onPlaced }`.
+- Fields: Name (required), Phone (optional), WhatsApp opt-in checkbox (shown only when phone is entered).
+- On submit: calls `findOrCreateCustomer` → `placeOrder`; on success, snapshots cart items, calls `onPlaced({ items, orderId })`.
+- `onPlaced` in `OrderFlow` calls `clearCart()` then advances to `confirmation`.
+- Error path: thrown message shown inline, cart not cleared, form re-submittable.
+- `isSubmitting` guard prevents double-submit.
+
+### `OrderFlow.tsx` (T07/T08)
+Modal that owns the full Place Order flow. View state machine: `idle → show-pin | enter-pin → checkout → confirmation`.
 - Reads `useTableSession()` — if `null` (off-table), shows a "scan QR" prompt instead of calling any server action.
 - Calls `createOrJoinSession` server action; wraps in `try/catch` — thrown "Incorrect PIN" shown inline.
 - OTP-style 4-box PIN input with auto-focus-advance and backspace navigation.
 - `isSubmitting` guard prevents duplicate session creation on double-tap.
-- `checkout` stage is a placeholder — T08 (`CheckoutForm`) fills it in.
+- Stores `confirmedPin` on **both** create and join paths (T09 reads it for the PIN reminder).
+- `checkout` view renders `<CheckoutForm>`; `confirmation` view shows order success + PIN reminder.
+- `onOrderConfirmed?(items)` prop — fired with the cart snapshot when guest closes confirmation; wired in `app/menu/page.tsx` to open `OrderLikeModal`.
 
 ### `OrderSummarySheet.tsx`
 **Legacy** — the old "show this screen to the waiter" bill UI. No longer part of the guest ordering path (replaced by `OrderFlow` in T07). File kept in repo; not imported by `app/menu/page.tsx`.
