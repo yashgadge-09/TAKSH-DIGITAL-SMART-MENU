@@ -91,7 +91,25 @@ HEIC files are converted server-side via `heic-convert` in the upload route.
 Shown to guests after ordering. Requests OneSignal push permission. On grant, POSTs `player_id` to `/api/save-token`.
 
 ### `AdminSidebar.tsx`
-Navigation sidebar for all `/admin/*` routes. Links to dashboard, menu, categories, analytics, reviews, todays-special. Contains the restaurant brand logo.
+Exports two things: the `<AdminSidebar>` nav component (used by `app/admin/layout.tsx`) and `<AdminLayout>` (a wrapper every admin page must use — renders sidebar + repeats session guard). Contains the restaurant brand logo.
+
+Nav items (12 total):
+| Label | Route | Icon |
+|---|---|---|
+| Dashboard | `/admin/dashboard` | LayoutDashboard |
+| Incoming Orders | `/admin/incoming` | Inbox |
+| Tables | `/admin/tables` | LayoutGrid |
+| Menu | `/admin/menu` | UtensilsCrossed |
+| Categories | `/admin/categories` | Tag |
+| Today's Special | `/admin/todays-special` | Sparkles |
+| Analytics | `/admin/analytics` | BarChart2 |
+| Customers | `/admin/customers` | Users |
+| Reports | `/admin/reports` | FileBarChart |
+| Review Prompts | `/admin/reviews` | Bell |
+| Settings | `/admin/settings` | Settings |
+| Preview Menu | `/admin/preview` | Eye |
+
+Active state: `usePathname()` compared to `href` with `startsWith` — **no** exact match, so `/admin/incoming` stays highlighted on any sub-path. The sidebar does not currently support nested active highlighting.
 
 ### `LanguageSwitcher.tsx`
 Three-way toggle: EN / हिं / मर. Calls `setLanguage()` from `LanguageContext`, which persists to `localStorage`.

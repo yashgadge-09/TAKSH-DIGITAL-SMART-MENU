@@ -21,19 +21,29 @@ All routes use Next.js 16 App Router. The root `page.tsx` immediately redirects 
 
 ### Admin Routes (`/admin/`)
 
-All admin routes share `app/admin/layout.tsx` which wraps with `AdminSidebar`.
+**Two-layer auth model:**
+1. `app/admin/layout.tsx` — route-level session guard: checks `supabase.auth.getSession()`, redirects unauthenticated users to `/admin` (the login page). Renders only `{children}` — no sidebar.
+2. `AdminLayout` from `components/AdminSidebar.tsx` — renders the sidebar AND repeats the session check. Every admin page must wrap its content in `<AdminLayout>`. Admin login is email/password via `supabase.auth.signInWithPassword`.
 
-| Route | Purpose |
-|---|---|
-| `/admin/dashboard` | Overview with key stats |
-| `/admin/menu` | CRUD for dishes — add/edit/delete/toggle availability |
-| `/admin/categories` | Category ordering and images |
-| `/admin/analytics` | Engagement charts (menu views, cart, favourites, reviews) |
-| `/admin/reviews` | Review moderation — toggle `is_public` |
-| `/admin/todays-special` | Toggle `is_todays_special` per dish |
-| `/admin/preview` | Admin can preview guest-facing menu |
+After login the shared browser client (`lib/supabase.ts`) carries the `authenticated` JWT. RLS grants `update to authenticated using(true)` on `table_sessions` and `restaurants` — so table Close and Settings-save are direct browser updates (no new server action needed).
 
-Admin has **no authentication** in the current codebase — the `/admin` routes are security-by-obscurity only.
+All admin pages are `"use client"` components wrapped in `<AdminLayout>`. Gold/dark theme: dark header card (`bg-[linear-gradient(130deg,#2A180F…)]`), cream content cards (`bg-[linear-gradient(145deg,#FFF8EE…)]`).
+
+| Route | File | Purpose |
+|---|---|---|
+| `/admin` | `app/admin/page.tsx` | Login page (email/password) |
+| `/admin/dashboard` | `app/admin/dashboard/page.tsx` | Overview — QR scans, trending |
+| `/admin/incoming` | `app/admin/incoming/page.tsx` | Live pending-orders queue (T11); Approve → KOT, Reject → no KOT; Realtime |
+| `/admin/tables` | `app/admin/tables/page.tsx` | Live table grid (T12); status badges, running totals, drawer with Generate Bill + Close Table; Realtime |
+| `/admin/menu` | `app/admin/menu/page.tsx` | Dish CRUD — add/edit/delete/toggle availability |
+| `/admin/categories` | `app/admin/categories/page.tsx` | Category ordering and images |
+| `/admin/analytics` | `app/admin/analytics/page.tsx` | Engagement charts (menu views, cart, favourites, reviews) |
+| `/admin/reviews` | `app/admin/reviews/page.tsx` | Review moderation — toggle `is_public` |
+| `/admin/todays-special` | `app/admin/todays-special/page.tsx` | Toggle `is_todays_special` per dish |
+| `/admin/customers` | `app/admin/customers/page.tsx` | Customer directory (T13) — name/phone/WhatsApp opted-in, most-recent first |
+| `/admin/reports` | `app/admin/reports/page.tsx` | Daily billing report (T13) — date picker (IST), totals/count/avg, per-bill list |
+| `/admin/settings` | `app/admin/settings/page.tsx` | Restaurant details (T13) — editable name/address/GSTIN/UPI; table list + disabled QR-download stub (T15) |
+| `/admin/preview` | `app/admin/preview/page.tsx` | Admin preview of guest-facing menu |
 
 ### API Routes (`/api/`)
 
