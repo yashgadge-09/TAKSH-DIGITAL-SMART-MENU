@@ -50,3 +50,5 @@ export default function Page() {
 - [ ] each lands on its route and shows active styling + header label
 - [ ] auth-gated (logged-out → `/admin`)
 - [ ] styling consistent with existing items (expanded & collapsed)
+
+    
