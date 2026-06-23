@@ -133,7 +133,12 @@ Client-side only (`CartContext`). State lives in React memory — not persisted.
 
 ### Print Bridge (`print-bridge/`)
 
-Standalone Node.js/TypeScript script — **not part of Next.js**. Self-contained `package.json` with `tsx` runner, `@supabase/supabase-js`, and `dotenv`. Run: `cd print-bridge && npm i && npm start`.
+Standalone Node.js/TypeScript script — **not part of Next.js**. Self-contained `package.json` with `tsx` runner, `@supabase/supabase-js`, and `dotenv`. Two scripts:
+
+- `npm start` (`index.ts`) — polls `print_jobs` and sends KOT/bill to printer or mock console.
+- `npm run qr` (`generateQR.ts`) — reads `restaurant_tables` from DB, generates one A5 page per table (QR + `TABLE N` + `Scan to order`), outputs `print-bridge/output/qr-codes-taksh.pdf`. Env: `QR_BASE_URL` (default `https://tastefy.food`). `output/` is gitignored.
+
+Run: `cd print-bridge && npm i && npm start` (print loop) or `npm run qr` (QR PDF).
 
 Uses the **service role key** (required — `print_jobs` has no public SELECT/UPDATE RLS policy). Polls `print_jobs` every `POLL_MS` (default 2 s). `MOCK_PRINT=true` → formats KOT/bill to console. `MOCK_PRINT=false` → TCP socket to printer IP:9100 (ESC/POS). Chained `setTimeout` (not `setInterval`) prevents overlapping ticks. Per-job + per-tick try/catch → failed job marked `status: failed`, loop keeps running.
 
@@ -195,3 +200,5 @@ Payload field names (exact — set by `approveOrder` / `generateBill`):
 - The `favourites` table has a unique constraint on `(dish_id, session_id)` — use upsert, not insert.
 
 See `app/CLAUDE.md`, `lib/CLAUDE.md`, `components/CLAUDE.md`, `context/CLAUDE.md`, `supabase/CLAUDE.md` for folder-level detail.
+
+`docs/qa-checklist.md` — manual end-to-end QA checklist covering all 8 flows (first order, approval gate, reorder/round-2, wrong PIN, bill generation, close table, availability toggle, customer+WhatsApp). Run before going live with real printers.

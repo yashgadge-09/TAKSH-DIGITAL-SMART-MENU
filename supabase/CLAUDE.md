@@ -99,18 +99,18 @@ Notification → review funnel by table number and date.
 
 ---
 
-### Restaurant Ops (in-progress, 0 rows)
+### Restaurant Ops (ordering system — live)
 
-These tables are created but not yet actively used by the application:
+All tables are seeded and actively used by the ordering flow (T01–T14).
 
-- **`restaurants`** (1 row) — `slug` (unique), `name`, `address`, `gstin`, `upi_id`
-- **`restaurant_tables`** — physical tables, FK to `restaurants`
-- **`table_sessions`** — active dining sessions, status: `active` / `bill_generated` / `closed`
-- **`customers`** — phone, `whatsapp_opted_in`
-- **`orders`** — round-based ordering per session
-- **`order_items`** — FK to `orders` and `dishes`
-- **`bills`** — `subtotal`, `gst_amount`, `total` per session
-- **`print_jobs`** — KOT/bill print queue, type: `kot` / `bill`, status: `pending` / `sent` / `failed`
+- **`restaurants`** (1 row) — slug `taksh`, id `c7b441fe-…`; columns: `name`, `address`, `gstin`, `upi_id`
+- **`restaurant_tables`** (16 rows) — tables 1–16 seeded for `taksh`; FK to `restaurants`
+- **`table_sessions`** — active dining sessions with 4-digit PIN; status: `active` / `bill_generated` / `closed`
+- **`customers`** — name + optional phone; reused by `(restaurant_id, phone)`; `whatsapp_opted_in` bool
+- **`orders`** — round-based ordering per session; status: `pending_approval` / `approved` / `rejected` / `served`; default `pending_approval`
+- **`order_items`** — snapshotted dish `name` + `price` at order time; FK to `orders`
+- **`bills`** — `subtotal`, `gst_rate`, `gst_amount`, `total` per session; created by `generateBill()`
+- **`print_jobs`** — KOT/bill print queue; type: `kot` / `bill`; status: `pending` / `sent` / `failed`; KOT rows created **only** by `approveOrder()`, never by `placeOrder()`
 
 ---
 
