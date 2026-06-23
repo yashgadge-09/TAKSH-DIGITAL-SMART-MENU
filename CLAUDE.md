@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **TAKSH Digital Smart Menu** — a Next.js 16 (App Router, React 19, TypeScript) digital menu system for a pure-veg restaurant. It serves two audiences:
 - **Guests:** Scan a per-table QR → browse/search dishes → manage a floating cart → place a real order (session + PIN) → checkout with name/phone → receive confirmation. Also rate dishes and submit reviews.
-- **Admin:** Manage menu items, categories, analytics, today's specials, customer reviews, and approve/reject incoming orders.
+- **Admin:** Manage menu items, categories, analytics, today's specials, customer reviews. Approve/reject incoming orders (live queue), monitor tables in real time (running totals, generate bill, close table), view customer directory, daily sales reports, and restaurant settings (name/address/GSTIN/UPI). Print bridge (standalone Node.js script) prints KOT and bills via ESC/POS or mock console.
 
 Deployed on **Vercel**. Database on **Supabase (PostgreSQL)**. Push notifications via **OneSignal** (primary) and **Firebase FCM** (legacy). Images via **Cloudinary / res.tastefy.food CDN**.
 
@@ -54,12 +54,18 @@ npm run lint      # ESLint
 /dish/[id]               → dish detail page
 /chefs-favourites, /most-loved, /todays-special → curated views
 /preview                 → customer-side preview
-/admin/dashboard         → admin home
+/admin/dashboard         → admin home (analytics overview)
+/admin/incoming          → live pending-orders queue (T11); Approve fires KOT, Reject discards
+/admin/tables            → live table grid (T12); drawer: rounds, Generate Bill, Close Table
 /admin/menu              → dish CRUD
 /admin/categories        → category management
 /admin/analytics         → engagement metrics
 /admin/reviews           → review moderation
 /admin/todays-special    → toggle daily specials
+/admin/customers         → customer directory (T13); name/phone/WhatsApp opt-in
+/admin/reports           → daily billing report (T13); date picker, IST-aware totals
+/admin/settings          → restaurant details (T13); editable name/address/GSTIN/UPI, QR stub
+/admin/preview           → admin preview of guest-facing menu
 ```
 
 API routes under `/api/`:
@@ -110,15 +116,30 @@ Dish content is multilingual at the DB level: `name_en/hi/mr`, `description_en/h
 
 Client-side only (`CartContext`). State lives in React memory — not persisted. Adding to cart fires `trackCartEvent` (analytics) and a two-tone audio chime (Web Audio API).
 
-### Ordering Flow (T06–T09, in progress)
+### Ordering Flow (T06–T14, complete)
 
-`/[slug]/table/[number]` → `TableSessionContext` (holds `restaurantId`, `tableId`, `tableNumber`, `slug`) → guest adds to cart → "PLACE ORDER" opens `OrderFlow` modal → `createOrJoinSession` (creates session + PIN, or joins via PIN) → `CheckoutForm` (T08, name/phone, calls `placeOrder` → `pending_approval`) → `OrderConfirmation` (T09).
+**Guest path:** `/[slug]/table/[number]` → `TableSessionContext` (holds `restaurantId`, `tableId`, `tableNumber`, `slug`) → guest adds to cart → "PLACE ORDER" opens `OrderFlow` modal → `createOrJoinSession` (creates session + PIN, or joins via PIN) → `CheckoutForm` (name/phone/WhatsApp, calls `placeOrder` → `pending_approval`) → `OrderConfirmation`.
+
+**Admin approval gate:** Order lands in `/admin/incoming` as `pending_approval`. Admin clicks **Approve** → `approveOrder()` transitions to `approved` and creates a `kot` print job. **Reject** → `rejected`, no print job. Nothing reaches the kitchen without passing through here.
+
+**Table lifecycle:** `/admin/tables` shows a live grid (Realtime). Drawer: rounds, running total (non-rejected orders only), **Generate Bill** → `generateBill({ sessionId })` → session `bill_generated` + bill print job. **Close Table** → direct authenticated update `status: closed`.
 
 **Key rules:**
 - `createOrJoinSession` **throws** on wrong PIN — callers must `try/catch`.
 - `placeOrder` creates the order as `pending_approval` with **no** print job.
 - `approveOrder` is the **only** function that creates a KOT print job.
+- `generateBill` takes `{ sessionId }` (object, not a bare string).
 - `useTableSession()` returns `null` on plain `/menu` — always null-check before calling ordering actions.
+
+### Print Bridge (`print-bridge/`)
+
+Standalone Node.js/TypeScript script — **not part of Next.js**. Self-contained `package.json` with `tsx` runner, `@supabase/supabase-js`, and `dotenv`. Run: `cd print-bridge && npm i && npm start`.
+
+Uses the **service role key** (required — `print_jobs` has no public SELECT/UPDATE RLS policy). Polls `print_jobs` every `POLL_MS` (default 2 s). `MOCK_PRINT=true` → formats KOT/bill to console. `MOCK_PRINT=false` → TCP socket to printer IP:9100 (ESC/POS). Chained `setTimeout` (not `setInterval`) prevents overlapping ticks. Per-job + per-tick try/catch → failed job marked `status: failed`, loop keeps running.
+
+Payload field names (exact — set by `approveOrder` / `generateBill`):
+- KOT: `{ tableNumber, roundNumber, time, items: { name, qty }[] }`
+- Bill: `{ restaurantName, address, gstin, upiId, tableNumber, customerName, rounds: { number, time, items: { name, qty, price }[] }[], subtotal, gstRate, gstAmount, total }`
 
 ### Push Notifications Flow
 
