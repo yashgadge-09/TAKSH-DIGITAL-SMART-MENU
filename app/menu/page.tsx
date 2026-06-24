@@ -9,14 +9,40 @@ import { OrderFlow } from "@/components/OrderFlow";
 import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
-import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView } from "@/lib/database";
+import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView, addSharedCartItem, trackCartEvent } from "@/lib/database";
 import { getOrCreateSessionId, shouldTrackClientEvent } from "@/lib/session";
+import { useSharedSession } from "@/context/SharedSessionContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { isSameCategory, normalizeCategory, toSingular } from "@/lib/utils";
 
 const PREVIEW_LIMIT = 6;
+
+function playChime() {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const playNote = (freq: number, startTime: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + 1.0);
+    };
+    playNote(1046.50, ctx.currentTime);
+    playNote(1318.51, ctx.currentTime + 0.1);
+  } catch {
+    // ignore if audio is blocked
+  }
+}
 
 
 
@@ -27,6 +53,7 @@ function MenuPageContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { totalItems, addItem, items } = useCart();
+  const sharedSession = useSharedSession();
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
   const [showSpicyOnly, setShowSpicyOnly] = useState(false);
@@ -165,9 +192,21 @@ function MenuPageContent() {
   const getTodaysSpecials = () => dishes.filter(d => d.isTodaysSpecial).map(d => ({ ...d, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }));
 
   const handleAddDishToCart = (dish: { id: string; name: string; price: number; image: string; category: string }) => {
-    addItem(dish);
     setLastAddedCategory(dish.category);
     toast(`${dish.name} added!`, { icon: "🛒" });
+
+    if (sharedSession) {
+      playChime();
+      void addSharedCartItem({
+        sessionId: sharedSession.sessionId,
+        deviceId: sharedSession.deviceId,
+        displayName: sharedSession.displayName,
+        dish,
+      }).catch(() => {});
+      void trackCartEvent(dish.id, dish.name, dish.category || "General", Number(dish.price) || 0).catch(() => {});
+    } else {
+      addItem(dish);
+    }
   };
 
   const cartIds = new Set(items.map(item => item.id));

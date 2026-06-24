@@ -18,6 +18,7 @@ All schema changes are tracked in `supabase/migrations/` as timestamped SQL file
 2026042405_push_subscriptions.sql              — push_subscriptions table
 2026042501_add_todays_special.sql              — is_todays_special column on dishes
 2026062101_ordering_system.sql                 — ordering system: restaurants/tables/sessions/customers/orders/order_items/bills/print_jobs; fixes orders.status default → 'pending_approval' + adds status check constraint
+2026062501_shared_cart.sql                     — shared cart: host_device_id/host_name on table_sessions; session_cart_items table with RLS + realtime
 ```
 
 To create a new migration:
@@ -105,12 +106,13 @@ All tables are seeded and actively used by the ordering flow (T01–T14).
 
 - **`restaurants`** (1 row) — slug `taksh`, id `c7b441fe-…`; columns: `name`, `address`, `gstin`, `upi_id`
 - **`restaurant_tables`** (16 rows) — tables 1–16 seeded for `taksh`; FK to `restaurants`
-- **`table_sessions`** — active dining sessions with 4-digit PIN; status: `active` / `bill_generated` / `closed`
+- **`table_sessions`** — active dining sessions with 4-digit PIN; status: `active` / `bill_generated` / `closed`; `host_device_id` + `host_name` columns for shared-cart host tracking (added by `2026062501_shared_cart.sql`)
 - **`customers`** — name + optional phone; reused by `(restaurant_id, phone)`; `whatsapp_opted_in` bool
 - **`orders`** — round-based ordering per session; status: `pending_approval` / `approved` / `rejected` / `served`; default `pending_approval`
 - **`order_items`** — snapshotted dish `name` + `price` at order time; FK to `orders`
-- **`bills`** — `subtotal`, `gst_rate`, `gst_amount`, `total` per session; created by `generateBill()`
+- **`bills`** — `subtotal`, `gst_amount`, `total` per session; created by `generateBill()`
 - **`print_jobs`** — KOT/bill print queue; type: `kot` / `bill`; status: `pending` / `sent` / `failed`; KOT rows created **only** by `approveOrder()`, never by `placeOrder()`
+- **`session_cart_items`** — shared DB-backed cart; one row per (session, dish, device); `added_by_device_id` + `added_by_name` for attribution; `on delete cascade` from `table_sessions`; in `supabase_realtime` publication; SELECT open to anon (for Realtime delivery); all writes via service role
 
 ---
 

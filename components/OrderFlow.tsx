@@ -3,8 +3,9 @@
 import { useState, useRef } from "react";
 import { X, QrCode, Lock, Loader2 } from "lucide-react";
 import { useTableSession } from "@/context/TableSessionContext";
+import { useSharedSession } from "@/context/SharedSessionContext";
 import { useCart, type CartItem } from "@/context/CartContext";
-import { createOrJoinSession } from "@/lib/database";
+import { createOrJoinSession, clearSharedCart } from "@/lib/database";
 import { CheckoutForm } from "@/components/CheckoutForm";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
 
@@ -18,7 +19,9 @@ interface OrderFlowProps {
 
 export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps) {
   const table = useTableSession();
-  const { items, totalPrice, clearCart } = useCart();
+  const sharedSession = useSharedSession();
+  const { items: localItems, totalPrice, clearCart } = useCart();
+
   const [view, setView] = useState<View>("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [displayPin, setDisplayPin] = useState("");
@@ -30,7 +33,30 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
   const [pinError, setPinError] = useState("");
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const itemCount = items.reduce((a, i) => a + i.quantity, 0);
+  // ── Shared-mode: aggregate shared cart items by dish_id for placeOrder ──
+  const sharedCartItems: CartItem[] = sharedSession
+    ? (() => {
+        const agg = new Map<string, CartItem>();
+        for (const si of sharedSession.sharedItems) {
+          const existing = agg.get(si.dishId);
+          if (existing) {
+            agg.set(si.dishId, { ...existing, quantity: existing.quantity + si.quantity });
+          } else {
+            agg.set(si.dishId, {
+              id: si.dishId,
+              name: si.name,
+              price: si.price,
+              image: si.image || "",
+              category: si.category || "",
+              quantity: si.quantity,
+            });
+          }
+        }
+        return Array.from(agg.values());
+      })()
+    : localItems;
+
+  const itemCount = sharedCartItems.reduce((a, i) => a + i.quantity, 0);
 
   const handleClose = () => {
     setView("idle");
@@ -69,7 +95,102 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     );
   }
 
-  // ── Place order ──
+  // ── Shared mode: direct to checkout (no PIN gate) ──
+  if (sharedSession) {
+    const sessionId = sharedSession.sessionId;
+    const pin = sharedSession.pin;
+    const tableNumber = table.tableNumber;
+
+    // checkout view
+    if (view === "checkout") {
+      return (
+        <Overlay onClose={handleClose}>
+          <Sheet>
+            <CloseBtn onClose={handleClose} />
+            <CheckoutForm
+              sessionId={sessionId}
+              restaurantId={table.restaurantId}
+              items={sharedCartItems}
+              onPlaced={async ({ items: snapshot, orderId: _orderId }) => {
+                setConfirmedItems(snapshot);
+                setConfirmedPin(pin);
+                setConfirmedTableNumber(tableNumber);
+                // Clear shared cart after successful order
+                await clearSharedCart(sessionId).catch(() => {});
+                clearCart();
+                setView("confirmation");
+              }}
+            />
+          </Sheet>
+        </Overlay>
+      );
+    }
+
+    // confirmation view
+    if (view === "confirmation") {
+      const handleDone = () => {
+        onOrderConfirmed?.(confirmedItems);
+        handleClose();
+      };
+      return (
+        <Overlay onClose={handleDone}>
+          <Sheet>
+            <CloseBtn onClose={handleDone} />
+            <OrderConfirmation
+              items={confirmedItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price }))}
+              pin={confirmedPin || pin}
+              tableNumber={confirmedTableNumber ?? tableNumber}
+              onDone={handleDone}
+            />
+          </Sheet>
+        </Overlay>
+      );
+    }
+
+    // idle — show order summary + PIN reference
+    return (
+      <Overlay onClose={handleClose}>
+        <Sheet>
+          <CloseBtn onClose={handleClose} />
+          <div className="flex flex-col gap-5 py-2">
+            <div className="space-y-1 text-center">
+              <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Place Your Order</h2>
+              <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
+                Table {tableNumber} · {itemCount} item{itemCount !== 1 ? "s" : ""}
+              </p>
+            </div>
+
+            {/* PIN reference for the host */}
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-[11px] text-[color:var(--brand-gold-muted)] opacity-60 flex items-center gap-1">
+                <Lock size={10} /> Table PIN (share with friends)
+              </p>
+              <div className="flex gap-2">
+                {pin.split("").map((d, i) => (
+                  <div
+                    key={i}
+                    className="grid h-10 w-9 place-items-center rounded-lg border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg)] font-serif text-xl font-bold text-[color:var(--brand-gold)]"
+                  >
+                    {d}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <GoldButton
+              onClick={() => setView("checkout")}
+              disabled={itemCount === 0}
+            >
+              {`Confirm & Checkout · ₹${sharedSession.sharedItems.reduce((s, i) => s + i.price * i.quantity, 0)}`}
+            </GoldButton>
+          </div>
+        </Sheet>
+      </Overlay>
+    );
+  }
+
+  // ── Legacy mode (no shared session — solo diner on /menu or session not yet loaded) ──
+
   const handlePlaceOrder = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -94,7 +215,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     }
   };
 
-  // ── PIN input ──
   const handlePinChange = (idx: number, val: string) => {
     const digit = val.replace(/\D/, "").slice(-1);
     const next = [...pinInputs];
@@ -135,7 +255,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     }
   };
 
-  // ── show-pin ──
   if (view === "show-pin") {
     return (
       <Overlay onClose={handleClose}>
@@ -170,7 +289,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     );
   }
 
-  // ── enter-pin ──
   if (view === "enter-pin") {
     return (
       <Overlay onClose={handleClose}>
@@ -215,7 +333,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     );
   }
 
-  // ── checkout ──
   if (view === "checkout" && confirmedSessionId) {
     return (
       <Overlay onClose={handleClose}>
@@ -224,7 +341,7 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
           <CheckoutForm
             sessionId={confirmedSessionId}
             restaurantId={table.restaurantId}
-            items={items}
+            items={localItems}
             onPlaced={({ items: snapshot, orderId: _orderId }) => {
               setConfirmedItems(snapshot);
               clearCart();
@@ -236,7 +353,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     );
   }
 
-  // ── confirmation ──
   if (view === "confirmation") {
     const handleDone = () => {
       onOrderConfirmed?.(confirmedItems);
@@ -257,7 +373,7 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     );
   }
 
-  // ── idle (default) ──
+  // idle
   return (
     <Overlay onClose={handleClose}>
       <Sheet>

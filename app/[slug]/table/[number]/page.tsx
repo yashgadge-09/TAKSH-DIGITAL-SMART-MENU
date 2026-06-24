@@ -1,5 +1,6 @@
 import { getTableEntry } from "@/lib/database";
 import { TableSessionProvider } from "@/context/TableSessionContext";
+import { SharedSessionProvider } from "@/context/SharedSessionContext";
 import MenuPage from "@/app/menu/page";
 
 interface Props {
@@ -28,7 +29,13 @@ export default async function TableEntryPage({ params }: Props) {
         slug: entry.slug,
       }}
     >
-      <MenuPage />
+      <SharedSessionProvider
+        restaurantId={entry.restaurantId}
+        tableId={entry.tableId}
+        tableNumber={entry.tableNumber}
+      >
+        <MenuPage />
+      </SharedSessionProvider>
     </TableSessionProvider>
   );
 }

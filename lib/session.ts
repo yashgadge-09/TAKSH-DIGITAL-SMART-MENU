@@ -1,4 +1,5 @@
 const SESSION_ID_KEY = "taksh:session-id"
+const DISPLAY_NAME_KEY = "taksh:display-name"
 
 function generateSessionId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -26,6 +27,16 @@ export function getOrCreateSessionId() {
   const next = generateSessionId()
   localStorage.setItem(SESSION_ID_KEY, next)
   return next
+}
+
+export function getOrCreateDisplayName(): string | null {
+  if (typeof window === "undefined") return null
+  return window.localStorage.getItem(DISPLAY_NAME_KEY)
+}
+
+export function setDisplayName(name: string): void {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(DISPLAY_NAME_KEY, name.trim() || "Guest")
 }
 
 export function getFavouriteSessionKey(sessionId: string, dishId: string) {
