@@ -1533,6 +1533,16 @@ export interface TableEntry {
   restaurantName: string
 }
 
+export async function getDefaultRestaurantSlug(): Promise<string | null> {
+  const { data } = await adminSupabase
+    .from('restaurants')
+    .select('slug')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  return data?.slug ?? null
+}
+
 export async function getTableEntry(
   slug: string,
   tableNumber: number
