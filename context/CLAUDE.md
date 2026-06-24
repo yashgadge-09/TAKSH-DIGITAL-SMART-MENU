@@ -77,6 +77,46 @@ All keys are defined in the `translations` object inside `LanguageContext.tsx`. 
 
 ---
 
+## `SharedSessionContext.tsx` (shared cart feature)
+
+Client-side context for the shared table cart. Lives under `app/[slug]/table/[number]/page.tsx` (inside `TableSessionProvider`). Runs `joinTable()` on mount via `useEffect` to auto-join the active table session.
+
+### API
+
+```ts
+const session = useSharedSession()
+// Returns SharedSessionValue | null
+// null = not under a table route, or joinTable() still in flight
+```
+
+### Shape
+
+```ts
+interface SharedSessionValue {
+  sessionId: string       // active table_sessions row id
+  pin: string             // 4-digit PIN (shown to host as reference)
+  isHost: boolean         // true if this device created the session
+  hostName: string        // display name of the host
+  deviceId: string        // per-device UUID from lib/session.ts
+  displayName: string     // this device's display name (from localStorage)
+  sharedItems: SharedCartItem[]  // live cart from useSharedCartRealtime
+  refetchCart: () => Promise<void>
+}
+```
+
+### Behavior
+
+- On first table visit (no `taksh:display-name` in localStorage): shows `NamePrompt` bottom sheet; joins as "Guest" immediately while prompt is shown
+- On subsequent visits: joins silently with stored name
+- `joinTable()` (server action) creates a new session if none is `active`, otherwise returns the existing one. First device to join is host.
+- `sharedItems` are kept in sync via Supabase Realtime (`session_cart_items` table)
+
+### Usage
+
+`<SharedSessionProvider>` is rendered by `app/[slug]/table/[number]/page.tsx` inside `<TableSessionProvider>`. `useSharedSession()` is available in any client component under that route (`MenuPage`, `CartDrawer`, `OrderFlow`).
+
+---
+
 ## `TableSessionContext.tsx` (T06)
 
 Holds the resolved table identity after a guest scans a per-table QR code (`/[slug]/table/[number]`).

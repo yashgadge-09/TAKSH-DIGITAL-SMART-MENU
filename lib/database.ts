@@ -1563,6 +1563,214 @@ export async function getTableEntry(
   }
 }
 
+// ─── Shared cart ────────────────────────────────────────────────────────────
+
+export interface SharedCartItem {
+  id: string
+  dishId: string
+  name: string
+  price: number
+  image: string | null
+  category: string | null
+  quantity: number
+  addedByDeviceId: string
+  addedByName: string
+}
+
+export async function joinTable({
+  restaurantId,
+  tableId,
+  deviceId,
+  displayName,
+}: {
+  restaurantId: string
+  tableId: string
+  deviceId: string
+  displayName?: string
+}): Promise<{ sessionId: string; pin: string; isHost: boolean; hostName: string }> {
+  if (!restaurantId || !tableId || !deviceId) throw new Error('restaurantId, tableId, and deviceId are required')
+
+  const effectiveName = displayName?.trim() || 'Guest'
+
+  const { data: tableRow, error: tableError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', tableId)
+    .single()
+  if (tableError || !tableRow) throw new Error('Table not found')
+
+  const { data: activeSession } = await adminSupabase
+    .from('table_sessions')
+    .select('id, pin, host_device_id, host_name')
+    .eq('table_id', tableId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!activeSession) {
+    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    const { data: newSession, error: insertError } = await adminSupabase
+      .from('table_sessions')
+      .insert({
+        restaurant_id: restaurantId,
+        table_id: tableId,
+        pin,
+        status: 'active',
+        host_device_id: deviceId,
+        host_name: effectiveName,
+      })
+      .select('id')
+      .single()
+    if (insertError || !newSession) throw new Error('Failed to create session')
+    return { sessionId: newSession.id, pin, isHost: true, hostName: effectiveName }
+  }
+
+  const isHost = activeSession.host_device_id === deviceId
+  return {
+    sessionId: activeSession.id,
+    pin: activeSession.pin,
+    isHost,
+    hostName: activeSession.host_name ?? 'Host',
+  }
+}
+
+export async function getSharedCart(sessionId: string): Promise<SharedCartItem[]> {
+  if (!sessionId) return []
+  const { data, error } = await adminSupabase
+    .from('session_cart_items')
+    .select('id, dish_id, name, price, image, category, quantity, added_by_device_id, added_by_name')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error('Failed to fetch shared cart')
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    dishId: row.dish_id,
+    name: row.name,
+    price: Number(row.price),
+    image: row.image,
+    category: row.category,
+    quantity: row.quantity,
+    addedByDeviceId: row.added_by_device_id,
+    addedByName: row.added_by_name,
+  }))
+}
+
+export async function addSharedCartItem({
+  sessionId,
+  deviceId,
+  displayName,
+  dish,
+}: {
+  sessionId: string
+  deviceId: string
+  displayName: string
+  dish: { id: string; name: string; price: number; image: string; category: string }
+}): Promise<void> {
+  if (!sessionId || !deviceId || !dish?.id) throw new Error('sessionId, deviceId, and dish are required')
+
+  const { data: existing } = await adminSupabase
+    .from('session_cart_items')
+    .select('id, quantity')
+    .eq('session_id', sessionId)
+    .eq('dish_id', dish.id)
+    .eq('added_by_device_id', deviceId)
+    .maybeSingle()
+
+  if (existing) {
+    await adminSupabase
+      .from('session_cart_items')
+      .update({ quantity: existing.quantity + 1, updated_at: new Date().toISOString() })
+      .eq('id', existing.id)
+  } else {
+    await adminSupabase.from('session_cart_items').insert({
+      session_id: sessionId,
+      dish_id: dish.id,
+      name: dish.name,
+      price: dish.price,
+      image: dish.image || null,
+      category: dish.category || null,
+      quantity: 1,
+      added_by_device_id: deviceId,
+      added_by_name: displayName || 'Guest',
+    })
+  }
+}
+
+export async function updateSharedCartItemQty({
+  sessionId,
+  deviceId,
+  itemId,
+  quantity,
+}: {
+  sessionId: string
+  deviceId: string
+  itemId: string
+  quantity: number
+}): Promise<void> {
+  if (!sessionId || !deviceId || !itemId) throw new Error('sessionId, deviceId, and itemId are required')
+
+  const { data: item } = await adminSupabase
+    .from('session_cart_items')
+    .select('added_by_device_id')
+    .eq('id', itemId)
+    .eq('session_id', sessionId)
+    .maybeSingle()
+  if (!item) throw new Error('Item not found')
+
+  const { data: session } = await adminSupabase
+    .from('table_sessions')
+    .select('host_device_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+
+  const canEdit = item.added_by_device_id === deviceId || session?.host_device_id === deviceId
+  if (!canEdit) throw new Error('Permission denied')
+
+  if (quantity <= 0) {
+    await adminSupabase.from('session_cart_items').delete().eq('id', itemId)
+  } else {
+    await adminSupabase
+      .from('session_cart_items')
+      .update({ quantity, updated_at: new Date().toISOString() })
+      .eq('id', itemId)
+  }
+}
+
+export async function removeSharedCartItem({
+  sessionId,
+  deviceId,
+  itemId,
+}: {
+  sessionId: string
+  deviceId: string
+  itemId: string
+}): Promise<void> {
+  if (!sessionId || !deviceId || !itemId) throw new Error('sessionId, deviceId, and itemId are required')
+
+  const { data: item } = await adminSupabase
+    .from('session_cart_items')
+    .select('added_by_device_id')
+    .eq('id', itemId)
+    .eq('session_id', sessionId)
+    .maybeSingle()
+  if (!item) throw new Error('Item not found')
+
+  const { data: session } = await adminSupabase
+    .from('table_sessions')
+    .select('host_device_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+
+  const canEdit = item.added_by_device_id === deviceId || session?.host_device_id === deviceId
+  if (!canEdit) throw new Error('Permission denied')
+
+  await adminSupabase.from('session_cart_items').delete().eq('id', itemId)
+}
+
+export async function clearSharedCart(sessionId: string): Promise<void> {
+  if (!sessionId) return
+  await adminSupabase.from('session_cart_items').delete().eq('session_id', sessionId)
+}
+
 export async function findOrCreateCustomer({
   restaurantId,
   name,
