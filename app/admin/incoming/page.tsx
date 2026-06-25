@@ -3,36 +3,9 @@
 import { useEffect, useState } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
 import { supabase } from "@/lib/supabase"
-import { approveOrder, rejectOrder } from "@/lib/database"
+import { approveOrder, rejectOrder, getPendingOrders, type PendingOrder } from "@/lib/database"
 import { toast } from "sonner"
 import { CheckCircle, XCircle, Clock, Users, Inbox } from "lucide-react"
-
-type OrderItem = { name: string; quantity: number }
-
-type PendingOrder = {
-  id: string
-  round_number: number
-  placed_at: string
-  customers: { name: string } | null
-  order_items: OrderItem[]
-  table_sessions: { restaurant_tables: { table_number: number } | null } | null
-}
-
-async function fetchPendingOrders(): Promise<PendingOrder[]> {
-  const { data, error } = await supabase
-    .from("orders")
-    .select(
-      "id, round_number, placed_at, " +
-      "order_items(name, quantity), " +
-      "customers(name), " +
-      "table_sessions(restaurant_tables(table_number))"
-    )
-    .eq("status", "pending_approval")
-    .order("placed_at", { ascending: true })
-
-  if (error) throw error
-  return (data as unknown as PendingOrder[]) ?? []
-}
 
 function formatTime(placed_at: string) {
   const d = new Date(placed_at)
@@ -46,10 +19,10 @@ export default function IncomingOrdersPage() {
 
   const load = async () => {
     try {
-      const data = await fetchPendingOrders()
+      const data = await getPendingOrders()
       setOrders(data)
-    } catch {
-      toast.error("Failed to load orders")
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to load orders")
     } finally {
       setIsLoading(false)
     }

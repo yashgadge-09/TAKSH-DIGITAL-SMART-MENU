@@ -140,6 +140,7 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
               items={confirmedItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price }))}
               pin={confirmedPin || pin}
               tableNumber={confirmedTableNumber ?? tableNumber}
+              sessionId={sessionId}
               onDone={handleDone}
             />
           </Sheet>
@@ -366,6 +367,7 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
             items={confirmedItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price }))}
             pin={confirmedPin}
             tableNumber={confirmedTableNumber ?? table?.tableNumber ?? 0}
+            sessionId={confirmedSessionId ?? undefined}
             onDone={handleDone}
           />
         </Sheet>

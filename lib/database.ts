@@ -1152,6 +1152,21 @@ export async function getAnalyticsData(days = 7) {
 
 // ─── Ordering system ────────────────────────────────────────────────────────
 
+// Returns the UTC Date corresponding to midnight IST today.
+// Any session whose opened_at is before this cutoff is from a previous day.
+function todayMidnightIST(): Date {
+  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  const dateStr = istNow.toISOString().split('T')[0] // "YYYY-MM-DD" in IST
+  return new Date(`${dateStr}T00:00:00+05:30`)
+}
+
+async function closeStaleSession(sessionId: string): Promise<void> {
+  await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+}
+
 export type SessionResult =
   | { exists: false; sessionId: string; tableNumber: number; pin: string }
   | { exists: true; requiresPin: true }
@@ -1177,12 +1192,19 @@ export async function createOrJoinSession({
   if (tableError || !tableRow) throw new Error('Table not found')
   const tableNumber: number = tableRow.table_number
 
-  const { data: activeSession } = await adminSupabase
+  const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin')
+    .select('id, pin, opened_at')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
+
+  // Auto-close sessions opened before today's midnight IST (stale from a previous day)
+  let activeSession = foundSession
+  if (foundSession && new Date(foundSession.opened_at) < todayMidnightIST()) {
+    await closeStaleSession(foundSession.id)
+    activeSession = null
+  }
 
   if (!activeSession) {
     const pin = String(Math.floor(1000 + Math.random() * 9000))
@@ -1382,6 +1404,128 @@ export async function rejectOrder(
   if (updateError) throw new Error('Failed to reject order')
 
   return { orderId, status: 'rejected' }
+}
+
+export type PendingOrder = {
+  id: string
+  round_number: number
+  placed_at: string
+  customers: { name: string } | null
+  order_items: { name: string; quantity: number }[]
+  table_sessions: { restaurant_tables: { table_number: number } | null } | null
+}
+
+export async function getPendingOrders(): Promise<PendingOrder[]> {
+  const { data, error } = await adminSupabase
+    .from('orders')
+    .select(
+      'id, round_number, placed_at, ' +
+      'order_items(name, quantity), ' +
+      'customers(name), ' +
+      'table_sessions(restaurant_tables(table_number))'
+    )
+    .eq('status', 'pending_approval')
+    .order('placed_at', { ascending: true })
+
+  if (error) throw new Error(error.message)
+  return (data as unknown as PendingOrder[]) ?? []
+}
+
+// ── Admin tables page server actions ────────────────────────────────────────
+
+export async function getRestaurantId(slug: string): Promise<string | null> {
+  const { data } = await adminSupabase
+    .from('restaurants')
+    .select('id')
+    .eq('slug', slug)
+    .single()
+  return data?.id ?? null
+}
+
+export type RawTableRow = {
+  id: string
+  table_number: number
+  table_sessions: {
+    id: string
+    status: string
+    opened_at: string
+    host_name: string | null
+    orders: {
+      id: string
+      round_number: number
+      placed_at: string
+      status: string
+      customers: { name: string } | null
+      order_items: { name: string; quantity: number; price: number }[]
+    }[]
+  }[]
+}
+
+export async function getTablesWithSessions(restaurantId: string): Promise<RawTableRow[]> {
+  const { data, error } = await adminSupabase
+    .from('restaurant_tables')
+    .select(`
+      id, table_number,
+      table_sessions(
+        id, status, opened_at, host_name,
+        orders(
+          id, round_number, placed_at, status,
+          customers(name),
+          order_items(name, quantity, price)
+        )
+      )
+    `)
+    .eq('restaurant_id', restaurantId)
+    .order('table_number')
+  if (error) throw new Error(error.message)
+  return (data as unknown as RawTableRow[]) ?? []
+}
+
+export type DailyBillsSummary = {
+  billedToday: number
+  servedToday: number
+}
+
+export async function getDailyBillsSummary(restaurantId: string): Promise<DailyBillsSummary> {
+  const now = new Date()
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+  const d = istNow.toISOString().slice(0, 10)
+  const start = `${d}T00:00:00+05:30`
+  const end = `${d}T23:59:59+05:30`
+
+  const { data: bills } = await adminSupabase
+    .from('bills')
+    .select('total, generated_at, table_sessions!inner(restaurant_id)')
+    .eq('table_sessions.restaurant_id', restaurantId)
+    .gte('generated_at', start)
+    .lte('generated_at', end)
+
+  const rows = bills ?? []
+  return {
+    billedToday: rows.reduce((s: number, b: any) => s + (b.total ?? 0), 0),
+    servedToday: rows.length,
+  }
+}
+
+export async function closeTable(sessionId: string): Promise<void> {
+  if (!sessionId) throw new Error('sessionId is required')
+  const { error } = await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+  if (error) throw new Error(error.message)
+}
+
+export async function forceResetTable(sessionId: string): Promise<void> {
+  if (!sessionId) throw new Error('sessionId is required')
+  await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+  await adminSupabase
+    .from('session_cart_items')
+    .delete()
+    .eq('session_id', sessionId)
 }
 
 export async function generateBill({
@@ -1609,12 +1753,21 @@ export async function joinTable({
     .single()
   if (tableError || !tableRow) throw new Error('Table not found')
 
-  const { data: activeSession } = await adminSupabase
+  const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, host_device_id, host_name')
+    .select('id, pin, host_device_id, host_name, opened_at')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
+
+  // Auto-close sessions that are stale (previous day) or orphaned (no host_device_id set)
+  let activeSession = foundSession
+  const isOrphaned = foundSession && !foundSession.host_device_id
+  const isStale = foundSession && new Date(foundSession.opened_at) < todayMidnightIST()
+  if (foundSession && (isStale || isOrphaned)) {
+    await closeStaleSession(foundSession.id)
+    activeSession = null
+  }
 
   if (!activeSession) {
     const pin = String(Math.floor(1000 + Math.random() * 9000))
