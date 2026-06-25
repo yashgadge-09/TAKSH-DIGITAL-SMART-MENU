@@ -1,6 +1,9 @@
 "use client";
 
-import { CheckCircle2, QrCode } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, QrCode, Receipt, Loader2 } from "lucide-react";
+import { generateBill } from "@/lib/database";
+import { toast } from "sonner";
 
 interface ConfirmationItem {
   name: string;
@@ -12,11 +15,34 @@ interface OrderConfirmationProps {
   items: ConfirmationItem[];
   pin: string;
   tableNumber: number;
+  sessionId?: string;
   onDone: () => void;
 }
 
-export function OrderConfirmation({ items, pin, tableNumber, onDone }: OrderConfirmationProps) {
+export function OrderConfirmation({ items, pin, tableNumber, sessionId, onDone }: OrderConfirmationProps) {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const [billLoading, setBillLoading] = useState(false);
+  const [billRequested, setBillRequested] = useState(false);
+
+  const handleRequestBill = async () => {
+    if (!sessionId || billLoading || billRequested) return;
+    setBillLoading(true);
+    try {
+      await generateBill({ sessionId });
+      setBillRequested(true);
+      toast.success("Bill sent to the counter! Please proceed to pay.");
+    } catch (e: any) {
+      const msg: string = e?.message ?? "";
+      if (msg.includes("bill_generated") || msg.includes("already")) {
+        setBillRequested(true);
+        toast("Bill was already requested for this table.");
+      } else {
+        toast.error(msg || "Could not request bill. Please ask staff.");
+      }
+    } finally {
+      setBillLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 py-2">
@@ -81,6 +107,27 @@ export function OrderConfirmation({ items, pin, tableNumber, onDone }: OrderConf
           Want to order more? Scan the QR code at your table and enter your PIN.
         </p>
       </div>
+
+      {/* Request Bill */}
+      {sessionId && (
+        billRequested ? (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--brand-gold)]/20 bg-[color:var(--brand-gold)]/5 py-3 text-[13px] text-[color:var(--brand-gold-soft)]/70">
+            <CheckCircle2 size={15} className="text-[color:var(--brand-gold)]" />
+            Bill requested — please pay at the counter
+          </div>
+        ) : (
+          <button
+            onClick={handleRequestBill}
+            disabled={billLoading}
+            className="flex w-full items-center justify-center gap-2 rounded-full border border-[color:var(--brand-gold)]/40 py-3 text-[14px] font-semibold text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)]/10 active:scale-[0.99] disabled:opacity-50"
+          >
+            {billLoading
+              ? <Loader2 size={15} className="animate-spin" />
+              : <Receipt size={15} />}
+            {billLoading ? "Requesting…" : "Request Bill"}
+          </button>
+        )
+      )}
 
       {/* Done */}
       <button

@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useCart } from "@/context/CartContext";
 import { useSharedSession } from "@/context/SharedSessionContext";
-import { updateSharedCartItemQty, removeSharedCartItem } from "@/lib/database";
-import { ChevronLeft, ShoppingCart, Minus, Plus, Users } from "lucide-react";
+import { updateSharedCartItemQty, removeSharedCartItem, generateBill } from "@/lib/database";
+import { ChevronLeft, ShoppingCart, Minus, Plus, Users, Receipt, Loader2, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 interface RecommendedDish {
   id: string;
@@ -33,6 +35,28 @@ export function CartDrawer({
   const { items: localItems, updateQuantity, removeItem, totalPrice: localTotalPrice } = useCart();
   const sharedSession = useSharedSession();
   const router = useRouter();
+  const [billLoading, setBillLoading] = useState(false);
+  const [billRequested, setBillRequested] = useState(false);
+
+  const handleRequestBill = async () => {
+    if (!sharedSession?.sessionId || billLoading || billRequested) return;
+    setBillLoading(true);
+    try {
+      await generateBill({ sessionId: sharedSession.sessionId });
+      setBillRequested(true);
+      toast.success("Bill sent to the counter! Please proceed to pay.");
+    } catch (e: any) {
+      const msg: string = e?.message ?? "";
+      if (msg.includes("bill_generated") || msg.includes("already")) {
+        setBillRequested(true);
+        toast("Bill was already requested for this table.");
+      } else {
+        toast.error(msg || "Could not request bill. Please ask staff.");
+      }
+    } finally {
+      setBillLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -262,40 +286,65 @@ export function CartDrawer({
         </div>
 
         {/* Footer */}
-        {displayItems.length > 0 && (
+        {(displayItems.length > 0 || isSharedMode) && (
           <div className="rounded-t-3xl bg-[#2a1a11] px-5 pt-5 pb-safe border-t border-[color:var(--brand-gold)]/10 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
-            <div className="mb-3 space-y-1.5">
-              <div className="flex justify-between items-center text-[color:var(--brand-gold)]">
-                <span className="text-[15px] font-semibold">Subtotal</span>
-                <span className="font-sans text-[15px] font-bold">₹{totalPrice}</span>
+            {displayItems.length > 0 && (
+              <div className="mb-3 space-y-1.5">
+                <div className="flex justify-between items-center text-[color:var(--brand-gold)]">
+                  <span className="text-[15px] font-semibold">Subtotal</span>
+                  <span className="font-sans text-[15px] font-bold">₹{totalPrice}</span>
+                </div>
+                <div className="flex justify-between items-center text-[color:var(--brand-gold-muted)]">
+                  <span className="text-[13px]">Taxes & Charges</span>
+                  <span className="text-[13px]">₹{taxes}</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center text-[color:var(--brand-gold-muted)]">
-                <span className="text-[13px]">Taxes & Charges</span>
-                <span className="text-[13px]">₹{taxes}</span>
-              </div>
-            </div>
+            )}
 
-            {isSharedMode && !sharedSession.isHost ? (
-              <div className="flex flex-col items-center gap-1 py-3 mb-3">
-                <p className="text-[13px] font-medium text-[color:var(--brand-gold-soft)]/60 text-center">
-                  Only <span className="font-bold text-[color:var(--brand-gold-soft)]">{sharedSession.hostName}</span> can place the order
-                </p>
-                <p className="text-[11px] text-[color:var(--brand-gold-muted)] opacity-50">
-                  Keep adding — they&apos;ll send it to the kitchen
-                </p>
-              </div>
-            ) : (
-              <button
-                onClick={() => onShowOrder?.()}
-                className="flex w-full items-center justify-center rounded-full py-3.5 mb-3 shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99]"
-                style={{
-                  background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)",
-                }}
-              >
-                <span className="text-[15px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
-                  PLACE ORDER · ₹{finalTotal}
-                </span>
-              </button>
+            {displayItems.length > 0 && (
+              isSharedMode && !sharedSession!.isHost ? (
+                <div className="flex flex-col items-center gap-1 py-3 mb-3">
+                  <p className="text-[13px] font-medium text-[color:var(--brand-gold-soft)]/60 text-center">
+                    Only <span className="font-bold text-[color:var(--brand-gold-soft)]">{sharedSession!.hostName}</span> can place the order
+                  </p>
+                  <p className="text-[11px] text-[color:var(--brand-gold-muted)] opacity-50">
+                    Keep adding — they&apos;ll send it to the kitchen
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => onShowOrder?.()}
+                  className="flex w-full items-center justify-center rounded-full py-3.5 mb-3 shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99]"
+                  style={{
+                    background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)",
+                  }}
+                >
+                  <span className="text-[15px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
+                    PLACE ORDER · ₹{finalTotal}
+                  </span>
+                </button>
+              )
+            )}
+
+            {/* Request Bill — always visible in shared mode */}
+            {isSharedMode && (
+              billRequested ? (
+                <div className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--brand-gold)]/20 bg-[color:var(--brand-gold)]/5 py-3 text-[13px] text-[color:var(--brand-gold-soft)]/70">
+                  <CheckCircle2 size={15} className="text-[color:var(--brand-gold)]" />
+                  Bill requested — please pay at the counter
+                </div>
+              ) : (
+                <button
+                  onClick={handleRequestBill}
+                  disabled={billLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-[color:var(--brand-gold)]/30 py-3 text-[14px] font-semibold text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)]/10 active:scale-[0.99] disabled:opacity-50"
+                >
+                  {billLoading
+                    ? <Loader2 size={15} className="animate-spin" />
+                    : <Receipt size={15} />}
+                  {billLoading ? "Requesting…" : "Request Bill"}
+                </button>
+              )
             )}
           </div>
         )}
