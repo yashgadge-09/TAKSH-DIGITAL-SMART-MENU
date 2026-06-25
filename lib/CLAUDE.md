@@ -100,6 +100,27 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 **Analytics**
 - `getAnalyticsData(days)` — aggregates `menu_views`, `dish_views`, `cart_events`, `favourites`, `reviews` into dashboard-ready shape
 
+**Ordering (T02–T05)**
+- `createOrJoinSession({ restaurantId, tableId, pinAttempt? })` → `SessionResult` — creates a new table session with a 4-digit PIN, or joins an existing one by PIN. **Throws** on wrong PIN or missing table. Auto-closes stale sessions (opened before today's IST midnight via `todayMidnightIST()`) before creating a new one — prevents cross-day session bleed.
+- `placeOrder({ sessionId, customerId, restaurantId, items })` → `{ orderId, roundNumber }` — inserts order as `pending_approval` with snapshotted item names/prices. Does **not** create a KOT print job.
+- `approveOrder(orderId)` — transitions order to `approved` and creates a `kot` print job.
+- `rejectOrder(orderId)` — transitions order to `rejected`.
+- `generateBill({ sessionId })` — aggregates all non-rejected order rounds, computes GST (5%), inserts `bills` row, queues a `bill` print job, flips session to `bill_generated`. Takes an **object**, not a bare string. Called by both admin and guest (via "Request Bill" button).
+- `getTableEntry(slug, tableNumber)` → `TableEntry | null` (T06) — resolves restaurant slug + table number into `{ restaurantId, tableId, tableNumber, slug, restaurantName }`. Used by `app/[slug]/table/[number]/page.tsx` only.
+- `findOrCreateCustomer({ restaurantId, name, phone?, wantsWhatsapp? })` → `{ customerId }` (T08) — looks up an existing `customers` row by `(restaurant_id, phone)` and reuses it, or inserts a new one. `whatsapp_opted_in` column is set on insert. Uses `adminSupabase` (RLS bypassed). Called by `CheckoutForm` before `placeOrder`.
+
+**Session Lifecycle Helpers**
+- `todayMidnightIST()` → `Date` — returns `new Date(\`${istDateStr}T00:00:00+05:30\`)` for today in IST. Used to detect stale sessions.
+- `joinTable({ restaurantId, tableId, deviceId, displayName })` — auto-closes sessions that are stale (opened before today's midnight IST) OR orphaned (`host_device_id IS NULL`) before joining/creating a new one. First joiner becomes host.
+- `forceResetTable(sessionId)` — admin escape hatch: sets session `status: closed` AND deletes all `session_cart_items` for that session. Use when a table is stuck (e.g. orphaned session, test data).
+
+**Admin Tables (all use `adminSupabase` — required for RLS bypass)**
+- `getRestaurantId(slug)` → `string` — resolves restaurant slug to UUID.
+- `getTablesWithSessions(restaurantId)` → `RawTableRow[]` — fetches all tables with nested session → orders → order_items + customers. **Critical PostgREST rule:** `customers(name)` must be nested inside `orders(...)`, not `table_sessions(...)`, because the FK is `orders.customer_id → customers.id`.
+- `getDailyBillsSummary(restaurantId)` → `DailyBillsSummary` — today's bill totals: count, subtotal, gst, grand total.
+- `getPendingOrders()` → `PendingOrder[]` — fetches `pending_approval` orders with items and table info. Used by `/admin/incoming`. Must use `adminSupabase` — anon client fails on nested joins due to RLS.
+- `closeTable(sessionId)` — server action: sets session `status: closed` via `adminSupabase`. Never use the browser `supabase` client to update `table_sessions` — RLS blocks it even for authenticated users.
+
 ---
 
 ### Supabase RPC Functions (PostgreSQL)
