@@ -122,7 +122,11 @@ Client-side only (`CartContext`). State lives in React memory — not persisted.
 
 **Admin approval gate:** Order lands in `/admin/incoming` as `pending_approval`. Admin clicks **Approve** → `approveOrder()` transitions to `approved` and creates a `kot` print job. **Reject** → `rejected`, no print job. Nothing reaches the kitchen without passing through here.
 
-**Table lifecycle:** `/admin/tables` shows a live grid (Realtime). Drawer: rounds, running total (non-rejected orders only), **Generate Bill** → `generateBill({ sessionId })` → session `bill_generated` + bill print job. **Close Table** → direct authenticated update `status: closed`.
+**Session auto-expiry:** `createOrJoinSession` and `joinTable` both call `todayMidnightIST()` to detect stale sessions (opened before today's IST midnight) and orphaned sessions (`host_device_id IS NULL`). Both are auto-closed before a new session is created — prevents cross-day session bleed and permanently locked tables.
+
+**Guest bill request:** Guests can tap **"Request Bill"** from `CartDrawer` (shared mode footer) or `OrderConfirmation` — both call `generateBill({ sessionId })`. Transitions session to `bill_generated`, queues a bill print job.
+
+**Table lifecycle:** `/admin/tables` shows a live grid (Realtime). Drawer: per-round itemised breakdown (customer name, items, round total), running total (non-rejected orders only), bill status. Actions: **Generate Bill** → `generateBill({ sessionId })` → session `bill_generated` + bill print job. **Mark Paid & Free Table** → `closeTable(sessionId)` server action (uses `adminSupabase`). **Force Reset** → `forceResetTable(sessionId)` — closes session + deletes all `session_cart_items`.
 
 **Key rules:**
 - `createOrJoinSession` **throws** on wrong PIN — callers must `try/catch`.
@@ -130,6 +134,8 @@ Client-side only (`CartContext`). State lives in React memory — not persisted.
 - `approveOrder` is the **only** function that creates a KOT print job.
 - `generateBill` takes `{ sessionId }` (object, not a bare string).
 - `useTableSession()` returns `null` on plain `/menu` — always null-check before calling ordering actions.
+- All admin table reads/writes **must** use `adminSupabase` server actions — the anon browser client fails on nested joins (PostgREST FK rule: `customers(name)` must be nested inside `orders`, not `table_sessions`) and is blocked by RLS on writes.
+- `closeTable()` and `forceResetTable()` are server actions — never use the browser `supabase` client to update `table_sessions` or `session_cart_items`.
 
 ### Print Bridge (`print-bridge/`)
 

@@ -25,7 +25,7 @@ All routes use Next.js 16 App Router. The root `page.tsx` immediately redirects 
 1. `app/admin/layout.tsx` — route-level session guard: checks `supabase.auth.getSession()`, redirects unauthenticated users to `/admin` (the login page). Renders only `{children}` — no sidebar.
 2. `AdminLayout` from `components/AdminSidebar.tsx` — renders the sidebar AND repeats the session check. Every admin page must wrap its content in `<AdminLayout>`. Admin login is email/password via `supabase.auth.signInWithPassword`.
 
-After login the shared browser client (`lib/supabase.ts`) carries the `authenticated` JWT. RLS grants `update to authenticated using(true)` on `table_sessions` and `restaurants` — so table Close and Settings-save are direct browser updates (no new server action needed).
+After login the shared browser client (`lib/supabase.ts`) carries the `authenticated` JWT. RLS grants `update to authenticated using(true)` on `restaurants` — so Settings-save is a direct browser update. **However, `table_sessions` writes must go through `adminSupabase` server actions** (`closeTable`, `forceResetTable`) — the RLS policy does not reliably allow browser-client updates for table lifecycle operations.
 
 All admin pages are `"use client"` components wrapped in `<AdminLayout>`. Gold/dark theme: dark header card (`bg-[linear-gradient(130deg,#2A180F…)]`), cream content cards (`bg-[linear-gradient(145deg,#FFF8EE…)]`).
 
@@ -33,8 +33,8 @@ All admin pages are `"use client"` components wrapped in `<AdminLayout>`. Gold/d
 |---|---|---|
 | `/admin` | `app/admin/page.tsx` | Login page (email/password) |
 | `/admin/dashboard` | `app/admin/dashboard/page.tsx` | Overview — QR scans, trending |
-| `/admin/incoming` | `app/admin/incoming/page.tsx` | Live pending-orders queue (T11); Approve → KOT, Reject → no KOT; Realtime |
-| `/admin/tables` | `app/admin/tables/page.tsx` | Live table grid (T12); status badges, running totals, drawer with Generate Bill + Close Table; Realtime |
+| `/admin/incoming` | `app/admin/incoming/page.tsx` | Live pending-orders queue (T11); Approve → KOT, Reject → no KOT; Realtime. Data via `getPendingOrders()` server action (adminSupabase — anon client can't do nested joins here) |
+| `/admin/tables` | `app/admin/tables/page.tsx` | Live table grid (T12); status badges, host name, round count, running total, bill-requested tag. Drawer: per-round itemised breakdown, Generate Bill, Mark Paid & Free Table (`closeTable` server action), Force Reset (`forceResetTable` server action). Browser `supabase` used only for Realtime subscription — all data via `getTablesWithSessions` + `getDailyBillsSummary` server actions |
 | `/admin/menu` | `app/admin/menu/page.tsx` | Dish CRUD — add/edit/delete/toggle availability |
 | `/admin/categories` | `app/admin/categories/page.tsx` | Category ordering and images |
 | `/admin/analytics` | `app/admin/analytics/page.tsx` | Engagement charts (menu views, cart, favourites, reviews) |

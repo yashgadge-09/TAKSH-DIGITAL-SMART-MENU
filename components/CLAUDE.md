@@ -40,7 +40,9 @@ Do not hand-edit these files unless patching a specific behavior — regenerate 
 ## Feature Components
 
 ### `CartDrawer.tsx`
-Floating cart drawer. Reads from `CartContext` (`useCart()`). Shows item list, quantity controls, subtotal. CTA is **"PLACE ORDER"** (T07) — calls `onShowOrder` prop which opens `OrderFlow`. No server calls — purely context-driven.
+Floating cart drawer. In **local mode**: reads from `CartContext` (`useCart()`), shows item list, quantity controls, subtotal, CTA is **"PLACE ORDER"** (T07) via `onShowOrder` prop.
+
+In **shared mode** (when `useSharedSession()` returns a session): shows shared cart from `SharedSessionContext`, per-item attribution ("you" / other guest's name), host-only PLACE ORDER button. Footer always renders and includes a **"Request Bill"** ghost button — calls `generateBill({ sessionId })` and shows a success strip once requested. Non-host guests see a "only host can place order" notice instead of the CTA button.
 
 ### `CheckoutForm.tsx` (T08)
 Customer info form rendered by `OrderFlow` in the `checkout` view. Props: `{ sessionId, restaurantId, items, onPlaced }`.
@@ -51,10 +53,11 @@ Customer info form rendered by `OrderFlow` in the `checkout` view. Props: `{ ses
 - `isSubmitting` guard prevents double-submit.
 
 ### `OrderConfirmation.tsx` (T09)
-Success screen rendered by `OrderFlow` in the `confirmation` view. Props: `{ items, pin, tableNumber, onDone }`.
+Success screen rendered by `OrderFlow` in the `confirmation` view. Props: `{ items, pin, tableNumber, onDone, sessionId? }`.
 - Shows ordered items with qty × price and a subtotal.
 - Prominent PIN reminder (individual digit boxes, matching `show-pin` style) — displayed on both create and join paths.
 - Reorder hint with QR code icon.
+- **"Request Bill"** ghost button — shown when `sessionId` prop is provided. Calls `generateBill({ sessionId })`; transitions to a success strip ("Bill requested — please pay at the counter") once sent.
 - Done button fires `onDone` (OrderFlow then calls `onOrderConfirmed?(items)` → opens `OrderLikeModal`, and closes the modal).
 
 ### `OrderFlow.tsx` (T07–T09)
@@ -64,7 +67,8 @@ Modal that owns the full Place Order flow. View state machine: `idle → show-pi
 - OTP-style 4-box PIN input with auto-focus-advance and backspace navigation.
 - `isSubmitting` guard prevents duplicate session creation on double-tap.
 - Stores `confirmedPin` on **both** create and join paths (T09 reads it for the PIN reminder).
-- `checkout` view renders `<CheckoutForm>`; `confirmation` view shows order success + PIN reminder.
+- `checkout` view renders `<CheckoutForm>`; `confirmation` view shows `<OrderConfirmation>`.
+- Passes `sessionId` prop to `<OrderConfirmation>`: in shared mode uses `sharedSession.sessionId`, in legacy mode uses `confirmedSessionId`. This enables the "Request Bill" button on the confirmation screen.
 - `onOrderConfirmed?(items)` prop — fired with the cart snapshot when guest closes confirmation; wired in `app/menu/page.tsx` to open `OrderLikeModal`.
 
 ### `OrderSummarySheet.tsx`
