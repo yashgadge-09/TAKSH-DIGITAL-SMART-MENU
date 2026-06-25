@@ -4,13 +4,19 @@ import { useState, useEffect } from "react";
 import OneSignal from "react-onesignal";
 import { supabase } from "@/lib/supabase";
 
+// Module-level flag survives React Strict Mode double-mount
+let oneSignalInitialized = false;
+
 export function NotificationPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     const init = async () => {
-      if (initialized) return;
+      if (oneSignalInitialized) {
+        setInitialized(true);
+        return;
+      }
       try {
         console.log("Initializing OneSignal...");
         await OneSignal.init({
@@ -25,6 +31,7 @@ export function NotificationPrompt() {
         OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event) => {
           event.notification.display();
         });
+        oneSignalInitialized = true;
         setInitialized(true);
         console.log("OneSignal initialized successfully!");
       } catch (e) {
@@ -32,7 +39,8 @@ export function NotificationPrompt() {
       }
     };
     init();
-  }, [initialized]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!initialized) return;

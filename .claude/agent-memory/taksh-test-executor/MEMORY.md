@@ -1,0 +1,1 @@
+- [Ordering System T01-T05 Execution](project-ordering-system.md) — Static analysis results: 4 core invariants PASS, TC-015 orphan-order confirmed risk, TC-025 ordering confirmed safe

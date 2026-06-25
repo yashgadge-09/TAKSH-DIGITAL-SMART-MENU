@@ -1149,3 +1149,826 @@ export async function getAnalyticsData(days = 7) {
     queryWarning,
   }
 }
+
+// ─── Ordering system ────────────────────────────────────────────────────────
+
+// Returns the UTC Date corresponding to midnight IST today.
+// Any session whose opened_at is before this cutoff is from a previous day.
+function todayMidnightIST(): Date {
+  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  const dateStr = istNow.toISOString().split('T')[0] // "YYYY-MM-DD" in IST
+  return new Date(`${dateStr}T00:00:00+05:30`)
+}
+
+async function closeStaleSession(sessionId: string): Promise<void> {
+  await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+}
+
+export type SessionResult =
+  | { exists: false; sessionId: string; tableNumber: number; pin: string }
+  | { exists: true; requiresPin: true }
+  | { exists: true; requiresPin?: false; sessionId: string; tableNumber: number; pin: string }
+
+export async function createOrJoinSession({
+  restaurantId,
+  tableId,
+  pinAttempt,
+}: {
+  restaurantId: string
+  tableId: string
+  pinAttempt?: string | number
+}): Promise<SessionResult> {
+  if (!restaurantId || !tableId) throw new Error('restaurantId and tableId are required')
+
+  const { data: tableRow, error: tableError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', tableId)
+    .single()
+
+  if (tableError || !tableRow) throw new Error('Table not found')
+  const tableNumber: number = tableRow.table_number
+
+  const { data: foundSession } = await adminSupabase
+    .from('table_sessions')
+    .select('id, pin, opened_at')
+    .eq('table_id', tableId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  // Auto-close sessions opened before today's midnight IST (stale from a previous day)
+  let activeSession = foundSession
+  if (foundSession && new Date(foundSession.opened_at) < todayMidnightIST()) {
+    await closeStaleSession(foundSession.id)
+    activeSession = null
+  }
+
+  if (!activeSession) {
+    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    const { data: newSession, error: insertError } = await adminSupabase
+      .from('table_sessions')
+      .insert({ restaurant_id: restaurantId, table_id: tableId, pin, status: 'active' })
+      .select('id')
+      .single()
+    if (insertError || !newSession) throw new Error('Failed to create session')
+    return { exists: false, sessionId: newSession.id, tableNumber, pin }
+  }
+
+  if (pinAttempt === undefined || pinAttempt === null || pinAttempt === '') {
+    return { exists: true, requiresPin: true }
+  }
+
+  if (String(pinAttempt).trim() === activeSession.pin) {
+    return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
+  }
+
+  throw new Error('Incorrect PIN')
+}
+
+export async function placeOrder({
+  sessionId,
+  customerId,
+  restaurantId,
+  items,
+}: {
+  sessionId: string
+  customerId: string
+  restaurantId: string
+  items: { dishId: string; quantity: number }[]
+}): Promise<{ orderId: string; roundNumber: number }> {
+  if (!sessionId || !customerId || !restaurantId || !items?.length) {
+    throw new Error('sessionId, customerId, restaurantId, and items are required')
+  }
+
+  // Snapshot dish name + price at order time.
+  // Use the public anon client — dishes are public-readable via RLS, no service-role needed.
+  const dishIds = items.map((i) => i.dishId)
+  const { data: dishes, error: dishError } = await supabase
+    .from('dishes')
+    .select('id, name_en, price')
+    .in('id', dishIds)
+  if (dishError || !dishes?.length) throw new Error('Failed to fetch dish details')
+
+  const dishMap = new Map(dishes.map((d) => [d.id, d]))
+
+  // Validate ALL dish IDs before any insert — prevents orphaned orders rows.
+  // If any dishId is absent from the DB result, throw here before touching orders.
+  const validatedItems = items.map((item) => {
+    const dish = dishMap.get(item.dishId)
+    if (!dish) throw new Error(`Dish ${item.dishId} not found`)
+    return {
+      dish_id: item.dishId,
+      name: dish.name_en,
+      price: dish.price,
+      quantity: item.quantity,
+    }
+  })
+
+  // Compute round number: max existing round for this session + 1
+  const { data: lastOrder } = await adminSupabase
+    .from('orders')
+    .select('round_number')
+    .eq('session_id', sessionId)
+    .order('round_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const roundNumber = (lastOrder?.round_number ?? 0) + 1
+
+  // Insert order — all dishes validated above, no orphan risk remains.
+  // Status must be explicit; do not rely on column default.
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .insert({ session_id: sessionId, customer_id: customerId, round_number: roundNumber, status: 'pending_approval' })
+    .select('id')
+    .single()
+  if (orderError || !order) throw new Error('Failed to create order')
+
+  // Attach order_id now that we have it, then persist all items.
+  const orderItems = validatedItems.map((item) => ({ ...item, order_id: order.id }))
+
+  const { error: itemsError } = await adminSupabase.from('order_items').insert(orderItems)
+  if (itemsError) {
+    // Best-effort rollback: delete the orphaned orders row so the admin queue
+    // and round_number counter stay clean. Do not suppress the original error.
+    await adminSupabase.from('orders').delete().eq('id', order.id)
+    throw new Error('Failed to save order items')
+  }
+
+  return { orderId: order.id, roundNumber }
+}
+
+function formatTimeIST(value: string | Date): string {
+  // Deterministic HH:MM in IST (UTC+5:30) — avoids toLocaleTimeString ICU
+  // variance across Node.js builds, ensuring KOT/bill payloads always match
+  // the print-bridge contract /^\d{2}:\d{2}$/.
+  const d = new Date(value)
+  const utcMs = d.getTime() + d.getTimezoneOffset() * 60000
+  const istMs = utcMs + 5.5 * 3600000
+  const ist = new Date(istMs)
+  const hh = String(ist.getUTCHours()).padStart(2, '0')
+  const mm = String(ist.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+export async function approveOrder(
+  orderId: string
+): Promise<{ orderId: string; status: 'approved' }> {
+  if (!orderId) throw new Error('orderId is required')
+
+  // Load order + idempotency guard
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .select('id, status, round_number, session_id, placed_at')
+    .eq('id', orderId)
+    .single()
+  if (orderError || !order) throw new Error('Order not found')
+
+  // Idempotent no-op on double-tap; reject conflicting states so we never
+  // create a second KOT or "approve" something already rejected/served.
+  if (order.status === 'approved') return { orderId, status: 'approved' }
+  if (order.status !== 'pending_approval') {
+    throw new Error(`Cannot approve order in status '${order.status}'`)
+  }
+
+  // Resolve restaurant_id + table_number via session → table
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('restaurant_id, table_id')
+    .eq('id', order.session_id)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+
+  const { data: table, error: tableError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', session.table_id)
+    .single()
+  if (tableError || !table) throw new Error('Table not found')
+
+  // Load items for the KOT payload
+  const { data: items, error: itemsError } = await adminSupabase
+    .from('order_items')
+    .select('name, quantity')
+    .eq('order_id', orderId)
+  if (itemsError || !items?.length) throw new Error('Order has no items')
+
+  // Flip status first so a concurrent call sees it as no longer pending
+  const { error: updateError } = await adminSupabase
+    .from('orders')
+    .update({ status: 'approved' })
+    .eq('id', orderId)
+  if (updateError) throw new Error('Failed to approve order')
+
+  // approveOrder is the ONLY creator of a KOT print job
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'kot',
+    status: 'pending',
+    payload: {
+      tableNumber: table.table_number,
+      roundNumber: order.round_number,
+      time: formatTimeIST(order.placed_at),
+      items: items.map((i) => ({ name: i.name, qty: i.quantity })),
+    },
+  })
+  if (printError) throw new Error('Failed to queue KOT print job')
+
+  return { orderId, status: 'approved' }
+}
+
+export async function rejectOrder(
+  orderId: string
+): Promise<{ orderId: string; status: 'rejected' }> {
+  if (!orderId) throw new Error('orderId is required')
+
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .select('id, status')
+    .eq('id', orderId)
+    .single()
+  if (orderError || !order) throw new Error('Order not found')
+
+  // Idempotent no-op on double-tap; never creates a print job either way.
+  if (order.status === 'rejected') return { orderId, status: 'rejected' }
+  if (order.status !== 'pending_approval') {
+    throw new Error(`Cannot reject order in status '${order.status}'`)
+  }
+
+  const { error: updateError } = await adminSupabase
+    .from('orders')
+    .update({ status: 'rejected' })
+    .eq('id', orderId)
+  if (updateError) throw new Error('Failed to reject order')
+
+  return { orderId, status: 'rejected' }
+}
+
+export type PendingOrder = {
+  id: string
+  round_number: number
+  placed_at: string
+  customers: { name: string } | null
+  order_items: { name: string; quantity: number }[]
+  table_sessions: { restaurant_tables: { table_number: number } | null } | null
+}
+
+export async function getPendingOrders(): Promise<PendingOrder[]> {
+  const { data, error } = await adminSupabase
+    .from('orders')
+    .select(
+      'id, round_number, placed_at, ' +
+      'order_items(name, quantity), ' +
+      'customers(name), ' +
+      'table_sessions(restaurant_tables(table_number))'
+    )
+    .eq('status', 'pending_approval')
+    .order('placed_at', { ascending: true })
+
+  if (error) throw new Error(error.message)
+  return (data as unknown as PendingOrder[]) ?? []
+}
+
+// ── Admin tables page server actions ────────────────────────────────────────
+
+export async function getRestaurantId(slug: string): Promise<string | null> {
+  const { data } = await adminSupabase
+    .from('restaurants')
+    .select('id')
+    .eq('slug', slug)
+    .single()
+  return data?.id ?? null
+}
+
+export type RawTableRow = {
+  id: string
+  table_number: number
+  table_sessions: {
+    id: string
+    status: string
+    opened_at: string
+    host_name: string | null
+    orders: {
+      id: string
+      round_number: number
+      placed_at: string
+      status: string
+      customers: { name: string } | null
+      order_items: { name: string; quantity: number; price: number }[]
+    }[]
+  }[]
+}
+
+export async function getTablesWithSessions(restaurantId: string): Promise<RawTableRow[]> {
+  const { data, error } = await adminSupabase
+    .from('restaurant_tables')
+    .select(`
+      id, table_number,
+      table_sessions(
+        id, status, opened_at, host_name,
+        orders(
+          id, round_number, placed_at, status,
+          customers(name),
+          order_items(name, quantity, price)
+        )
+      )
+    `)
+    .eq('restaurant_id', restaurantId)
+    .order('table_number')
+  if (error) throw new Error(error.message)
+  return (data as unknown as RawTableRow[]) ?? []
+}
+
+export type DailyBillsSummary = {
+  billedToday: number
+  servedToday: number
+}
+
+export async function getDailyBillsSummary(restaurantId: string): Promise<DailyBillsSummary> {
+  const now = new Date()
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+  const d = istNow.toISOString().slice(0, 10)
+  const start = `${d}T00:00:00+05:30`
+  const end = `${d}T23:59:59+05:30`
+
+  const { data: bills } = await adminSupabase
+    .from('bills')
+    .select('total, generated_at, table_sessions!inner(restaurant_id)')
+    .eq('table_sessions.restaurant_id', restaurantId)
+    .gte('generated_at', start)
+    .lte('generated_at', end)
+
+  const rows = bills ?? []
+  return {
+    billedToday: rows.reduce((s: number, b: any) => s + (b.total ?? 0), 0),
+    servedToday: rows.length,
+  }
+}
+
+export async function closeTable(sessionId: string): Promise<void> {
+  if (!sessionId) throw new Error('sessionId is required')
+  const { error } = await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+  if (error) throw new Error(error.message)
+}
+
+export async function forceResetTable(sessionId: string): Promise<void> {
+  if (!sessionId) throw new Error('sessionId is required')
+  await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+  await adminSupabase
+    .from('session_cart_items')
+    .delete()
+    .eq('session_id', sessionId)
+}
+
+export async function generateBill({
+  sessionId,
+}: {
+  sessionId: string
+}): Promise<{ billId: string; total: number }> {
+  if (!sessionId) throw new Error('sessionId is required')
+
+  // Load session + restaurant + table for the bill header
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id, table_id')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+
+  // Guard: if already billed, return the existing bill (no duplicate rows/jobs)
+  if (session.status === 'bill_generated') {
+    const { data: existing } = await adminSupabase
+      .from('bills')
+      .select('id, total')
+      .eq('session_id', sessionId)
+      .order('generated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (existing) return { billId: existing.id, total: Number(existing.total) }
+  }
+
+  // Billable orders only — rejected never appears on the bill
+  const { data: orders, error: ordersError } = await adminSupabase
+    .from('orders')
+    .select('id, round_number, placed_at, customer_id')
+    .eq('session_id', sessionId)
+    .neq('status', 'rejected')
+    .order('round_number', { ascending: true })
+  if (ordersError) throw new Error('Failed to load orders')
+  if (!orders?.length) throw new Error('No billable orders for this session')
+
+  const orderIds = orders.map((o) => o.id)
+  const { data: items, error: itemsError } = await adminSupabase
+    .from('order_items')
+    .select('order_id, name, price, quantity')
+    .in('order_id', orderIds)
+  if (itemsError) throw new Error('Failed to load order items')
+  if (!items?.length) throw new Error('No items to bill')
+
+  // Group items by their parent order's round
+  const orderById = new Map(orders.map((o) => [o.id, o]))
+  const roundsMap = new Map<
+    number,
+    { number: number; time: string; items: { name: string; qty: number; price: number }[] }
+  >()
+  let subtotal = 0
+  for (const item of items) {
+    const parent = orderById.get(item.order_id)
+    if (!parent) continue
+    const round = parent.round_number
+    if (!roundsMap.has(round)) {
+      roundsMap.set(round, {
+        number: round,
+        time: formatTimeIST(parent.placed_at),
+        items: [],
+      })
+    }
+    roundsMap.get(round)!.items.push({
+      name: item.name,
+      qty: item.quantity,
+      price: Number(item.price),
+    })
+    subtotal += Number(item.price) * item.quantity
+  }
+  const rounds = Array.from(roundsMap.values()).sort((a, b) => a.number - b.number)
+
+  const gstRate = 5
+  const gstAmount = Math.round(subtotal * gstRate) / 100
+  const total = subtotal + gstAmount
+
+  // Customer name = most recent order's customer
+  const latestOrder = [...orders].sort(
+    (a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime()
+  )[0]
+  let customerName = ''
+  if (latestOrder?.customer_id) {
+    const { data: customer } = await adminSupabase
+      .from('customers')
+      .select('name')
+      .eq('id', latestOrder.customer_id)
+      .maybeSingle()
+    customerName = customer?.name ?? ''
+  }
+
+  const { data: restaurant } = await adminSupabase
+    .from('restaurants')
+    .select('name, address, gstin, upi_id')
+    .eq('id', session.restaurant_id)
+    .maybeSingle()
+
+  const { data: table } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', session.table_id)
+    .maybeSingle()
+
+  // Persist the bill
+  const { data: bill, error: billError } = await adminSupabase
+    .from('bills')
+    .insert({ session_id: sessionId, subtotal, gst_amount: gstAmount, total })
+    .select('id')
+    .single()
+  if (billError || !bill) throw new Error('Failed to create bill')
+
+  // Queue the bill print job
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'bill',
+    status: 'pending',
+    payload: {
+      restaurantName: restaurant?.name ?? '',
+      address: restaurant?.address ?? '',
+      gstin: restaurant?.gstin ?? '',
+      upiId: restaurant?.upi_id ?? '',
+      tableNumber: table?.table_number ?? null,
+      customerName,
+      rounds,
+      subtotal,
+      gstRate,
+      gstAmount,
+      total,
+    },
+  })
+  if (printError) throw new Error('Failed to queue bill print job')
+
+  // Flip the session
+  const { error: sessionUpdateError } = await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'bill_generated' })
+    .eq('id', sessionId)
+  if (sessionUpdateError) throw new Error('Failed to update session status')
+
+  return { billId: bill.id, total }
+}
+
+export interface TableEntry {
+  restaurantId: string
+  tableId: string
+  tableNumber: number
+  slug: string
+  restaurantName: string
+}
+
+export async function getDefaultRestaurantSlug(): Promise<string | null> {
+  const { data } = await adminSupabase
+    .from('restaurants')
+    .select('slug')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  return data?.slug ?? null
+}
+
+export async function getTableEntry(
+  slug: string,
+  tableNumber: number
+): Promise<TableEntry | null> {
+  const { data: restaurant } = await adminSupabase
+    .from('restaurants')
+    .select('id, name')
+    .eq('slug', slug)
+    .maybeSingle()
+
+  if (!restaurant) return null
+
+  const { data: table } = await adminSupabase
+    .from('restaurant_tables')
+    .select('id, table_number')
+    .eq('restaurant_id', restaurant.id)
+    .eq('table_number', tableNumber)
+    .maybeSingle()
+
+  if (!table) return null
+
+  return {
+    restaurantId: restaurant.id,
+    tableId: table.id,
+    tableNumber: table.table_number,
+    slug,
+    restaurantName: restaurant.name,
+  }
+}
+
+// ─── Shared cart ────────────────────────────────────────────────────────────
+
+export interface SharedCartItem {
+  id: string
+  dishId: string
+  name: string
+  price: number
+  image: string | null
+  category: string | null
+  quantity: number
+  addedByDeviceId: string
+  addedByName: string
+}
+
+export async function joinTable({
+  restaurantId,
+  tableId,
+  deviceId,
+  displayName,
+}: {
+  restaurantId: string
+  tableId: string
+  deviceId: string
+  displayName?: string
+}): Promise<{ sessionId: string; pin: string; isHost: boolean; hostName: string }> {
+  if (!restaurantId || !tableId || !deviceId) throw new Error('restaurantId, tableId, and deviceId are required')
+
+  const effectiveName = displayName?.trim() || 'Guest'
+
+  const { data: tableRow, error: tableError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', tableId)
+    .single()
+  if (tableError || !tableRow) throw new Error('Table not found')
+
+  const { data: foundSession } = await adminSupabase
+    .from('table_sessions')
+    .select('id, pin, host_device_id, host_name, opened_at')
+    .eq('table_id', tableId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  // Auto-close sessions that are stale (previous day) or orphaned (no host_device_id set)
+  let activeSession = foundSession
+  const isOrphaned = foundSession && !foundSession.host_device_id
+  const isStale = foundSession && new Date(foundSession.opened_at) < todayMidnightIST()
+  if (foundSession && (isStale || isOrphaned)) {
+    await closeStaleSession(foundSession.id)
+    activeSession = null
+  }
+
+  if (!activeSession) {
+    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    const { data: newSession, error: insertError } = await adminSupabase
+      .from('table_sessions')
+      .insert({
+        restaurant_id: restaurantId,
+        table_id: tableId,
+        pin,
+        status: 'active',
+        host_device_id: deviceId,
+        host_name: effectiveName,
+      })
+      .select('id')
+      .single()
+    if (insertError || !newSession) throw new Error('Failed to create session')
+    return { sessionId: newSession.id, pin, isHost: true, hostName: effectiveName }
+  }
+
+  const isHost = activeSession.host_device_id === deviceId
+  return {
+    sessionId: activeSession.id,
+    pin: activeSession.pin,
+    isHost,
+    hostName: activeSession.host_name ?? 'Host',
+  }
+}
+
+export async function getSharedCart(sessionId: string): Promise<SharedCartItem[]> {
+  if (!sessionId) return []
+  const { data, error } = await adminSupabase
+    .from('session_cart_items')
+    .select('id, dish_id, name, price, image, category, quantity, added_by_device_id, added_by_name')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error('Failed to fetch shared cart')
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    dishId: row.dish_id,
+    name: row.name,
+    price: Number(row.price),
+    image: row.image,
+    category: row.category,
+    quantity: row.quantity,
+    addedByDeviceId: row.added_by_device_id,
+    addedByName: row.added_by_name,
+  }))
+}
+
+export async function addSharedCartItem({
+  sessionId,
+  deviceId,
+  displayName,
+  dish,
+}: {
+  sessionId: string
+  deviceId: string
+  displayName: string
+  dish: { id: string; name: string; price: number; image: string; category: string }
+}): Promise<void> {
+  if (!sessionId || !deviceId || !dish?.id) throw new Error('sessionId, deviceId, and dish are required')
+
+  const { data: existing } = await adminSupabase
+    .from('session_cart_items')
+    .select('id, quantity')
+    .eq('session_id', sessionId)
+    .eq('dish_id', dish.id)
+    .eq('added_by_device_id', deviceId)
+    .maybeSingle()
+
+  if (existing) {
+    await adminSupabase
+      .from('session_cart_items')
+      .update({ quantity: existing.quantity + 1, updated_at: new Date().toISOString() })
+      .eq('id', existing.id)
+  } else {
+    await adminSupabase.from('session_cart_items').insert({
+      session_id: sessionId,
+      dish_id: dish.id,
+      name: dish.name,
+      price: dish.price,
+      image: dish.image || null,
+      category: dish.category || null,
+      quantity: 1,
+      added_by_device_id: deviceId,
+      added_by_name: displayName || 'Guest',
+    })
+  }
+}
+
+export async function updateSharedCartItemQty({
+  sessionId,
+  deviceId,
+  itemId,
+  quantity,
+}: {
+  sessionId: string
+  deviceId: string
+  itemId: string
+  quantity: number
+}): Promise<void> {
+  if (!sessionId || !deviceId || !itemId) throw new Error('sessionId, deviceId, and itemId are required')
+
+  const { data: item } = await adminSupabase
+    .from('session_cart_items')
+    .select('added_by_device_id')
+    .eq('id', itemId)
+    .eq('session_id', sessionId)
+    .maybeSingle()
+  if (!item) throw new Error('Item not found')
+
+  const { data: session } = await adminSupabase
+    .from('table_sessions')
+    .select('host_device_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+
+  const canEdit = item.added_by_device_id === deviceId || session?.host_device_id === deviceId
+  if (!canEdit) throw new Error('Permission denied')
+
+  if (quantity <= 0) {
+    await adminSupabase.from('session_cart_items').delete().eq('id', itemId)
+  } else {
+    await adminSupabase
+      .from('session_cart_items')
+      .update({ quantity, updated_at: new Date().toISOString() })
+      .eq('id', itemId)
+  }
+}
+
+export async function removeSharedCartItem({
+  sessionId,
+  deviceId,
+  itemId,
+}: {
+  sessionId: string
+  deviceId: string
+  itemId: string
+}): Promise<void> {
+  if (!sessionId || !deviceId || !itemId) throw new Error('sessionId, deviceId, and itemId are required')
+
+  const { data: item } = await adminSupabase
+    .from('session_cart_items')
+    .select('added_by_device_id')
+    .eq('id', itemId)
+    .eq('session_id', sessionId)
+    .maybeSingle()
+  if (!item) throw new Error('Item not found')
+
+  const { data: session } = await adminSupabase
+    .from('table_sessions')
+    .select('host_device_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+
+  const canEdit = item.added_by_device_id === deviceId || session?.host_device_id === deviceId
+  if (!canEdit) throw new Error('Permission denied')
+
+  await adminSupabase.from('session_cart_items').delete().eq('id', itemId)
+}
+
+export async function clearSharedCart(sessionId: string): Promise<void> {
+  if (!sessionId) return
+  await adminSupabase.from('session_cart_items').delete().eq('session_id', sessionId)
+}
+
+export async function findOrCreateCustomer({
+  restaurantId,
+  name,
+  phone,
+  wantsWhatsapp,
+}: {
+  restaurantId: string
+  name: string
+  phone?: string
+  wantsWhatsapp?: boolean
+}): Promise<{ customerId: string }> {
+  if (!restaurantId || !name?.trim()) throw new Error('restaurantId and name are required')
+
+  const normalizedPhone = phone?.trim() || null
+
+  if (normalizedPhone) {
+    const { data: existing } = await adminSupabase
+      .from('customers')
+      .select('id')
+      .eq('restaurant_id', restaurantId)
+      .eq('phone', normalizedPhone)
+      .maybeSingle()
+    if (existing) return { customerId: existing.id }
+  }
+
+  const { data: customer, error } = await adminSupabase
+    .from('customers')
+    .insert({
+      restaurant_id: restaurantId,
+      name: name.trim(),
+      phone: normalizedPhone,
+      whatsapp_opted_in: wantsWhatsapp ?? false,
+    })
+    .select('id')
+    .single()
+  if (error || !customer) throw new Error('Failed to create customer')
+  return { customerId: customer.id }
+}

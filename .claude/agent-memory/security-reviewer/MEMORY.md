@@ -1,0 +1,1 @@
+- [Ordering System Security Findings](project-ordering-system-security.md) — auth gaps, RLS over-exposure, and input validation issues in the 2026-06-21 ordering system server actions

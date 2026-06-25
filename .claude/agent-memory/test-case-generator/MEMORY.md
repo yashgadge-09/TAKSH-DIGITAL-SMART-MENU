@@ -1,0 +1,1 @@
+- [Ordering System Backend (T01–T05)](project-ordering-system.md) — core invariants, GST formula, seed data, cleanup order, and key implementation facts for test generation

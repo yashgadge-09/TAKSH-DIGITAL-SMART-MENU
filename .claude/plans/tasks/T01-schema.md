@@ -3,19 +3,47 @@
 **Day 1 · Phase 1/cross-cutting · depends on: nothing · unblocks: T02–T05, T11, T12, T13**
 
 ## Goal
-Converge the live Supabase DB to the ordering schema **with the approval fix** (`orders.status` default `pending_approval`), enable Realtime, and seed the restaurant + 10 tables.
+Converge the live Supabase DB to the ordering schema **with the approval fix** (`orders.status` default `pending_approval` + status check), and capture the already-applied schema as a repo migration for reproducibility.
 
-## Pre-step (Supabase MCP — do first)
-1. `list_tables` — confirm which of the 8 ordering tables already exist and their exact columns.
-2. `list_edge_functions` — if a `place-order` (or any ordering) function exists, read it (`get_edge_function`) and **note the divergence** (esp. whether it creates `print_jobs` immediately — the flagged gap).
-3. Reconcile findings with the schema below before writing the migration.
+## ✅ Verified live state — MCP run 2026-06-21
+The schema was built directly via dashboard/MCP (no repo migrations existed). Almost everything the original plan called for is **already done**. Verified findings:
 
-> MCP was disconnected during planning — this verification is mandatory before any code depends on the schema.
+| Item | Status |
+|---|---|
+| All 8 ordering tables exist, columns per spec | ✅ done |
+| RLS **enabled** on all 8 | ✅ done |
+| RLS **policies** (7 tables: public INSERT+SELECT, authenticated UPDATE+DELETE; `print_jobs`: public INSERT only) | ✅ done — match spec |
+| Realtime on `orders` + `table_sessions` (`supabase_realtime` publication) | ✅ done |
+| `restaurant_tables` `UNIQUE(restaurant_id, table_number)` (`unique_restaurant_table`) | ✅ done |
+| `table_sessions.status` default `active` + check `(active\|bill_generated\|closed)` | ✅ done |
+| Seed: restaurant `TAKSH Veg` / slug `taksh` / `takshveg@ybl` / gstin `27AAAAA1111A1Z1` | ✅ done (id `c7b441fe-8639-4540-b78b-cb16744234ab`) |
+| Seed: tables | ✅ **16 tables (1–16)** already seeded (plan said 1–10 — more is fine) |
+| **`orders.status` default = `pending_approval`** | ❌ **default is `'received'`, NO check constraint** |
+
+> **Net remaining DB work = the approval fix on `orders` only.** Everything else is a no-op convergence.
 
 ## Files
-- `supabase/migrations/<timestamp>_ordering_system.sql` — **idempotent** (`create table if not exists`, `alter ... add column if not exists`, guarded constraint/policy creation) so it safely converges whatever already exists.
+- `supabase/migrations/<timestamp>_ordering_system.sql` — **idempotent** (`create table if not exists`, `alter ... add column if not exists`, guarded constraint/policy creation via `DO $$ ... IF NOT EXISTS`). It documents the full ordering schema for version control (none exists in-repo today) and **safely re-applies** against the already-built DB. The only statement that actually changes live data is the `orders` status fix below.
 
-## Tables / columns
+## The one effective change — orders approval fix
+```sql
+alter table orders alter column status set default 'pending_approval';
+-- guarded: add check only if absent
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'orders'::regclass and conname = 'orders_status_check'
+  ) then
+    alter table orders add constraint orders_status_check
+      check (status in ('pending_approval','approved','rejected','served'));
+  end if;
+end $$;
+```
+> ⚠️ `orders` currently has **0 rows**, so the check constraint adds cleanly with no backfill needed. If any legacy `received` rows appear before this runs, normalize them first (`update orders set status='pending_approval' where status='received'`).
+
+> Note for T03: until this migration is applied, the DB default is still `received`. `placeOrder` **must explicitly set `status='pending_approval'`** regardless of the column default — do not rely on it.
+
+## Tables / columns (reference — already live, included in migration for idempotent converge)
 - `restaurants(id uuid pk default gen_random_uuid(), name text not null, slug text unique not null, address text, gstin text, upi_id text, created_at timestamptz default now())`
 - `restaurant_tables(id uuid pk, restaurant_id uuid → restaurants, table_number int, unique(restaurant_id, table_number))`
 - `table_sessions(id uuid pk, restaurant_id uuid → restaurants, table_id uuid → restaurant_tables, pin text, status text default 'active' check in (active|bill_generated|closed), opened_at timestamptz default now(), closed_at timestamptz)`
@@ -25,28 +53,26 @@ Converge the live Supabase DB to the ordering schema **with the approval fix** (
 - `bills(id uuid pk, session_id uuid → table_sessions, subtotal numeric, gst_amount numeric, total numeric, generated_at timestamptz default now())`
 - `print_jobs(id uuid pk, restaurant_id uuid → restaurants, type text check in (kot|bill), payload jsonb, status text default 'pending' check in (pending|sent|failed), created_at timestamptz default now())`
 
-> ⚠️ Approval fix: `orders.status` default **MUST** be `pending_approval` (not `received`). If the live table already defaults to `received`, `alter column ... set default 'pending_approval'`.
+## RLS (already live — re-assert idempotently)
+- RLS enabled on all 8.
+- Customer-facing (`restaurants, restaurant_tables, table_sessions, customers, orders, order_items, bills`): public (anon) **INSERT + SELECT**; **UPDATE/DELETE authenticated only**.
+- `print_jobs`: public **INSERT** only; **SELECT/UPDATE service-role only** (no SELECT/UPDATE policy → service role bypasses RLS).
+- Realtime on `table_sessions` + `orders` — already in publication.
 
-## RLS
-- Enable RLS on all 8 tables.
-- Customer-facing (`restaurants, restaurant_tables, table_sessions, customers, orders, order_items, bills`): allow public (anon) **INSERT + SELECT**; **UPDATE/DELETE admin/authenticated only**.
-- `print_jobs`: public **INSERT** only; **SELECT/UPDATE service-role only** (print bridge uses service role).
-- **Enable Realtime** on `table_sessions` and `orders` (add to `supabase_realtime` publication).
+## Seed (already live — keep ON CONFLICT guards)
+- `restaurants`: `TAKSH Veg` / `taksh` / `Chinchwad, Pune` / `27AAAAA1111A1Z1` / `takshveg@ybl` — `ON CONFLICT (slug) DO UPDATE`.
+- `restaurant_tables`: ensure 1–10 exist for that restaurant — `ON CONFLICT (restaurant_id, table_number) DO NOTHING`. (16 already present; this is a no-op.)
 
-## Seed (S2)
-- Insert `restaurants`: name `TAKSH Veg`, slug `taksh`, address `Chinchwad, Pune`, gstin `27AAAAA1111A1Z1`, upi_id `takshveg@ybl` — `ON CONFLICT (slug) DO UPDATE`.
-- Insert `restaurant_tables` 1–10 for that restaurant — `ON CONFLICT (restaurant_id, table_number) DO NOTHING`.
-
-## Test
-- MCP `execute_sql`: `select` from each of the 8 tables (no error).
-- Confirm `orders` column default = `pending_approval`.
-- Confirm `table_sessions` + `orders` are in the `supabase_realtime` publication.
-- Confirm 1 restaurant (slug `taksh`) + 10 tables seeded.
+## Test (MCP `execute_sql`)
+- `select` from each of the 8 tables (no error). ✅ already confirmed.
+- **Confirm `orders` default = `pending_approval`** (the actual change) + `orders_status_check` present.
+- Confirm `table_sessions` + `orders` in `supabase_realtime` publication. ✅
+- Confirm restaurant slug `taksh` + tables seeded. ✅
 
 ## Definition of Done
-- [ ] All 8 tables present with correct columns
-- [ ] `orders.status` default = `pending_approval`
-- [ ] RLS policies as specified
-- [ ] Realtime enabled on `table_sessions` + `orders`
-- [ ] `TAKSH Veg` + tables 1–10 seeded
-- [ ] Migration is idempotent (safe re-run)
+- [x] All 8 tables present with correct columns *(verified live)*
+- [x] **`orders.status` default = `pending_approval` + check constraint** *(applied 2026-06-21, migration version `20260621154153`)*
+- [x] RLS policies as specified *(verified live)*
+- [x] Realtime enabled on `table_sessions` + `orders` *(verified live)*
+- [x] `TAKSH Veg` + tables seeded *(verified live — 16 tables)*
+- [x] Migration committed to `supabase/migrations/2026062101_ordering_system.sql` and applied idempotently
