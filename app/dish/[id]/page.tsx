@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Heart, ChefHat, Sparkles, Minus, Plus, ShoppingCart } from "lucide-react";
-import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, trackFavourite } from "@/lib/database";
-import { getFavouriteSessionKey, getOrCreateSessionId } from "@/lib/session";
+import { ArrowLeft, ChefHat, Sparkles, Minus, Plus, ShoppingCart } from "lucide-react";
+import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView } from "@/lib/database";
+import { getOrCreateSessionId } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
@@ -66,8 +66,6 @@ export default function DishDetailPage() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [moreLikeThisDishes, setMoreLikeThisDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isFavorited, setIsFavorited] = useState(false);
-  const [sessionId, setSessionId] = useState("");
 
   const [showAddedToast, setShowAddedToast] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -185,13 +183,6 @@ export default function DishDetailPage() {
 
         setRawDish(fetchedDish);
 
-        const activeSessionId = getOrCreateSessionId();
-        setSessionId(activeSessionId);
-        const isAlreadyFavourited = window.sessionStorage.getItem(
-          getFavouriteSessionKey(activeSessionId, fetchedDish.id)
-        ) === "1";
-        setIsFavorited(isAlreadyFavourited);
-
         const trackingKey = `taksh:last-dish-view-${fetchedDish.id}`;
         const now = Date.now();
         const previousViewTs = Number(window.sessionStorage.getItem(trackingKey) || 0);
@@ -281,34 +272,6 @@ export default function DishDetailPage() {
     toastTimerRef.current = setTimeout(() => {
       setShowAddedToast(false);
     }, TOAST_DURATION_MS);
-  };
-
-  const handleFavouriteToggle = () => {
-    if (isFavorited) return; // Once liked in the session, it cannot be disliked
-
-    const nextState = true;
-    setIsFavorited(nextState);
-
-    if (!dish) return;
-
-    const activeSessionId = sessionId || getOrCreateSessionId();
-    if (!sessionId) setSessionId(activeSessionId);
-
-    const favouriteKey = getFavouriteSessionKey(activeSessionId, dish.id);
-
-    if (window.sessionStorage.getItem(favouriteKey) === "1") return;
-
-    window.sessionStorage.setItem(favouriteKey, "1");
-
-    void trackFavourite(
-      dish.id,
-      dish.name || dish.name_en || "Unknown Dish",
-      activeSessionId,
-      nextState
-    ).catch(() => {
-      window.sessionStorage.removeItem(favouriteKey);
-      setIsFavorited(false);
-    });
   };
 
   const getRecommendationName = (recommendedDish: any) =>
@@ -471,23 +434,6 @@ export default function DishDetailPage() {
 
           <div className="flex items-center gap-2">
             <LanguageToggle />
-            <button
-              type="button"
-              aria-label={isFavorited ? "Unlike dish" : "Like dish"}
-              aria-pressed={isFavorited}
-              onClick={handleFavouriteToggle}
-              className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full bg-[color:var(--brand-gold-soft)]/95 shadow-md backdrop-blur transition hover:bg-[color:var(--brand-gold-soft)]"
-            >
-              <Heart
-                className={[
-                  "h-[18px] w-[18px] transition",
-                  isFavorited
-                    ? "fill-red-500 text-red-500"
-                    : "text-[color:var(--brand-bg-deep)]",
-                ].join(" ")}
-                strokeWidth={2.2}
-              />
-            </button>
             <button
               type="button"
               aria-label="Open Cart"

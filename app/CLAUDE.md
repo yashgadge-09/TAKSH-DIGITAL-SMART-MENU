@@ -1,4 +1,4 @@
-# CLAUDE.md — `app/`
+/mco# CLAUDE.md — `app/`
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this directory.
 
