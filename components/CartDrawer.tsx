@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCart } from "@/context/CartContext";
 import { useSharedSession } from "@/context/SharedSessionContext";
 import { updateSharedCartItemQty, removeSharedCartItem, generateBill } from "@/lib/database";
+import { useSessionOrders } from "@/hooks/useSessionOrders";
 import { ChevronLeft, ShoppingCart, Minus, Plus, Users, Receipt, Loader2, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -32,11 +33,26 @@ export function CartDrawer({
   onAddRecommendation,
   onShowOrder,
 }: CartDrawerProps) {
-  const { items: localItems, updateQuantity, removeItem, totalPrice: localTotalPrice } = useCart();
+  const { items: localItems, updateQuantity, removeItem, totalPrice: localTotalPrice, activeSessionId } = useCart();
   const sharedSession = useSharedSession();
   const router = useRouter();
   const [billLoading, setBillLoading] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
+
+  const isSharedMode = !!sharedSession;
+  const sharedItems = sharedSession?.sharedItems ?? [];
+
+  // Session ID for fetching order history:
+  // shared mode → always use the shared session ID
+  // legacy mode → use the one stored in CartContext after first order
+  const sessionId = isSharedMode ? (sharedSession?.sessionId ?? null) : activeSessionId;
+
+  const { orders: pastOrders, refetch: refetchOrders } = useSessionOrders(sessionId);
+
+  // Refresh order history each time the drawer opens
+  useEffect(() => {
+    if (isOpen) refetchOrders();
+  }, [isOpen, refetchOrders]);
 
   const handleRequestBill = async () => {
     if (!sharedSession?.sessionId || billLoading || billRequested) return;
@@ -60,9 +76,6 @@ export function CartDrawer({
 
   if (!isOpen) return null;
 
-  const isSharedMode = !!sharedSession;
-  const sharedItems = sharedSession?.sharedItems ?? [];
-
   // In shared mode, derive totals from shared items; else use local cart
   const displayItems = isSharedMode ? sharedItems : localItems;
   const totalPrice = isSharedMode
@@ -71,6 +84,9 @@ export function CartDrawer({
   const totalItems = displayItems.reduce((acc, item) => acc + item.quantity, 0);
   const taxes = Math.round(totalPrice * 0.1);
   const finalTotal = totalPrice + taxes;
+
+  const hasPastOrders = pastOrders.length > 0;
+  const hasCurrentItems = displayItems.length > 0;
 
   const handleDecrease = async (item: typeof displayItems[0]) => {
     if (isSharedMode) {
@@ -151,15 +167,75 @@ export function CartDrawer({
           </div>
         </div>
 
-        {/* Items */}
+        {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-5 pb-6 no-scrollbar">
-          {displayItems.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-3 opacity-60">
-              <ShoppingCart size={40} className="text-[color:var(--brand-gold-muted)]" />
-              <p className="text-[14px] font-medium text-[color:var(--brand-gold-muted)]">
-                {isSharedMode ? "Table cart is empty — add something!" : "Your cart is empty"}
+
+          {/* ── Past orders (already placed rounds) ── */}
+          {hasPastOrders && (
+            <div className="mb-4">
+              <p className="mb-2.5 text-[10px] uppercase tracking-widest text-[color:var(--brand-gold-muted)] opacity-60">
+                Already Ordered
               </p>
+              <div className="space-y-2.5">
+                {pastOrders.map((round) => (
+                  <div
+                    key={round.orderId}
+                    className="rounded-xl border border-[color:var(--brand-gold)]/10 bg-[#1c110a] px-4 py-3"
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[12px] font-semibold text-[color:var(--brand-gold-soft)]/60">
+                        Round {round.roundNumber}
+                      </span>
+                      <OrderStatusBadge status={round.status} />
+                    </div>
+                    <ul className="space-y-1">
+                      {round.items.map((item, i) => (
+                        <li key={i} className="flex items-baseline justify-between gap-2">
+                          <span className="text-[12px] text-[color:var(--brand-gold-soft)]/55 leading-snug">
+                            {item.name}
+                            {item.quantity > 1 && (
+                              <span className="ml-1.5 text-[11px] opacity-60">× {item.quantity}</span>
+                            )}
+                          </span>
+                          <span className="shrink-0 text-[12px] text-[color:var(--brand-gold-soft)]/40">
+                            ₹{item.price * item.quantity}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+
+          {/* Divider between past and current when both exist */}
+          {hasPastOrders && hasCurrentItems && (
+            <div className="mb-3 flex items-center gap-2">
+              <div className="h-px flex-1 bg-[color:var(--brand-gold)]/10" />
+              <span className="text-[10px] uppercase tracking-widest text-[color:var(--brand-gold-muted)] opacity-50">
+                New Order
+              </span>
+              <div className="h-px flex-1 bg-[color:var(--brand-gold)]/10" />
+            </div>
+          )}
+
+          {/* ── Current cart items ── */}
+          {!hasCurrentItems ? (
+            !hasPastOrders ? (
+              /* Fully empty — no history either */
+              <div className="flex h-40 flex-col items-center justify-center gap-3 opacity-60">
+                <ShoppingCart size={40} className="text-[color:var(--brand-gold-muted)]" />
+                <p className="text-[14px] font-medium text-[color:var(--brand-gold-muted)]">
+                  {isSharedMode ? "Table cart is empty — add something!" : "Your cart is empty"}
+                </p>
+              </div>
+            ) : (
+              /* Past orders exist but nothing new yet */
+              <p className="mt-1 mb-3 text-center text-[13px] text-[color:var(--brand-gold-muted)]/50">
+                Browse the menu to add more dishes
+              </p>
+            )
           ) : (
             <div className="mt-2">
               <ul className="space-y-5">
@@ -286,9 +362,9 @@ export function CartDrawer({
         </div>
 
         {/* Footer */}
-        {(displayItems.length > 0 || isSharedMode) && (
+        {(hasCurrentItems || isSharedMode) && (
           <div className="rounded-t-3xl bg-[#2a1a11] px-5 pt-5 pb-safe border-t border-[color:var(--brand-gold)]/10 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
-            {displayItems.length > 0 && (
+            {hasCurrentItems && (
               <div className="mb-3 space-y-1.5">
                 <div className="flex justify-between items-center text-[color:var(--brand-gold)]">
                   <span className="text-[15px] font-semibold">Subtotal</span>
@@ -301,7 +377,7 @@ export function CartDrawer({
               </div>
             )}
 
-            {displayItems.length > 0 && (
+            {hasCurrentItems && (
               isSharedMode && !sharedSession!.isHost ? (
                 <div className="flex flex-col items-center gap-1 py-3 mb-3">
                   <p className="text-[13px] font-medium text-[color:var(--brand-gold-soft)]/60 text-center">
@@ -351,5 +427,30 @@ export function CartDrawer({
         )}
       </div>
     </>
+  );
+}
+
+function OrderStatusBadge({ status }: { status: string }) {
+  if (status === "approved") {
+    return (
+      <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        Approved
+      </span>
+    );
+  }
+  if (status === "served") {
+    return (
+      <span className="flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--brand-gold-muted)] opacity-50">
+        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+        Served
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-[11px] font-medium text-amber-400">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+      Pending
+    </span>
   );
 }

@@ -1300,6 +1300,32 @@ export async function placeOrder({
   return { orderId: order.id, roundNumber }
 }
 
+export type SessionOrder = {
+  orderId: string
+  roundNumber: number
+  status: string
+  placedAt: string
+  items: { name: string; quantity: number; price: number }[]
+}
+
+export async function getOrdersForSession(sessionId: string): Promise<SessionOrder[]> {
+  if (!sessionId) return []
+  const { data, error } = await adminSupabase
+    .from('orders')
+    .select('id, round_number, status, placed_at, order_items(name, quantity, price)')
+    .eq('session_id', sessionId)
+    .neq('status', 'rejected')
+    .order('round_number', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row: any) => ({
+    orderId: row.id,
+    roundNumber: row.round_number,
+    status: row.status,
+    placedAt: row.placed_at,
+    items: (row.order_items as { name: string; quantity: number; price: number }[]) ?? [],
+  }))
+}
+
 function formatTimeIST(value: string | Date): string {
   // Deterministic HH:MM in IST (UTC+5:30) — avoids toLocaleTimeString ICU
   // variance across Node.js builds, ensuring KOT/bill payloads always match
