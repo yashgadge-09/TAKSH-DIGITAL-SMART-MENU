@@ -108,7 +108,7 @@ export function OrderConfirmation({ items, pin, tableNumber, sessionId, onDone }
         </p>
       </div>
 
-      {/* Request Bill */}
+      {/* Request Bill — temporarily hidden
       {sessionId && (
         billRequested ? (
           <div className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--brand-gold)]/20 bg-[color:var(--brand-gold)]/5 py-3 text-[13px] text-[color:var(--brand-gold-soft)]/70">
@@ -128,6 +128,7 @@ export function OrderConfirmation({ items, pin, tableNumber, sessionId, onDone }
           </button>
         )
       )}
+      */}
 
       {/* Done */}
       <button
