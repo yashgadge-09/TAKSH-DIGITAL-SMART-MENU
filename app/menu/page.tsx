@@ -56,8 +56,6 @@ function MenuPageContent() {
   const sharedSession = useSharedSession();
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
-  const [showSpicyOnly, setShowSpicyOnly] = useState(false);
-
   useEffect(() => {
     const currentCategory = searchParams.get("category") || "All";
     if (activeCategory !== currentCategory) {
@@ -179,8 +177,7 @@ function MenuPageContent() {
     const sl = searchQuery.toLowerCase().trim();
     const matchesSearch = !sl || name.includes(sl) || desc.includes(sl);
     const matchesCategory = sl ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
-    const matchesSpice = !showSpicyOnly || d.spiceLevel === 3;
-    return matchesSearch && matchesCategory && matchesSpice;
+    return matchesSearch && matchesCategory;
   }).map(d => ({ ...d, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }));
 
   const getGuestFavorites = () => {
@@ -412,17 +409,6 @@ function MenuPageContent() {
                     </button>
                   ))}
                 </div>
-                {/* Spice filter */}
-                <button
-                  onClick={() => setShowSpicyOnly(!showSpicyOnly)}
-                  aria-label={showSpicyOnly ? "Show all items" : "Show only high spice items"}
-                  className={`grid h-8 w-8 place-items-center rounded-full border transition-all ${showSpicyOnly
-                    ? "bg-orange-600 border-orange-500 text-white shadow-[0_0_12px_rgba(234,88,12,0.4)]"
-                    : "border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] hover:border-[color:var(--brand-gold)]/60"
-                    }`}
-                >
-                  <span className={showSpicyOnly ? "animate-pulse" : ""}>🔥</span>
-                </button>
                 {/* Cart button */}
                 <button onClick={() => setIsCartOpen(true)} aria-label={`View cart, ${totalItems} items`}
                   className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
@@ -509,7 +495,7 @@ function MenuPageContent() {
         )}
 
         {/* ── Discovery sections (All + no search + no spice filter) ── */}
-        {activeCategory === "All" && !searchQuery && !showSpicyOnly && (
+        {activeCategory === "All" && !searchQuery && (
           <>
             {getTodaysSpecials().length > 0 && (
               <section className="mt-6">
@@ -573,7 +559,7 @@ function MenuPageContent() {
 
         {/* ── Dish listing ── */}
         <div className="px-4 mt-6">
-          {activeCategory === "All" && !searchQuery && !showSpicyOnly ? (
+          {activeCategory === "All" && !searchQuery ? (
             previewCategories.map(tab => {
               const catDishes = groupedDishes[tab.categoryValue] || [];
               if (catDishes.length === 0) return null;
@@ -610,26 +596,14 @@ function MenuPageContent() {
           {!isLoading && filteredDishes.length === 0 && (
             <div className="flex flex-col items-center py-16 text-center px-6">
               <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/20 shadow-[0_4px_20px_-4px_rgba(234,88,12,0.3)]">
-                <span className="text-3xl">{showSpicyOnly ? "🔥" : "🍽️"}</span>
+                <span className="text-3xl">🍽️</span>
               </div>
               <p className="font-serif text-[18px] text-[color:var(--brand-gold)]">
-                {showSpicyOnly ? t("noSpicyDishesFound") : t("noDishesFound")}
+                {t("noDishesFound")}
               </p>
               <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--brand-gold-muted)]">
-                {searchQuery 
-                  ? t("tryDifferentKeywords")
-                  : showSpicyOnly 
-                    ? t("turnOffIndicator")
-                    : t("noDishesAvailable")}
+                {searchQuery ? t("tryDifferentKeywords") : t("noDishesAvailable")}
               </p>
-              {showSpicyOnly && (
-                <button 
-                  onClick={() => setShowSpicyOnly(false)}
-                  className="mt-6 rounded-full border border-[color:var(--brand-gold)]/40 px-5 py-2 text-[13px] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)]"
-                >
-                  {t("turnOffIndicatorBtn")}
-                </button>
-              )}
             </div>
           )}
         </div>
