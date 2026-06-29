@@ -9,7 +9,6 @@
     "allow": [
       "Edit(*)",
       "Write(*)",
-      "Bash(*)",
       "Skill(update-config)",
       "Skill(self_review)",
       "Skill(code-review)",

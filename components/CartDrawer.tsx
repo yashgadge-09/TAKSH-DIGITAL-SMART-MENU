@@ -326,7 +326,7 @@ export function CartDrawer({
               )
             )}
 
-            {/* Request Bill — always visible in shared mode */}
+            {/* Request Bill — temporarily hidden
             {isSharedMode && (
               billRequested ? (
                 <div className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--brand-gold)]/20 bg-[color:var(--brand-gold)]/5 py-3 text-[13px] text-[color:var(--brand-gold-soft)]/70">
@@ -346,6 +346,7 @@ export function CartDrawer({
                 </button>
               )
             )}
+            */}
           </div>
         )}
       </div>
