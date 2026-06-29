@@ -20,6 +20,8 @@ interface CartContextType {
   clearCart: () => void;
   totalItems: number;
   totalPrice: number;
+  activeSessionId: string | null;
+  setActiveSessionId: (id: string) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -59,6 +61,11 @@ const playCartSound = () => {
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
+
+  const setActiveSessionId = useCallback((id: string) => {
+    setActiveSessionIdState(id);
+  }, []);
 
   const addItem = useCallback(
     (dish: { id: string; name: string; price: number; image: string; category: string }) => {
@@ -127,6 +134,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         totalItems,
         totalPrice,
+        activeSessionId,
+        setActiveSessionId,
       }}
     >
       {children}

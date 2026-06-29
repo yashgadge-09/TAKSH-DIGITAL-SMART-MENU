@@ -20,7 +20,7 @@ interface OrderFlowProps {
 export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps) {
   const table = useTableSession();
   const sharedSession = useSharedSession();
-  const { items: localItems, totalPrice, clearCart } = useCart();
+  const { items: localItems, totalPrice, clearCart, setActiveSessionId } = useCart();
 
   const [view, setView] = useState<View>("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -346,6 +346,7 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
             onPlaced={({ items: snapshot, orderId: _orderId }) => {
               setConfirmedItems(snapshot);
               clearCart();
+              if (confirmedSessionId) setActiveSessionId(confirmedSessionId);
               setView("confirmation");
             }}
           />
