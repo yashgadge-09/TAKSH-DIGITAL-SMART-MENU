@@ -24,7 +24,6 @@ import {
   ScanLine,
   MapPin,
   ExternalLink,
-  FileBarChart,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -328,117 +327,98 @@ export default function AnalyticsPage() {
 
   return (
     <AdminLayout>
-      <div className="relative">
-        <div className="pointer-events-none absolute -top-16 left-[20%] h-44 w-44 rounded-full bg-[#E8650A]/20 blur-3xl" />
-        <div className="pointer-events-none absolute top-[30%] right-[12%] h-56 w-56 rounded-full bg-[#A05822]/20 blur-3xl" />
+      <div className="space-y-6">
 
-        {/* Reports — daily billing summary */}
-        <section className="mb-8">
-          {/* Date picker */}
-          <div className="mb-6 flex items-center gap-3">
-            <label className="text-sm font-medium text-[#6B5744]">Date</label>
-            <input
-              type="date"
-              value={selectedDate}
-              max={todayIST()}
-              onChange={e => setSelectedDate(e.target.value)}
-              className="rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm text-[#2C1810] focus:outline-none focus:ring-2 focus:ring-[#A46833]"
-            />
-          </div>
+        {/* Date picker */}
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-[#6B5744]">Date</label>
+          <input
+            type="date"
+            value={selectedDate}
+            max={todayIST()}
+            onChange={e => setSelectedDate(e.target.value)}
+            className="rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm text-[#2C1810] focus:outline-none focus:ring-2 focus:ring-[#A46833]"
+          />
+        </div>
 
-          {/* Summary cards */}
-          <div className="mb-6 grid grid-cols-3 gap-4">
-            {[
-              { label: "Total billed", value: billsLoading ? "…" : `₹${bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}` },
-              { label: "# Bills",      value: billsLoading ? "…" : bills.length },
-              { label: "Avg bill",     value: billsLoading ? "…" : bills.length > 0 ? `₹${Math.round(bills.reduce((s, b) => s + b.total, 0) / bills.length).toLocaleString("en-IN")}` : "—" },
-            ].map(({ label, value }) => (
-              <div key={label} className="rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 text-center shadow-[0_8px_20px_rgba(90,53,25,0.1)]">
-                <div className="text-2xl font-bold text-[#2C1810]">{value}</div>
-                <div className="mt-1 text-xs text-[#8E6D4E]">{label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Bills list */}
-          {billsLoading ? (
-            <div className="py-8 text-center text-[#8E6D4E]">Loading…</div>
-          ) : bills.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-[#A68660]">
-              <FileBarChart className="h-10 w-10 opacity-40" />
-              <p className="text-base font-medium">No bills for this date</p>
+        {/* Summary cards */}
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: "Total billed", value: billsLoading ? "…" : `₹${bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}` },
+            { label: "# Bills",      value: billsLoading ? "…" : bills.length },
+            { label: "Avg bill",     value: billsLoading ? "…" : bills.length > 0 ? `₹${Math.round(bills.reduce((s, b) => s + b.total, 0) / bills.length).toLocaleString("en-IN")}` : "—" },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 text-center shadow-[0_8px_20px_rgba(90,53,25,0.1)]">
+              <div className="text-2xl font-bold text-[#2C1810]">{value}</div>
+              <div className="mt-1 text-xs text-[#8E6D4E]">{label}</div>
             </div>
-          ) : (
-            <div className="overflow-hidden rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] shadow-[0_14px_32px_rgba(90,53,25,0.14)]">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[#E8D5BC]">
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Time (IST)</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Amount</th>
+          ))}
+        </div>
+
+        {/* Weekly Customers */}
+        <PremiumPanel title="Weekly Customers" subtitle={`Unique customers per day — last ${rangeDays} days`} badge="+INSIGHTS">
+          <div className="h-72">
+            {weeklyLineData.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weeklyLineData} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                  <CartesianGrid stroke="rgba(231,207,168,0.08)" vertical={false} />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#CDAE8A", fontSize: 12 }} />
+                  <YAxis hide />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line
+                    type="monotone"
+                    dataKey="customers"
+                    stroke="#F0A33D"
+                    strokeWidth={3}
+                    dot={{ r: 3, fill: "#F0A33D", stroke: "#1E120C", strokeWidth: 2 }}
+                    activeDot={{ r: 5, fill: "#F2BC68", stroke: "#1E120C", strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-[#AF8B63]">
+                No customer data yet for this range.
+              </div>
+            )}
+          </div>
+        </PremiumPanel>
+
+        {/* Bills table */}
+        {!billsLoading && bills.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] shadow-[0_14px_32px_rgba(90,53,25,0.14)]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#E8D5BC]">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Time (IST)</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EDE0CC]">
+                {bills.map((b, i) => (
+                  <tr key={i} className="transition-colors hover:bg-[#F5EBD8]">
+                    <td className="px-5 py-3 text-[#6B5744]">{billTimeIST(b.generated_at)}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-[#2C1810]">₹{b.total.toLocaleString("en-IN")}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EDE0CC]">
-                  {bills.map((b, i) => (
-                    <tr key={i} className="transition-colors hover:bg-[#F5EBD8]">
-                      <td className="px-5 py-3 text-[#6B5744]">{billTimeIST(b.generated_at)}</td>
-                      <td className="px-5 py-3 text-right font-semibold text-[#2C1810]">₹{b.total.toLocaleString("en-IN")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex justify-between border-t border-[#E8D5BC] px-5 py-3 text-sm">
-                <span className="text-[#8E6D4E]">Total</span>
-                <span className="font-bold text-[#2C1810]">₹{bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}</span>
-              </div>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex justify-between border-t border-[#E8D5BC] px-5 py-3 text-sm">
+              <span className="text-[#8E6D4E]">Total</span>
+              <span className="font-bold text-[#2C1810]">₹{bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}</span>
             </div>
-          )}
-        </section>
+          </div>
+        )}
 
         {error ? (
-          <div className="mb-6 rounded-xl border border-[#A63B21] bg-[#2C1510] p-4 text-[#FFB3A0]">{error}</div>
+          <div className="rounded-xl border border-[#A63B21] bg-[#2C1510] p-4 text-[#FFB3A0]">{error}</div>
         ) : null}
 
         {queryWarning ? (
-          <div className="mb-6 rounded-xl border border-[#9A672C] bg-[#2D1B10] p-4 text-[#EBC086]">{queryWarning}</div>
+          <div className="rounded-xl border border-[#9A672C] bg-[#2D1B10] p-4 text-[#EBC086]">{queryWarning}</div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <PremiumPanel title="Weekly Customers" subtitle={`Unique customers per day — last ${rangeDays} days`} badge="+INSIGHTS">
-            <div className="h-72">
-              {weeklyLineData.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weeklyLineData} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                    <CartesianGrid stroke="rgba(231,207,168,0.08)" vertical={false} />
-                    <XAxis
-                      dataKey="day"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: "#CDAE8A", fontSize: 12 }}
-                    />
-                    <YAxis hide />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line
-                      type="monotone"
-                      dataKey="customers"
-                      stroke="#F0A33D"
-                      strokeWidth={3}
-                      dot={{ r: 3, fill: "#F0A33D", stroke: "#1E120C", strokeWidth: 2 }}
-                      activeDot={{ r: 5, fill: "#F2BC68", stroke: "#1E120C", strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-[#AF8B63]">
-                  No customer data yet for this range.
-                </div>
-              )}
-            </div>
-          </PremiumPanel>
-        </div>
-
-        <div className="mt-6">
-          <PremiumPanel title="Top Dishes This Week" subtitle="Ranked by views" badge="TRENDING">
-            {topDishesWeekData.length ? (
+        <PremiumPanel title="Top Dishes This Week" subtitle="Ranked by views" badge="TRENDING">
+          {topDishesWeekData.length ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {topDishesWeekData.map((dish: any) => {
                   const views = Number(dish.views) || 0
@@ -491,9 +471,8 @@ export default function AnalyticsPage() {
               <div className="text-sm text-[#AF8B63]">No dish view data yet for this range.</div>
             )}
           </PremiumPanel>
-        </div>
 
-        <div className="mt-8 mb-4 flex items-end justify-between gap-3">
+        <div className="flex items-end justify-between gap-3">
           <div>
             <h2 className="text-2xl font-bold text-[#2C1810]">Google Business Intelligence</h2>
             <p className="text-sm text-[#8E7F71]">
@@ -513,7 +492,7 @@ export default function AnalyticsPage() {
           ) : null}
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border border-[#6D4428] bg-[linear-gradient(145deg,#27170E,#150D08)] p-4 shadow-[0_12px_30px_rgba(22,13,8,0.45)]">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Overall Rating</span>
@@ -626,7 +605,6 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </PremiumPanel>
-        </div>
       </div>
     </AdminLayout>
   )
