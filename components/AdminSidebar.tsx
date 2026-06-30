@@ -11,7 +11,6 @@ import {
   Sparkles,
   Bell,
   Inbox,
-  FileBarChart,
 } from "lucide-react"
 import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
@@ -24,7 +23,6 @@ const navItems = [
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/todays-special", label: "Today's Special", icon: Sparkles },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
-  { href: "/admin/reports", label: "Reports", icon: FileBarChart },
   { href: "/admin/reviews", label: "Review Prompts", icon: Bell },
 ]
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
 import { getAnalyticsData } from "@/lib/database"
+import { supabase } from "@/lib/supabase"
 import {
   LineChart,
   Line,
@@ -23,6 +24,7 @@ import {
   ScanLine,
   MapPin,
   ExternalLink,
+  FileBarChart,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -188,6 +190,28 @@ function getInitials(value: string) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
+// ── Reports helpers ──────────────────────────────────────────────────────────
+
+type BillRow = { total: number; generated_at: string }
+
+function todayIST() {
+  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  return istNow.toISOString().slice(0, 10)
+}
+
+function getISTDayBounds(dateStr: string) {
+  return {
+    start: `${dateStr}T00:00:00+05:30`,
+    end:   `${dateStr}T23:59:59+05:30`,
+  }
+}
+
+function billTimeIST(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
+  })
+}
+
 export default function AnalyticsPage() {
   const [activeFilter, setActiveFilter] = useState<number | null>(null)
   const [analytics, setAnalytics] = useState<any>(null)
@@ -196,6 +220,12 @@ export default function AnalyticsPage() {
   const [rangeDays, setRangeDays] = useState<7 | 30 | 90>(7)
   const [googleStats, setGoogleStats] = useState<GoogleStats | null>(null)
   const [isGoogleLoading, setIsGoogleLoading] = useState(true)
+
+  // Reports state
+  const [selectedDate, setSelectedDate] = useState(todayIST())
+  const [bills, setBills] = useState<BillRow[]>([])
+  const [billsLoading, setBillsLoading] = useState(true)
+  const [restId, setRestId] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchGoogleStats = async () => {
@@ -235,6 +265,40 @@ export default function AnalyticsPage() {
     }
   }, [rangeDays])
 
+  // Reports: resolve restaurant ID once
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const { data: rest, error } = await supabase
+        .from("restaurants").select("id").eq("slug", "taksh").single()
+      if (mounted && !error && rest) setRestId(rest.id)
+      else if (mounted) setBillsLoading(false)
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  // Reports: fetch bills when date or restId changes
+  useEffect(() => {
+    if (!restId) return
+    let mounted = true
+    setBillsLoading(true)
+    ;(async () => {
+      const { start, end } = getISTDayBounds(selectedDate)
+      const { data, error } = await supabase
+        .from("bills")
+        .select("total, generated_at, table_sessions!inner(restaurant_id)")
+        .eq("table_sessions.restaurant_id", restId)
+        .gte("generated_at", start)
+        .lte("generated_at", end)
+        .order("generated_at", { ascending: false })
+      if (!mounted) return
+      if (error) { setBillsLoading(false); return }
+      setBills((data ?? []) as unknown as BillRow[])
+      setBillsLoading(false)
+    })()
+    return () => { mounted = false }
+  }, [restId, selectedDate])
+
   const menuViewsToday = analytics?.menuViewsToday ?? 0
   const avgRatingValue = analytics?.avgRating ?? 0
   const totalReviewsValue = analytics?.totalReviews ?? 0
@@ -268,65 +332,67 @@ export default function AnalyticsPage() {
         <div className="pointer-events-none absolute -top-16 left-[20%] h-44 w-44 rounded-full bg-[#E8650A]/20 blur-3xl" />
         <div className="pointer-events-none absolute top-[30%] right-[12%] h-56 w-56 rounded-full bg-[#A05822]/20 blur-3xl" />
 
-        <div className="relative mb-6 overflow-hidden rounded-3xl border border-[#6D4428] bg-[linear-gradient(140deg,#2A180F_0%,#1A100A_60%,#140C08_100%)] p-6 shadow-[0_20px_54px_rgba(17,9,5,0.55)] sm:p-8">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,191,118,0.18),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(232,101,10,0.2),transparent_40%)]" />
-
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#7E4F2D] bg-[#3B2314]/80 px-3 py-1 text-xs font-medium uppercase tracking-[0.1em] text-[#F2C786]">
-                <ScanLine className="h-3.5 w-3.5" />
-                Live insights
-              </p>
-              <h1 className="text-3xl font-bold text-[#F7E4C4] sm:text-4xl">Analytics Dashboard</h1>
-              <p className="mt-2 text-sm text-[#C9A983] sm:text-base">
-                Premium view of scans, engagement, and guest sentiment. Menu views today:{" "}
-                <span className="font-semibold text-[#F2C786]">
-                  {isLoading ? "..." : menuViewsToday.toLocaleString()}
-                </span>
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 rounded-xl border border-[#704828] bg-[#1D120B]/90 p-1.5">
-              {DATE_RANGES.map((days) => (
-                <button
-                  key={days}
-                  onClick={() => setRangeDays(days)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-semibold tracking-wide transition-all duration-200 ${
-                    rangeDays === days
-                      ? "bg-[#F0A33D] text-[#24150D] shadow-[0_0_20px_rgba(240,163,61,0.35)]"
-                      : "text-[#C39B70] hover:bg-[#3A2518] hover:text-[#F2C786]"
-                  }`}
-                  type="button"
-                >
-                  {days}D
-                </button>
-              ))}
-            </div>
+        {/* Reports — daily billing summary */}
+        <section className="mb-8">
+          {/* Date picker */}
+          <div className="mb-6 flex items-center gap-3">
+            <label className="text-sm font-medium text-[#6B5744]">Date</label>
+            <input
+              type="date"
+              value={selectedDate}
+              max={todayIST()}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm text-[#2C1810] focus:outline-none focus:ring-2 focus:ring-[#A46833]"
+            />
           </div>
 
-          <div className="relative mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Google Rating</p>
-              <p className="mt-1 text-2xl font-bold text-[#F3B85E]">
-                {isGoogleLoading ? "..." : googleRatingValue > 0 ? googleRatingValue.toFixed(1) : "N/A"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Google Reviews</p>
-              <p className="mt-1 text-2xl font-bold text-[#F1DDC0]">
-                {isGoogleLoading ? "..." : googleReviewsCount.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Menu Scans ({rangeDays}D)</p>
-              <p className="mt-1 text-2xl font-bold text-[#B9F4B1]">{isLoading ? "..." : analytics?.totalScans || "0"}</p>
-            </div>
-            <div className="rounded-xl border border-[#6A4329] bg-[#1A100A]/85 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.08em] text-[#B99267]">Today's Views</p>
-              <p className="mt-1 text-2xl font-bold text-[#FFBFAE]">{isLoading ? "..." : menuViewsToday.toLocaleString()}</p>
-            </div>
+          {/* Summary cards */}
+          <div className="mb-6 grid grid-cols-3 gap-4">
+            {[
+              { label: "Total billed", value: billsLoading ? "…" : `₹${bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}` },
+              { label: "# Bills",      value: billsLoading ? "…" : bills.length },
+              { label: "Avg bill",     value: billsLoading ? "…" : bills.length > 0 ? `₹${Math.round(bills.reduce((s, b) => s + b.total, 0) / bills.length).toLocaleString("en-IN")}` : "—" },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 text-center shadow-[0_8px_20px_rgba(90,53,25,0.1)]">
+                <div className="text-2xl font-bold text-[#2C1810]">{value}</div>
+                <div className="mt-1 text-xs text-[#8E6D4E]">{label}</div>
+              </div>
+            ))}
           </div>
-        </div>
+
+          {/* Bills list */}
+          {billsLoading ? (
+            <div className="py-8 text-center text-[#8E6D4E]">Loading…</div>
+          ) : bills.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-12 text-[#A68660]">
+              <FileBarChart className="h-10 w-10 opacity-40" />
+              <p className="text-base font-medium">No bills for this date</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] shadow-[0_14px_32px_rgba(90,53,25,0.14)]">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#E8D5BC]">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Time (IST)</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EDE0CC]">
+                  {bills.map((b, i) => (
+                    <tr key={i} className="transition-colors hover:bg-[#F5EBD8]">
+                      <td className="px-5 py-3 text-[#6B5744]">{billTimeIST(b.generated_at)}</td>
+                      <td className="px-5 py-3 text-right font-semibold text-[#2C1810]">₹{b.total.toLocaleString("en-IN")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex justify-between border-t border-[#E8D5BC] px-5 py-3 text-sm">
+                <span className="text-[#8E6D4E]">Total</span>
+                <span className="font-bold text-[#2C1810]">₹{bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}</span>
+              </div>
+            </div>
+          )}
+        </section>
 
         {error ? (
           <div className="mb-6 rounded-xl border border-[#A63B21] bg-[#2C1510] p-4 text-[#FFB3A0]">{error}</div>
