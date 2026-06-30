@@ -1,0 +1,2 @@
+- [Supabase Error Handling Patterns](feedback_supabase_error_handling.md) — Recurring: maybeSingle() results destructured without error field, turns DB errors into silent null
+- [Ordering System Review](project_ordering_system_review.md) — 2026-06-21 review of ordering backend; known issues, fixed items, and patterns to watch
