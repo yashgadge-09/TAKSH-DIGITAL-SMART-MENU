@@ -605,6 +605,7 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </PremiumPanel>
+        </div>
       </div>
     </AdminLayout>
   )
