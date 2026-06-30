@@ -3,20 +3,14 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  LayoutDashboard,
   UtensilsCrossed,
   Tag,
   BarChart2,
-  Eye,
   PanelLeftClose,
   PanelLeft,
   Sparkles,
   Bell,
   Inbox,
-  LayoutGrid,
-  Users,
-  FileBarChart,
-  Settings,
 } from "lucide-react"
 import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
@@ -24,18 +18,12 @@ import { supabase } from "@/lib/supabase"
 import { TakshBrand } from "@/components/TakshBrand"
 
 const navItems = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/incoming", label: "Incoming Orders", icon: Inbox },
-  { href: "/admin/tables", label: "Tables", icon: LayoutGrid },
+  { href: "/admin/incoming", label: "Tables", icon: Inbox },
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/todays-special", label: "Today's Special", icon: Sparkles },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
-  { href: "/admin/customers", label: "Customers", icon: Users },
-  { href: "/admin/reports", label: "Reports", icon: FileBarChart },
   { href: "/admin/reviews", label: "Review Prompts", icon: Bell },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
-  { href: "/admin/preview", label: "Preview Menu", icon: Eye },
 ]
 
 // Context for sidebar state
