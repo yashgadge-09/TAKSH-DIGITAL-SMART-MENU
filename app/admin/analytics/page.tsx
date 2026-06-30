@@ -6,13 +6,10 @@ import { getAnalyticsData } from "@/lib/database"
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   CartesianGrid,
 } from "recharts"
 import {
@@ -244,10 +241,7 @@ export default function AnalyticsPage() {
   const publicReviewsValue = analytics?.publicReviews ?? 0
   const privateReviewsValue = totalReviewsValue - publicReviewsValue
 
-  const topCartBarData = analytics?.topCartDishes || []
-  const topFavouritesBarData = analytics?.topFavourites || []
-  const weeklyLineData = analytics?.weeklyScans || []
-  const scansVsFavouritesBarData = analytics?.scansVsFavourites || []
+  const weeklyLineData = analytics?.weeklyCustomers || []
   const topDishesWeekData = analytics?.topDishesThisWeek || []
   const ratingDistributionData = analytics?.ratingDistribution || EMPTY_RATING_DISTRIBUTION
   const reviewListData = analytics?.recentReviews || []
@@ -343,7 +337,7 @@ export default function AnalyticsPage() {
         ) : null}
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <PremiumPanel title="Weekly QR Scans" subtitle={`Last ${rangeDays} days trendline`} badge="+INSIGHTS">
+          <PremiumPanel title="Weekly Customers" subtitle={`Unique customers per day — last ${rangeDays} days`} badge="+INSIGHTS">
             <div className="h-72">
               {weeklyLineData.length ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -359,7 +353,7 @@ export default function AnalyticsPage() {
                     <Tooltip content={<CustomTooltip />} />
                     <Line
                       type="monotone"
-                      dataKey="scans"
+                      dataKey="customers"
                       stroke="#F0A33D"
                       strokeWidth={3}
                       dot={{ r: 3, fill: "#F0A33D", stroke: "#1E120C", strokeWidth: 2 }}
@@ -369,109 +363,7 @@ export default function AnalyticsPage() {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-[#AF8B63]">
-                  No scan data yet for this range.
-                </div>
-              )}
-            </div>
-          </PremiumPanel>
-
-          <PremiumPanel title="Scans vs Favourites" subtitle="Daily comparison" badge="ENGAGEMENT">
-            <div className="h-72">
-              {scansVsFavouritesBarData.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={scansVsFavouritesBarData} barGap={6} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
-                    <CartesianGrid stroke="rgba(231,207,168,0.08)" vertical={false} />
-                    <XAxis
-                      dataKey="day"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: "#CDAE8A", fontSize: 12 }}
-                    />
-                    <YAxis hide />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend
-                      wrapperStyle={{ paddingTop: 16 }}
-                      formatter={(value) => <span className="text-xs text-[#C6A378]">{value}</span>}
-                    />
-                    <Bar dataKey="scans" fill="#F0A33D" radius={[6, 6, 0, 0]} name="QR scans" />
-                    <Bar dataKey="favourites" fill="#A76122" radius={[6, 6, 0, 0]} name="Favourites" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-[#AF8B63]">
-                  No scan/favourite events yet for this range.
-                </div>
-              )}
-            </div>
-          </PremiumPanel>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <PremiumPanel title="Most Added to Cart" subtitle="Top dishes by cart additions" badge={`LAST ${rangeDays}D`}>
-            <div className="h-72">
-              {topCartBarData.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topCartBarData} layout="vertical" margin={{ top: 4, right: 12, bottom: 4, left: 12 }}>
-                    <CartesianGrid stroke="rgba(231,207,168,0.08)" horizontal={false} />
-                    <XAxis
-                      type="number"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: "#CDAE8A", fontSize: 12 }}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: "#EFD6B2", fontSize: 12 }}
-                      width={118}
-                      tickFormatter={(value: string) =>
-                        value.length > 14 ? `${value.slice(0, 14)}...` : value
-                      }
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="count" fill="#F0A33D" radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-[#AF8B63]">
-                  No cart events tracked yet.
-                </div>
-              )}
-            </div>
-          </PremiumPanel>
-
-          <PremiumPanel title="Most Favourited" subtitle="Top dishes by favourites" badge={`LAST ${rangeDays}D`}>
-            <div className="h-72">
-              {topFavouritesBarData.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topFavouritesBarData} layout="vertical" margin={{ top: 4, right: 12, bottom: 4, left: 12 }}>
-                    <CartesianGrid stroke="rgba(231,207,168,0.08)" horizontal={false} />
-                    <XAxis
-                      type="number"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: "#CDAE8A", fontSize: 12 }}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: "#EFD6B2", fontSize: 12 }}
-                      width={118}
-                      tickFormatter={(value: string) =>
-                        value.length > 14 ? `${value.slice(0, 14)}...` : value
-                      }
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="count" fill="#A76122" radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-[#AF8B63]">
-                  No favourites tracked yet.
+                  No customer data yet for this range.
                 </div>
               )}
             </div>

@@ -877,7 +877,8 @@ export async function getAnalyticsData(days = 7) {
     cartEventsInRange,
     cartEventsToday,
     favouritesInRange,
-    reviewsInRange
+    reviewsInRange,
+    ordersInRange,
   ] = await Promise.all([
     adminSupabase
       .from('menu_views')
@@ -906,7 +907,12 @@ export async function getAnalyticsData(days = 7) {
     adminSupabase
       .from('reviews')
       .select('id, stars, is_public, text, reviewer, dishes, created_at')
-      .gte('created_at', weekStartISO)
+      .gte('created_at', weekStartISO),
+    adminSupabase
+      .from('orders')
+      .select('customer_id, placed_at')
+      .gte('placed_at', weekStartISO)
+      .neq('status', 'rejected'),
   ])
 
   let favouritesRows = (favouritesInRange.data || []).map((row: any) => ({
@@ -1044,6 +1050,19 @@ export async function getAnalyticsData(days = 7) {
     scans: bucket.scans,
   }))
 
+  // Count unique customers per day bucket
+  const customersByDay = new Map<string, Set<string>>()
+  dayBuckets.forEach(b => customersByDay.set(b.key, new Set()))
+  ordersInRange.data?.forEach((order: any) => {
+    const key = normalizeDayKey(order.placed_at)
+    const set = customersByDay.get(key)
+    if (set && order.customer_id) set.add(order.customer_id)
+  })
+  const weeklyCustomers = dayBuckets.map((bucket) => ({
+    day: bucket.label,
+    customers: customersByDay.get(bucket.key)?.size ?? 0,
+  }))
+
   const scansVsFavourites = dayBuckets.map((bucket) => ({
     day: bucket.label,
     scans: bucket.scans,
@@ -1139,6 +1158,7 @@ export async function getAnalyticsData(days = 7) {
     publicReviews: reviews.filter(r => r.is_public).length,
     avgRating: Math.round(avgRating * 10) / 10,
     weeklyScans,
+    weeklyCustomers,
     scansVsFavourites,
     topDishesThisWeek,
     ratingDistribution,
