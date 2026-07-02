@@ -128,9 +128,6 @@ dist
 # Local VS Code MCP server configuration
 .vscode/mcp.json
 
-# Supabase local migrations
-supabase/migrations/
-
 # yarn v3
 .pnp.*
 .yarn/*
