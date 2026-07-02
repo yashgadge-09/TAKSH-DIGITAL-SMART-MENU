@@ -10,14 +10,43 @@ interface CheckoutFormProps {
   restaurantId: string;
   items: CartItem[];
   onPlaced: (result: { items: CartItem[]; orderId: string }) => void;
+  /** Already collected at host onboarding — skips the name/phone form and orders directly. */
+  prefilled?: { customerId: string; name: string };
 }
 
-export function CheckoutForm({ sessionId, restaurantId, items, onPlaced }: CheckoutFormProps) {
+export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefilled }: CheckoutFormProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [wantsWhatsapp, setWantsWhatsapp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const itemCount = items.reduce((a, i) => a + i.quantity, 0);
+  const itemTotal = items.reduce((a, i) => a + i.price * i.quantity, 0);
+
+  const placeSnapshotOrder = async (customerId: string) => {
+    const snapshot = items.map(i => ({ ...i }));
+    const { orderId } = await placeOrder({
+      sessionId,
+      customerId,
+      restaurantId,
+      items: snapshot.map(i => ({ dishId: i.id, quantity: i.quantity })),
+    });
+    onPlaced({ items: snapshot, orderId });
+  };
+
+  const handleConfirmPrefilled = async () => {
+    if (!prefilled || isSubmitting) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await placeSnapshotOrder(prefilled.customerId);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async () => {
     const trimmedName = name.trim();
@@ -26,8 +55,6 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced }: Check
     setIsSubmitting(true);
     setError("");
 
-    const snapshot = items.map(i => ({ ...i }));
-
     try {
       const { customerId } = await findOrCreateCustomer({
         restaurantId,
@@ -35,19 +62,40 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced }: Check
         phone: phone.trim() || undefined,
         wantsWhatsapp,
       });
-      const { orderId } = await placeOrder({
-        sessionId,
-        customerId,
-        restaurantId,
-        items: snapshot.map(i => ({ dishId: i.id, quantity: i.quantity })),
-      });
-      onPlaced({ items: snapshot, orderId });
+      await placeSnapshotOrder(customerId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (prefilled) {
+    return (
+      <div className="flex flex-col gap-5 py-2">
+        <div className="space-y-1 text-center">
+          <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Confirm Order</h2>
+          <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
+            {itemCount} item{itemCount !== 1 ? "s" : ""} · ₹{itemTotal}
+          </p>
+          <p className="text-[12px] text-[color:var(--brand-gold-soft)]/50">Ordering as {prefilled.name}</p>
+        </div>
+
+        {error && (
+          <p className="text-center text-[13px] font-medium text-red-400">{error}</p>
+        )}
+
+        <button
+          onClick={handleConfirmPrefilled}
+          disabled={isSubmitting}
+          className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-bold text-[color:var(--brand-bg-deep)] shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)" }}
+        >
+          {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : "Confirm Order"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5 py-2">
