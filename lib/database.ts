@@ -1233,8 +1233,24 @@ export async function createOrJoinSession({
       .insert({ restaurant_id: restaurantId, table_id: tableId, pin, status: 'active' })
       .select('id')
       .single()
-    if (insertError || !newSession) throw new Error('Failed to create session')
-    return { exists: false, sessionId: newSession.id, tableNumber, pin }
+
+    if (!insertError && newSession) {
+      return { exists: false, sessionId: newSession.id, tableNumber, pin }
+    }
+
+    // Lost the create race to a concurrent scan — the partial unique index
+    // (one active session per table) rejected this INSERT with SQLSTATE 23505.
+    // Re-read the winning session so this caller is asked for its PIN instead.
+    if (insertError?.code !== '23505') throw new Error('Failed to create session')
+
+    const { data: winner } = await adminSupabase
+      .from('table_sessions')
+      .select('id, pin, opened_at')
+      .eq('table_id', tableId)
+      .eq('status', 'active')
+      .maybeSingle()
+    if (!winner) throw new Error('Failed to create session')
+    activeSession = winner
   }
 
   if (pinAttempt === undefined || pinAttempt === null || pinAttempt === '') {
@@ -1836,8 +1852,26 @@ export async function joinTable({
       })
       .select('id')
       .single()
-    if (insertError || !newSession) throw new Error('Failed to create session')
-    return { sessionId: newSession.id, pin, isHost: true, hostName: effectiveName, hostCustomerId: null }
+
+    if (!insertError && newSession) {
+      // Won the race — this device is the sole host.
+      return { sessionId: newSession.id, pin, isHost: true, hostName: effectiveName, hostCustomerId: null }
+    }
+
+    // Lost the create race: another device scanned within milliseconds and its
+    // INSERT landed first. The partial unique index (one active session per
+    // table) rejected ours with SQLSTATE 23505. Re-read the winning session and
+    // fall through to the join-as-guest path so this device enters the PIN.
+    if (insertError?.code !== '23505') throw new Error('Failed to create session')
+
+    const { data: winner } = await adminSupabase
+      .from('table_sessions')
+      .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
+      .eq('table_id', tableId)
+      .eq('status', 'active')
+      .maybeSingle()
+    if (!winner) throw new Error('Failed to create session')
+    activeSession = winner
   }
 
   const isHost = activeSession.host_device_id === deviceId

@@ -19,7 +19,12 @@ All schema changes are tracked in `supabase/migrations/` as timestamped SQL file
 2026042501_add_todays_special.sql              — is_todays_special column on dishes
 2026062101_ordering_system.sql                 — ordering system: restaurants/tables/sessions/customers/orders/order_items/bills/print_jobs; fixes orders.status default → 'pending_approval' + adds status check constraint
 2026062501_shared_cart.sql                     — shared cart: host_device_id/host_name on table_sessions; session_cart_items table with RLS + realtime
+2026070203_one_active_session_per_table.sql    — partial unique index (table_id WHERE status='active'): guarantees one host/PIN per table, closing the simultaneous-scan race
 ```
+
+## Invariant: one active session per table
+
+`table_sessions_one_active_per_table` is a **partial unique index** on `(table_id) WHERE status = 'active'`. It is the source of truth for "only one host & PIN per table" — application read-then-insert checks alone can't prevent two guests who scan within milliseconds from both creating a session. When the losing INSERT hits this index it fails with SQLSTATE `23505`; `joinTable()` and `createOrJoinSession()` catch that code, re-read the winning session, and route the caller through the PIN-join path instead of erroring.
 
 To create a new migration:
 ```bash
