@@ -1777,17 +1777,23 @@ export interface SharedCartItem {
   addedByName: string
 }
 
+export type JoinTableResult =
+  | { requiresPin: true }
+  | { requiresPin?: false; sessionId: string; pin: string; isHost: boolean; hostName: string; hostCustomerId: string | null }
+
 export async function joinTable({
   restaurantId,
   tableId,
   deviceId,
   displayName,
+  pinAttempt,
 }: {
   restaurantId: string
   tableId: string
   deviceId: string
   displayName?: string
-}): Promise<{ sessionId: string; pin: string; isHost: boolean; hostName: string }> {
+  pinAttempt?: string
+}): Promise<JoinTableResult> {
   if (!restaurantId || !tableId || !deviceId) throw new Error('restaurantId, tableId, and deviceId are required')
 
   const effectiveName = displayName?.trim() || 'Guest'
@@ -1801,7 +1807,7 @@ export async function joinTable({
 
   const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, host_device_id, host_name, opened_at')
+    .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
@@ -1826,20 +1832,84 @@ export async function joinTable({
         status: 'active',
         host_device_id: deviceId,
         host_name: effectiveName,
+        joined_device_ids: [deviceId],
       })
       .select('id')
       .single()
     if (insertError || !newSession) throw new Error('Failed to create session')
-    return { sessionId: newSession.id, pin, isHost: true, hostName: effectiveName }
+    return { sessionId: newSession.id, pin, isHost: true, hostName: effectiveName, hostCustomerId: null }
   }
 
   const isHost = activeSession.host_device_id === deviceId
+  const joinedDeviceIds: string[] = activeSession.joined_device_ids ?? []
+  const alreadyJoined = isHost || joinedDeviceIds.includes(deviceId)
+
+  // Non-host devices that haven't joined this session before must supply the
+  // correct table PIN — prevents anyone with just the table URL (screenshotted,
+  // forwarded, or a stale QR) from silently joining someone else's shared cart.
+  if (!alreadyJoined) {
+    if (!pinAttempt) {
+      return { requiresPin: true }
+    }
+    if (String(pinAttempt).trim() !== activeSession.pin) {
+      throw new Error('Incorrect PIN')
+    }
+    await adminSupabase
+      .from('table_sessions')
+      .update({ joined_device_ids: [...joinedDeviceIds, deviceId] })
+      .eq('id', activeSession.id)
+  }
+
   return {
     sessionId: activeSession.id,
     pin: activeSession.pin,
     isHost,
     hostName: activeSession.host_name ?? 'Host',
+    hostCustomerId: activeSession.host_customer_id ?? null,
   }
+}
+
+// Called once by the host right after they open the table, before browsing —
+// collects name + phone up front (instead of at checkout) and links the
+// session to a customers row. Only the host device may call this.
+export async function registerHost({
+  sessionId,
+  deviceId,
+  restaurantId,
+  name,
+  phone,
+  wantsWhatsapp,
+}: {
+  sessionId: string
+  deviceId: string
+  restaurantId: string
+  name: string
+  phone?: string
+  wantsWhatsapp?: boolean
+}): Promise<{ customerId: string }> {
+  if (!sessionId || !deviceId || !restaurantId || !name?.trim()) {
+    throw new Error('sessionId, deviceId, restaurantId, and name are required')
+  }
+
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, host_device_id, status')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+  if (session.status !== 'active') throw new Error('Session is no longer active')
+  if (session.host_device_id !== deviceId) throw new Error('Only the host can register table details')
+
+  const trimmedName = name.trim()
+  const { customerId } = await findOrCreateCustomer({ restaurantId, name: trimmedName, phone, wantsWhatsapp })
+
+  const { error: updateError } = await adminSupabase
+    .from('table_sessions')
+    .update({ host_name: trimmedName, host_customer_id: customerId })
+    .eq('id', sessionId)
+  if (updateError) throw new Error('Failed to save host details')
+
+  return { customerId }
 }
 
 export async function getSharedCart(sessionId: string): Promise<SharedCartItem[]> {

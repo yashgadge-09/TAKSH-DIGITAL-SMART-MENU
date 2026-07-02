@@ -111,6 +111,7 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
               sessionId={sessionId}
               restaurantId={table.restaurantId}
               items={sharedCartItems}
+              prefilled={sharedSession.customerId ? { customerId: sharedSession.customerId, name: sharedSession.hostName } : undefined}
               onPlaced={async ({ items: snapshot, orderId: _orderId }) => {
                 setConfirmedItems(snapshot);
                 setConfirmedPin(pin);

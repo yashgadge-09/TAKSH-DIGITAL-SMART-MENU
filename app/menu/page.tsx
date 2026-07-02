@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Plus, ChefHat } from "lucide-react";
+import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Plus, ChefHat, Lock } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { OrderFlow } from "@/components/OrderFlow";
@@ -421,6 +421,24 @@ function MenuPageContent() {
                 </button>
               </div>
             </div>
+
+            {/* Persistent table PIN — host only, visible until the session ends */}
+            {sharedSession?.isHost && sharedSession.pin && (
+              <div className="mt-3 flex items-center justify-center gap-2 rounded-full border border-[color:var(--brand-gold)]/40 bg-[color:var(--brand-gold)]/10 py-1.5">
+                <Lock className="h-3 w-3 text-[color:var(--brand-gold)]" strokeWidth={2} />
+                <span className="text-[10px] font-semibold tracking-wide text-[color:var(--brand-gold-muted)]">TABLE PIN</span>
+                <div className="flex gap-1">
+                  {sharedSession.pin.split("").map((d, i) => (
+                    <span
+                      key={i}
+                      className="grid h-5 w-5 place-items-center rounded-md bg-[color:var(--brand-bg-deep)] font-serif text-[13px] font-bold text-[color:var(--brand-gold)]"
+                    >
+                      {d}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Search bar */}
             <div className="mt-3">
