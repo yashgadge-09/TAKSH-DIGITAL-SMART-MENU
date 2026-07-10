@@ -54,6 +54,9 @@ function MenuPageContent() {
   const pathname = usePathname();
   const { totalItems, addItem, items } = useCart();
   const sharedSession = useSharedSession();
+  const cartBadgeCount = sharedSession
+    ? sharedSession.sharedItems.reduce((sum, item) => sum + item.quantity, 0)
+    : totalItems;
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") || "All");
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
   useEffect(() => {
@@ -409,12 +412,12 @@ function MenuPageContent() {
                   ))}
                 </div>
                 {/* Cart button */}
-                <button onClick={() => setIsCartOpen(true)} aria-label={`View cart, ${totalItems} items`}
+                <button onClick={() => setIsCartOpen(true)} aria-label={`View cart, ${cartBadgeCount} items`}
                   className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
                   <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
-                  {totalItems > 0 && (
+                  {cartBadgeCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#8B0000] px-1 text-[10px] font-extrabold text-[color:var(--brand-gold)] shadow-[0_0_10px_rgba(139,0,0,0.8)] ring-1 ring-[color:var(--brand-gold)]">
-                      {totalItems}
+                      {cartBadgeCount}
                     </span>
                   )}
                 </button>
