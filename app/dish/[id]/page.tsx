@@ -42,7 +42,6 @@ function LanguageToggle() {
 }
 
 export default function DishDetailPage() {
-  const TOAST_DURATION_MS = 950;
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
@@ -67,8 +66,6 @@ export default function DishDetailPage() {
   const [moreLikeThisDishes, setMoreLikeThisDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [showAddedToast, setShowAddedToast] = useState(false);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recommendationSectionRef = useRef<HTMLDivElement | null>(null);
   const [shouldScrollToRecommendations, setShouldScrollToRecommendations] = useState(false);
@@ -146,7 +143,6 @@ export default function DishDetailPage() {
 
   useEffect(() => {
     return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     };
   }, []);
@@ -155,7 +151,6 @@ export default function DishDetailPage() {
     const canShowRecommendations =
       Boolean(dish?.id) &&
       items.some((item) => item.id === dish.id) &&
-      !showAddedToast &&
       recommendations.length > 0;
 
     if (!canShowRecommendations || !shouldScrollToRecommendations) return;
@@ -172,7 +167,7 @@ export default function DishDetailPage() {
       }, 1200);
       setShouldScrollToRecommendations(false);
     });
-  }, [dish, items, showAddedToast, recommendations.length, shouldScrollToRecommendations]);
+  }, [dish, items, recommendations.length, shouldScrollToRecommendations]);
 
   useEffect(() => {
     let mounted = true;
@@ -265,13 +260,8 @@ export default function DishDetailPage() {
       });
     }
 
-    setShowAddedToast(true);
     setShouldScrollToRecommendations(true);
     setQty(1);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => {
-      setShowAddedToast(false);
-    }, TOAST_DURATION_MS);
   };
 
   const getRecommendationName = (recommendedDish: any) =>
@@ -599,7 +589,7 @@ export default function DishDetailPage() {
         )}
 
         {/* Curated Picks */}
-        {isCurrentDishInCart && !showAddedToast && recommendations.length > 0 && (
+        {isCurrentDishInCart && recommendations.length > 0 && (
           <section ref={recommendationSectionRef} className="px-5 pt-6">
             <div
               className={`overflow-hidden rounded-2xl ring-1 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)] transition-all duration-500 ${highlightRecommendations ? "ring-[color:var(--brand-gold)]/60 shadow-[0_0_20px_rgba(212,166,86,0.3)]" : "ring-[color:var(--brand-gold)]/20"
@@ -675,14 +665,6 @@ export default function DishDetailPage() {
       {/* Fixed bottom CTA */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--brand-gold)]/15 bg-[color:var(--brand-bg-deep)]/95 backdrop-blur-md pb-safe">
         <div className="mx-auto flex w-full max-w-md flex-col items-center gap-3 px-4 py-3">
-          {showAddedToast && (
-            <div className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-950/80 text-emerald-300 px-4 py-2.5 shadow-[0_10px_30px_rgba(16,185,129,0.15)] backdrop-blur-md animate-fade-in-out text-center">
-              <div className="flex items-center justify-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500 text-emerald-950 text-xs font-bold flex items-center justify-center">✓</span>
-                <p className="text-[13px] font-bold leading-tight">Added to cart</p>
-              </div>
-            </div>
-          )}
           <div className="flex w-full items-center gap-3">
             <div
               role="group"

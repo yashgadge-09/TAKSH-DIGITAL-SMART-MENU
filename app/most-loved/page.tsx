@@ -7,7 +7,6 @@ import { getAllDishes, getMostLovedDishRatings, trackMenuView } from "@/lib/data
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { toast } from "sonner";
 import Link from "next/link";
 
 export default function MostLovedPage() {
@@ -84,7 +83,6 @@ export default function MostLovedPage() {
       image: dish.image,
       category: dish.category,
     });
-    toast(`${dish.name} added!`, { icon: "🛒" });
   };
 
   return (

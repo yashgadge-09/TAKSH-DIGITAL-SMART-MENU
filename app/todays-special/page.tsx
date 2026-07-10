@@ -7,7 +7,6 @@ import { getAllDishes, trackMenuView } from "@/lib/database";
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { toast } from "sonner";
 import Link from "next/link";
 
 export default function TodaysSpecialPage() {
@@ -70,7 +69,6 @@ export default function TodaysSpecialPage() {
       image: dish.image,
       category: dish.category,
     });
-    toast(`${dish.name} added!`, { icon: "🛒" });
   };
 
   return (

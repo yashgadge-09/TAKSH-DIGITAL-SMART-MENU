@@ -190,7 +190,6 @@ function MenuPageContent() {
 
   const handleAddDishToCart = (dish: { id: string; name: string; price: number; image: string; category: string }) => {
     setLastAddedCategory(dish.category);
-    toast(`${dish.name} added!`, { icon: "🛒" });
 
     if (sharedSession) {
       playChime();

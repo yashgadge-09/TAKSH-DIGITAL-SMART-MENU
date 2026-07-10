@@ -7,7 +7,6 @@ import { getAllDishes, trackMenuView } from "@/lib/database";
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { toast } from "sonner";
 import { isSameCategory } from "@/lib/utils";
 
 export default function CategoryPage({ params }: { params: Promise<{ name: string }> }) {
@@ -73,7 +72,6 @@ export default function CategoryPage({ params }: { params: Promise<{ name: strin
       image: dish.image,
       category: dish.category,
     });
-    toast(`${dish.name} added!`, { icon: "🛒" });
   };
 
   return (
