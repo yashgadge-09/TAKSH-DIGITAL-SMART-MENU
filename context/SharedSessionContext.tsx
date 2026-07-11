@@ -93,13 +93,6 @@ export function SharedSessionProvider({
     }
   }
 
-  const handleNameSubmit = (name: string) => {
-    const trimmed = name.trim() || "Guest";
-    setDisplayName(trimmed);
-    setDisplayNameState(trimmed);
-    setShowNamePrompt(false);
-  };
-
   const handlePinSubmit = async (pinAttempt: string) => {
     setPinSubmitting(true);
     setPinError("");
@@ -148,10 +141,7 @@ export function SharedSessionProvider({
           onSubmit={handleHostOnboardingSubmit}
         />
       )}
-      {!needsHostOnboarding && showNamePrompt && (
-        <NamePrompt tableNumber={tableNumber} onSubmit={handleNameSubmit} />
-      )}
-      {!needsHostOnboarding && !showNamePrompt && requiresPin && (
+      {!needsHostOnboarding && requiresPin && (
         <JoinPinPrompt
           tableNumber={tableNumber}
           isSubmitting={pinSubmitting}

@@ -82,8 +82,6 @@ export function CartDrawer({
     ? sharedItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
     : localTotalPrice;
   const totalItems = displayItems.reduce((acc, item) => acc + item.quantity, 0);
-  const taxes = Math.round(totalPrice * 0.1);
-  const finalTotal = totalPrice + taxes;
 
   const hasPastOrders = pastOrders.length > 0;
   const hasCurrentItems = displayItems.length > 0;
@@ -367,12 +365,8 @@ export function CartDrawer({
             {hasCurrentItems && (
               <div className="mb-3 space-y-1.5">
                 <div className="flex justify-between items-center text-[color:var(--brand-gold)]">
-                  <span className="text-[15px] font-semibold">Subtotal</span>
+                  <span className="text-[15px] font-semibold">Total</span>
                   <span className="font-sans text-[15px] font-bold">₹{totalPrice}</span>
-                </div>
-                <div className="flex justify-between items-center text-[color:var(--brand-gold-muted)]">
-                  <span className="text-[13px]">Taxes & Charges</span>
-                  <span className="text-[13px]">₹{taxes}</span>
                 </div>
               </div>
             )}
@@ -396,7 +390,7 @@ export function CartDrawer({
                   }}
                 >
                   <span className="text-[15px] font-bold text-[color:var(--brand-bg-deep)] uppercase tracking-tight">
-                    PLACE ORDER · ₹{finalTotal}
+                    PLACE ORDER · ₹{totalPrice}
                   </span>
                 </button>
               )
