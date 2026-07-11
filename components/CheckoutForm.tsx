@@ -51,6 +51,9 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
   const handleSubmit = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) { setError("Please enter your name."); return; }
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) { setError("Please enter your phone number."); return; }
+    if (!/^\d{10}$/.test(trimmedPhone)) { setError("Please enter a valid 10-digit phone number."); return; }
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError("");
@@ -59,7 +62,7 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
       const { customerId } = await findOrCreateCustomer({
         restaurantId,
         name: trimmedName,
-        phone: phone.trim() || undefined,
+        phone: trimmedPhone,
         wantsWhatsapp,
       });
       await placeSnapshotOrder(customerId);
@@ -125,7 +128,7 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
         {/* Phone */}
         <div className="flex flex-col gap-1">
           <label className="text-[12px] font-medium text-[color:var(--brand-gold-soft)]/70 uppercase tracking-wide">
-            Phone <span className="text-[color:var(--brand-gold-soft)]/40">(optional)</span>
+            Phone <span className="text-red-400">*</span>
           </label>
           <input
             type="tel"
@@ -164,7 +167,7 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
 
       <button
         onClick={handleSubmit}
-        disabled={isSubmitting || !name.trim()}
+        disabled={isSubmitting || !name.trim() || !phone.trim()}
         className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-bold text-[color:var(--brand-bg-deep)] shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
         style={{ background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)" }}
       >

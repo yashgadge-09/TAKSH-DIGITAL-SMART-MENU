@@ -1518,7 +1518,7 @@ export type RawTableRow = {
       placed_at: string
       status: string
       customers: { name: string } | null
-      order_items: { name: string; quantity: number; price: number }[]
+      order_items: { id: string; name: string; quantity: number; price: number }[]
     }[]
   }[]
 }
@@ -1533,7 +1533,7 @@ export async function getTablesWithSessions(restaurantId: string): Promise<RawTa
         orders(
           id, round_number, placed_at, status,
           customers(name),
-          order_items(name, quantity, price)
+          order_items(id, name, quantity, price)
         )
       )
     `)
@@ -1729,6 +1729,238 @@ export async function generateBill({
   if (sessionUpdateError) throw new Error('Failed to update session status')
 
   return { billId: bill.id, total }
+}
+
+// ── Captain panel server actions (C01) ──────────────────────────────────────
+
+export type PaymentMethod = 'cash' | 'upi' | 'card' | 'other'
+
+/**
+ * Stamps the latest bill of a session with the payment method and closes the
+ * table. Requires a bill to exist — call generateBill first.
+ */
+export async function settleBill({
+  sessionId,
+  paymentMethod,
+}: {
+  sessionId: string
+  paymentMethod: PaymentMethod
+}): Promise<{ billId: string; total: number }> {
+  if (!sessionId) throw new Error('sessionId is required')
+  if (!['cash', 'upi', 'card', 'other'].includes(paymentMethod)) {
+    throw new Error('Invalid payment method')
+  }
+
+  const { data: bill, error: billError } = await adminSupabase
+    .from('bills')
+    .select('id, total, settled_at')
+    .eq('session_id', sessionId)
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (billError) throw new Error(billError.message)
+  if (!bill) throw new Error('No bill found for this session — generate the bill first')
+
+  // Idempotent: settling an already-settled bill just re-stamps the method
+  const { error: settleError } = await adminSupabase
+    .from('bills')
+    .update({ payment_method: paymentMethod, settled_at: new Date().toISOString() })
+    .eq('id', bill.id)
+  if (settleError) throw new Error('Failed to settle bill')
+
+  const { error: closeError } = await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+  if (closeError) throw new Error('Bill settled but failed to close table')
+
+  return { billId: bill.id, total: Number(bill.total) }
+}
+
+export type SessionBill = {
+  billId: string
+  subtotal: number
+  gstAmount: number
+  total: number
+  paymentMethod: PaymentMethod | null
+  settledAt: string | null
+}
+
+/** Latest bill for a session, or null if none generated yet. */
+export async function getSessionBill(sessionId: string): Promise<SessionBill | null> {
+  if (!sessionId) throw new Error('sessionId is required')
+  const { data, error } = await adminSupabase
+    .from('bills')
+    .select('id, subtotal, gst_amount, total, payment_method, settled_at')
+    .eq('session_id', sessionId)
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  return {
+    billId: data.id,
+    subtotal: Number(data.subtotal),
+    gstAmount: Number(data.gst_amount),
+    total: Number(data.total),
+    paymentMethod: (data.payment_method as PaymentMethod) ?? null,
+    settledAt: data.settled_at,
+  }
+}
+
+/**
+ * Moves an active session (orders, cart, guests) to another table.
+ * Fails if the target table already has an active/bill_generated session.
+ */
+export async function moveTableSession({
+  sessionId,
+  targetTableId,
+}: {
+  sessionId: string
+  targetTableId: string
+}): Promise<{ targetTableNumber: number }> {
+  if (!sessionId) throw new Error('sessionId is required')
+  if (!targetTableId) throw new Error('targetTableId is required')
+
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id, table_id')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+  if (session.status === 'closed') throw new Error('Cannot move a closed session')
+  if (session.table_id === targetTableId) throw new Error('Session is already on that table')
+
+  const { data: target, error: targetError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('id, table_number, restaurant_id')
+    .eq('id', targetTableId)
+    .single()
+  if (targetError || !target) throw new Error('Target table not found')
+  if (target.restaurant_id !== session.restaurant_id) {
+    throw new Error('Target table belongs to a different restaurant')
+  }
+
+  const { data: occupied, error: occupiedError } = await adminSupabase
+    .from('table_sessions')
+    .select('id')
+    .eq('table_id', targetTableId)
+    .in('status', ['active', 'bill_generated'])
+    .limit(1)
+    .maybeSingle()
+  if (occupiedError) throw new Error(occupiedError.message)
+  if (occupied) throw new Error(`Table ${target.table_number} is already occupied`)
+
+  const { error: moveError } = await adminSupabase
+    .from('table_sessions')
+    .update({ table_id: targetTableId })
+    .eq('id', sessionId)
+  if (moveError) throw new Error('Failed to move table')
+
+  return { targetTableNumber: target.table_number }
+}
+
+/**
+ * Re-queues the KOT print job for an already-approved order (e.g. printer
+ * jam, kitchen lost the slip). Never changes order status.
+ */
+export async function reprintKot(orderId: string): Promise<void> {
+  if (!orderId) throw new Error('orderId is required')
+
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .select('id, status, round_number, session_id, placed_at')
+    .eq('id', orderId)
+    .single()
+  if (orderError || !order) throw new Error('Order not found')
+  if (order.status !== 'approved' && order.status !== 'served') {
+    throw new Error('Only approved orders can be reprinted')
+  }
+
+  const { data: session } = await adminSupabase
+    .from('table_sessions')
+    .select('restaurant_id, table_id')
+    .eq('id', order.session_id)
+    .single()
+  if (!session) throw new Error('Session not found')
+
+  const { data: table } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', session.table_id)
+    .single()
+
+  const { data: items } = await adminSupabase
+    .from('order_items')
+    .select('name, quantity')
+    .eq('order_id', orderId)
+  if (!items?.length) throw new Error('Order has no items')
+
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'kot',
+    status: 'pending',
+    payload: {
+      tableNumber: table?.table_number ?? null,
+      roundNumber: order.round_number,
+      time: formatTimeIST(order.placed_at),
+      items: items.map((i) => ({ name: i.name, qty: i.quantity })),
+    },
+  })
+  if (printError) throw new Error('Failed to queue KOT print job')
+}
+
+/**
+ * Captain bill edit: change the quantity of an order item before the bill is
+ * generated (e.g. wrongly punched). Quantity 0 removes the item. Blocked once
+ * the session is bill_generated — regenerating bills would drift from print.
+ */
+export async function updateOrderItemQuantity({
+  orderItemId,
+  quantity,
+}: {
+  orderItemId: string
+  quantity: number
+}): Promise<void> {
+  if (!orderItemId) throw new Error('orderItemId is required')
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 99) {
+    throw new Error('Quantity must be between 0 and 99')
+  }
+
+  const { data: item, error: itemError } = await adminSupabase
+    .from('order_items')
+    .select('id, order_id, orders(id, status, session_id, table_sessions(status))')
+    .eq('id', orderItemId)
+    .single()
+  if (itemError || !item) throw new Error('Order item not found')
+
+  const order = item.orders as unknown as {
+    id: string
+    status: string
+    table_sessions: { status: string } | null
+  } | null
+  if (!order) throw new Error('Parent order not found')
+  if (order.status === 'rejected') throw new Error('Cannot edit a rejected order')
+  if (order.table_sessions?.status === 'bill_generated') {
+    throw new Error('Bill already generated — cannot edit items')
+  }
+  if (order.table_sessions?.status === 'closed') {
+    throw new Error('Session is closed — cannot edit items')
+  }
+
+  if (quantity === 0) {
+    const { error } = await adminSupabase
+      .from('order_items')
+      .delete()
+      .eq('id', orderItemId)
+    if (error) throw new Error('Failed to remove item')
+  } else {
+    const { error } = await adminSupabase
+      .from('order_items')
+      .update({ quantity })
+      .eq('id', orderItemId)
+    if (error) throw new Error('Failed to update quantity')
+  }
 }
 
 export interface TableEntry {

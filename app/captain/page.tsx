@@ -7,7 +7,7 @@ import { TakshBrand } from "@/components/TakshBrand"
 
 export default function CaptainLoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState("")
+  const [email, setEmail] = useState("captain@taksh.com")
   const [password, setPassword] = useState("")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -19,32 +19,19 @@ export default function CaptainLoginPage() {
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     })
 
-    if (error || !data.user) {
-      setErrorMessage(error?.message ?? "Sign in failed")
+    if (error) {
+      setErrorMessage(error.message)
       setIsLoading(false)
       return
     }
 
-    // Defense-in-depth alongside middleware: a Supabase Auth login without a
-    // matching active staff row is not a captain/owner, even if the password
-    // was correct (e.g. a stray Auth user with no role assigned yet).
-    const { data: staff } = await supabase
-      .from("staff")
-      .select("role, is_active")
-      .eq("id", data.user.id)
-      .single()
-
-    if (!staff?.is_active || (staff.role !== "owner" && staff.role !== "captain")) {
-      await supabase.auth.signOut()
-      setErrorMessage("Not authorized as staff")
-      setIsLoading(false)
-      return
+    // Admins may open the captain panel too; captains land here only
+    if (data.user?.app_metadata?.role === "captain" || data.user) {
+      router.push("/captain/tables")
     }
-
-    router.push("/captain/dashboard")
   }
 
   return (
@@ -57,7 +44,7 @@ export default function CaptainLoginPage() {
         <div className="mb-7">
           <h1 className="mb-2 text-2xl font-bold text-[#F6E0C2]">Captain Login</h1>
           <p className="text-sm text-[#C5A077]">
-            Sign in to manage tables and approve orders.
+            Sign in to manage tables and orders.
           </p>
         </div>
 

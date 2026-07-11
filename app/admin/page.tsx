@@ -17,7 +17,7 @@ export default function AdminLoginPage() {
     setIsLoading(true)
     setErrorMessage(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
     })
@@ -25,6 +25,12 @@ export default function AdminLoginPage() {
     if (error) {
       setErrorMessage(error.message)
       setIsLoading(false)
+      return
+    }
+
+    // Captain accounts belong on the captain panel, not the admin panel
+    if (data.user?.app_metadata?.role === "captain") {
+      router.push("/captain/tables")
       return
     }
 

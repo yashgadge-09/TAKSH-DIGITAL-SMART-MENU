@@ -4,7 +4,6 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import { joinTable, registerHost, type SharedCartItem } from "@/lib/database";
 import { getOrCreateSessionId, getOrCreateDisplayName, setDisplayName } from "@/lib/session";
 import { useSharedCartRealtime } from "@/hooks/useSharedCartRealtime";
-import { NamePrompt } from "@/components/NamePrompt";
 import { JoinPinPrompt } from "@/components/JoinPinPrompt";
 import { HostOnboarding } from "@/components/HostOnboarding";
 
@@ -42,7 +41,6 @@ export function SharedSessionProvider({
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState("");
   const [displayName, setDisplayNameState] = useState("Guest");
-  const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [requiresPin, setRequiresPin] = useState(false);
   const [pinSubmitting, setPinSubmitting] = useState(false);
   const [pinError, setPinError] = useState("");
@@ -61,20 +59,13 @@ export function SharedSessionProvider({
     const id = getOrCreateSessionId();
     setDeviceId(id);
 
-    const storedName = getOrCreateDisplayName();
-
-    if (storedName) {
-      setDisplayNameState(storedName);
-      doJoin(id, storedName, { hadStoredName: true });
-    } else {
-      // Don't show a prompt yet — wait to learn whether this device is the
-      // host (gets full onboarding) or a guest (gets the lightweight name prompt).
-      doJoin(id, "Guest", { hadStoredName: false });
-    }
+    const storedName = getOrCreateDisplayName() || "Guest";
+    setDisplayNameState(storedName);
+    doJoin(id, storedName, {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function doJoin(id: string, name: string, opts: { pinAttempt?: string; hadStoredName: boolean }) {
+  async function doJoin(id: string, name: string, opts: { pinAttempt?: string }) {
     try {
       const result = await joinTable({ restaurantId, tableId, deviceId: id, displayName: name, pinAttempt: opts.pinAttempt });
       if (result.requiresPin) {
@@ -89,10 +80,8 @@ export function SharedSessionProvider({
       setRequiresPin(false);
       setPinError("");
 
-      if (result.isHost) {
-        if (!result.hostCustomerId) setNeedsHostOnboarding(true);
-      } else if (!opts.hadStoredName) {
-        setShowNamePrompt(true);
+      if (result.isHost && !result.hostCustomerId) {
+        setNeedsHostOnboarding(true);
       }
     } catch (err) {
       if (opts.pinAttempt) {

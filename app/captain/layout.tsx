@@ -4,15 +4,18 @@ import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+// Route-level guard for /captain/*. The login page (/captain) is public;
+// every other captain page needs a session. Both captains and admins may
+// use the captain panel.
+export default function CaptainLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [isSessionReady, setIsSessionReady] = useState(pathname === "/admin")
+  const [isSessionReady, setIsSessionReady] = useState(pathname === "/captain")
 
   useEffect(() => {
     let mounted = true
 
-    if (pathname === "/admin") {
+    if (pathname === "/captain") {
       setIsSessionReady(true)
       return () => {
         mounted = false
@@ -27,13 +30,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       if (!mounted) return
 
       if (!data.session) {
-        router.replace("/admin")
-        return
-      }
-
-      // Captains never see the admin panel — no analytics, customers, reports
-      if (data.session.user.app_metadata?.role === "captain") {
-        router.replace("/captain/tables")
+        router.replace("/captain")
         return
       }
 
@@ -42,8 +39,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (!session && pathname !== "/admin") {
-          router.replace("/admin")
+        if (!session && pathname !== "/captain") {
+          router.replace("/captain")
         }
       }
     )
@@ -57,7 +54,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   if (!isSessionReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#2A190F_0%,#140C08_100%)] text-[#F1D2A2]">
-        Checking admin session...
+        Checking captain session...
       </div>
     )
   }

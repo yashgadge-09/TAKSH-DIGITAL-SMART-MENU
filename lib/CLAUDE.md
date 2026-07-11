@@ -121,6 +121,13 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 - `getPendingOrders()` → `PendingOrder[]` — fetches `pending_approval` orders with items and table info. Used by `/admin/incoming`. Must use `adminSupabase` — anon client fails on nested joins due to RLS.
 - `closeTable(sessionId)` — server action: sets session `status: closed` via `adminSupabase`. Never use the browser `supabase` client to update `table_sessions` — RLS blocks it even for authenticated users.
 
+**Captain panel (C01)**
+- `settleBill({ sessionId, paymentMethod })` — stamps `payment_method` (`'cash'|'upi'|'card'|'other'`) + `settled_at` on the latest bill, then closes the session. Throws if no bill exists.
+- `getSessionBill(sessionId)` → `SessionBill | null` — latest bill for a session (used by the settle popup to show the GST-inclusive total).
+- `moveTableSession({ sessionId, targetTableId })` — moves a live session to another table; rejects occupied targets and cross-restaurant moves.
+- `reprintKot(orderId)` — re-queues a `kot` print job for an approved order; never changes order status.
+- `updateOrderItemQuantity({ orderItemId, quantity })` — captain bill edit; quantity `0` deletes the item. Throws once the session is `bill_generated` or `closed`.
+
 ---
 
 ### Supabase RPC Functions (PostgreSQL)
