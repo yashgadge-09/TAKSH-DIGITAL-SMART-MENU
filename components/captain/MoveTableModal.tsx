@@ -20,7 +20,9 @@ export function MoveTableModal({
   const [targetId, setTargetId] = useState<string | null>(null)
   const [moving, setMoving] = useState(false)
 
-  const emptyTables = allTables.filter(t => t.status === "open")
+  // A table can show "open" while a pending-only session still holds it —
+  // the server rejects those as occupied, so exclude any table with a session.
+  const emptyTables = allTables.filter(t => t.status === "open" && !t.sessionId)
   const target = emptyTables.find(t => t.tableId === targetId) ?? null
 
   async function handleMove() {

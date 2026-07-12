@@ -1,11 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { generateBill, reprintKot, updateOrderItemQuantity } from "@/lib/database"
+import { generateBill, reprintKot, updateOrderItemQuantity, forceResetTableById } from "@/lib/database"
 import { toast } from "sonner"
 import {
   X, Clock, Users, ChefHat, Receipt, Printer, ArrowLeftRight,
-  Wallet, CheckCircle2, Minus, Plus,
+  Wallet, CheckCircle2, Minus, Plus, Trash2,
 } from "lucide-react"
 import type { CaptainTable } from "@/app/captain/tables/page"
 
@@ -71,6 +71,21 @@ export function TableSheet({
       if (thenSettle) onRequestSettle()
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to generate bill")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleForceReset() {
+    if (!confirm(`Force-reset Table ${table.tableNumber}? Clears any session and cart with no bill.`)) return
+    setActionLoading(true)
+    try {
+      await forceResetTableById(table.tableId)
+      toast.success(`Table ${table.tableNumber} force-reset`)
+      onChanged()
+      onClose()
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to reset table")
     } finally {
       setActionLoading(false)
     }
@@ -268,14 +283,26 @@ export function TableSheet({
             </button>
           )}
 
+          {table.status !== "open" && (
+            <button
+              onClick={onRequestMove}
+              disabled={actionLoading}
+              data-testid="move-table-open"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#CFAF8C] text-sm font-semibold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+              Move Table
+            </button>
+          )}
+
           <button
-            onClick={onRequestMove}
+            onClick={handleForceReset}
             disabled={actionLoading}
-            data-testid="move-table-open"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#CFAF8C] text-sm font-semibold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+            data-testid="force-reset"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300/70 bg-white text-sm font-medium text-red-500 active:bg-red-50 disabled:opacity-50"
           >
-            <ArrowLeftRight className="h-4 w-4" />
-            Move Table
+            <Trash2 className="h-3.5 w-3.5" />
+            Force Reset (no bill)
           </button>
         </div>
       </div>
