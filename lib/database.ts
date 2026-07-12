@@ -1578,6 +1578,31 @@ export async function closeTable(sessionId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// Table-level force reset: closes every live session on the table (including
+// hidden pending-only sessions that the grid shows as "open") and clears their
+// shared carts. No-op if the table has no live session.
+export async function forceResetTableById(tableId: string): Promise<void> {
+  if (!tableId) throw new Error('tableId is required')
+  const { data: sessions, error } = await adminSupabase
+    .from('table_sessions')
+    .select('id')
+    .eq('table_id', tableId)
+    .in('status', ['active', 'bill_generated'])
+  if (error) throw new Error(error.message)
+  if (!sessions?.length) return
+
+  const sessionIds = sessions.map((s) => s.id)
+  const { error: closeError } = await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .in('id', sessionIds)
+  if (closeError) throw new Error(closeError.message)
+  await adminSupabase
+    .from('session_cart_items')
+    .delete()
+    .in('session_id', sessionIds)
+}
+
 export async function forceResetTable(sessionId: string): Promise<void> {
   if (!sessionId) throw new Error('sessionId is required')
   await adminSupabase

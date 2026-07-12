@@ -99,6 +99,23 @@ export function buildCaptainTable(t: RawTableRow): CaptainTable {
     nonRejected.find(o => o.customers?.name)?.customers?.name ||
     null
 
+  // A scanned QR opens a session immediately, but the table only counts as
+  // occupied once its first order is approved (or a bill exists). Keep the
+  // session's rounds + pendingCount so the approval strip and badge still show.
+  const hasApprovedOrder = nonRejected.some(o => o.status === "approved" || o.status === "served")
+  if (!hasApprovedOrder && session.status !== "bill_generated") {
+    return {
+      tableId: t.id,
+      tableNumber: t.table_number,
+      status: "open",
+      sessionId: session.id,
+      runningTotal: 0,
+      roundCount: 0,
+      pendingCount,
+      rounds,
+    }
+  }
+
   return {
     tableId: t.id,
     tableNumber: t.table_number,
@@ -384,7 +401,7 @@ export default function CaptainTablesPage() {
       </section>
 
       {/* ── Table bottom sheet ──────────────────────────────────────────── */}
-      {selectedTable && selectedTable.status !== "open" && (
+      {selectedTable && (
         <TableSheet
           table={selectedTable}
           onClose={() => setSelectedId(null)}

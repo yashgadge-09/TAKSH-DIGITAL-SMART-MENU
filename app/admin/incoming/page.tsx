@@ -5,7 +5,7 @@ import { AdminLayout } from "@/components/AdminSidebar"
 import { supabase } from "@/lib/supabase"
 import {
   approveOrder, rejectOrder, getPendingOrders, type PendingOrder,
-  generateBill, forceResetTable, closeTable,
+  generateBill, forceResetTableById, closeTable,
   getRestaurantId, getTablesWithSessions, type RawTableRow,
 } from "@/lib/database"
 import { toast } from "sonner"
@@ -62,6 +62,13 @@ function buildCard(t: RawTableRow): TableCard {
     .sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime())[0]
 
   if (!session) {
+    return { tableId: t.id, tableNumber: t.table_number, status: "open", runningTotal: 0, roundCount: 0, rounds: [] }
+  }
+
+  // A scanned QR opens a session immediately, but the table only counts as
+  // occupied once its first order is approved (or a bill exists).
+  const hasApprovedOrder = session.orders.some(o => o.status === "approved" || o.status === "served")
+  if (!hasApprovedOrder && session.status !== "bill_generated") {
     return { tableId: t.id, tableNumber: t.table_number, status: "open", runningTotal: 0, roundCount: 0, rounds: [] }
   }
 
@@ -254,11 +261,11 @@ export default function IncomingOrdersPage() {
   }
 
   async function handleForceReset() {
-    if (!selectedCard?.sessionId) return
-    if (!confirm(`Force-reset Table ${selectedCard.tableNumber}? Clears session and cart with no bill.`)) return
+    if (!selectedCard) return
+    if (!confirm(`Force-reset Table ${selectedCard.tableNumber}? Clears any session and cart with no bill.`)) return
     setActionLoading(true)
     try {
-      await forceResetTable(selectedCard.sessionId)
+      await forceResetTableById(selectedCard.tableId)
       toast.success(`Table ${selectedCard.tableNumber} force-reset`)
       setSelectedId(null)
       if (restIdRef.current) fetchTables(restIdRef.current)
@@ -521,16 +528,14 @@ export default function IncomingOrdersPage() {
                 </button>
               )}
 
-              {selectedCard.status !== "open" && (
-                <button
-                  onClick={handleForceReset}
-                  disabled={actionLoading}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Force Reset (no bill)
-                </button>
-              )}
+              <button
+                onClick={handleForceReset}
+                disabled={actionLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Force Reset (no bill)
+              </button>
 
               {selectedCard.roundCount === 0 && selectedCard.status === "active" && (
                 <p className="flex items-center gap-1.5 text-xs text-[#A89080]">
