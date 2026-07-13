@@ -49,63 +49,205 @@ type PrintJob = {
   payload: KotPayload | BillPayload
 }
 
-// ── Mock formatters ─────────────────────────────────────────────────────────
+// ── Layout ──────────────────────────────────────────────────────────────────
+//
+// Slips are described as a list of segments; the same segments render to
+// plain text (mock mode) or to an ESC/POS byte stream (real mode).
+// WIDTH = 32 chars fits both 80mm and 58mm printers at Font A.
 
-const LINE = "─".repeat(40)
+const WIDTH = 32
+const LINE = "-".repeat(WIDTH)
 
-function formatKot(p: KotPayload): string {
-  const lines = [
-    LINE,
-    "            KOT",
-    `Table ${p.tableNumber} · Round ${p.roundNumber}`,
-    `Time: ${p.time}`,
-    LINE,
-    ...p.items.map(i => `  ${i.qty} x ${i.name}`),
-    LINE,
-  ]
-  return lines.join("\n")
+type Seg =
+  | { text: string; center?: boolean; bold?: boolean; size?: "tall" | "big" }
+  | { qr: string }
+
+// ESC/POS output is single-byte, so strip anything non-ASCII (₹, ─, accents).
+function toAscii(s: string): string {
+  return s.normalize("NFKD").replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim()
 }
 
-function formatBill(p: BillPayload): string {
-  const lines = [
-    LINE,
-    `  ${p.restaurantName}`,
-    `  ${p.address}`,
-    `  GSTIN: ${p.gstin}`,
-    LINE,
-    `Table ${p.tableNumber ?? "—"}`,
-    `Customer: ${p.customerName}`,
-    LINE,
+function money(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2)
+}
+
+// "left ....... right" padded to WIDTH
+function pair(left: string, right: string): string {
+  const gap = WIDTH - left.length - right.length
+  return gap > 0 ? left + " ".repeat(gap) + right : `${left} ${right}`
+}
+
+// Right-align "Rs. X.XX" against a label
+function amountLine(label: string, n: number): string {
+  return pair(label, `Rs. ${n.toFixed(2)}`)
+}
+
+// Current date/time in IST (bills print at generation time, so "now" is correct)
+function nowIST(): { date: string; time: string } {
+  const d = new Date()
+  const ist = new Date(d.getTime() + d.getTimezoneOffset() * 60000 + 5.5 * 3600000)
+  const dd = String(ist.getUTCDate()).padStart(2, "0")
+  const mo = String(ist.getUTCMonth() + 1).padStart(2, "0")
+  const yy = String(ist.getUTCFullYear()).slice(-2)
+  const hh = String(ist.getUTCHours()).padStart(2, "0")
+  const mi = String(ist.getUTCMinutes()).padStart(2, "0")
+  return { date: `${dd}/${mo}/${yy}`, time: `${hh}:${mi}` }
+}
+
+// ── KOT: big & bold for kitchen readability ─────────────────────────────────
+
+export function kotSegments(p: KotPayload): Seg[] {
+  const segs: Seg[] = [
+    { text: LINE },
+    { text: "K O T", center: true, bold: true, size: "big" },
+    { text: LINE },
+    { text: `TABLE ${p.tableNumber}`, bold: true, size: "big" },
+    { text: `Round ${p.roundNumber}   Time ${p.time}` },
+    { text: LINE },
+    { text: "QTY  ITEM", bold: true },
+    { text: LINE },
   ]
-  for (const round of p.rounds) {
-    lines.push(`Round ${round.number} — ${round.time}`)
+  for (const i of p.items) {
+    segs.push({
+      text: `${String(i.qty).padStart(2)} x ${toAscii(i.name).toUpperCase()}`,
+      bold: true,
+      size: "tall",
+    })
+  }
+  segs.push({ text: LINE })
+  return segs
+}
+
+// ── Bill: GST-invoice style, items consolidated across rounds ───────────────
+
+// Merge the same dish (name + price) ordered in different rounds into one line
+function consolidateItems(rounds: BillPayload["rounds"]) {
+  const merged = new Map<string, { name: string; qty: number; price: number }>()
+  for (const round of rounds) {
     for (const item of round.items) {
-      const lineTotal = item.qty * item.price
-      lines.push(`  ${item.qty} x ${item.name}  ₹${lineTotal}`)
+      const key = `${item.name}|${item.price}`
+      const existing = merged.get(key)
+      if (existing) existing.qty += item.qty
+      else merged.set(key, { name: item.name, qty: item.qty, price: item.price })
     }
   }
-  lines.push(
-    LINE,
-    `Subtotal          ₹${p.subtotal}`,
-    `GST (${p.gstRate}%)         ₹${p.gstAmount}`,
-    `TOTAL             ₹${p.total}`,
-    LINE,
-    `UPI: ${p.upiId}`,
-    LINE,
+  return Array.from(merged.values())
+}
+
+// Columns: ITEM(14) QTY(3) RATE(7) AMT(8) = 32; long names wrap below
+function itemRows(item: { name: string; qty: number; price: number }): string[] {
+  const name = toAscii(item.name)
+  const rows = [
+    name.slice(0, 14).padEnd(14) +
+      String(item.qty).padStart(3) +
+      money(item.price).padStart(7) +
+      money(item.qty * item.price).padStart(8),
+  ]
+  let rest = name.slice(14)
+  while (rest.length > 0) {
+    rows.push("  " + rest.slice(0, WIDTH - 2))
+    rest = rest.slice(WIDTH - 2)
+  }
+  return rows
+}
+
+function upiLink(p: BillPayload): string {
+  const pn = encodeURIComponent(toAscii(p.restaurantName) || "Restaurant")
+  return `upi://pay?pa=${p.upiId}&pn=${pn}&am=${p.total.toFixed(2)}&cu=INR`
+}
+
+export function billSegments(p: BillPayload): Seg[] {
+  const { date, time } = nowIST()
+  const segs: Seg[] = [
+    { text: toAscii(p.restaurantName).toUpperCase(), center: true, bold: true, size: "tall" },
+  ]
+  if (p.address) segs.push({ text: toAscii(p.address), center: true })
+  if (p.gstin) segs.push({ text: `GSTIN: ${p.gstin}`, center: true })
+  segs.push(
+    { text: LINE },
+    { text: pair(`Table: ${p.tableNumber ?? "-"}`, `Bill To: ${toAscii(p.customerName)}`) },
+    { text: pair(`Date: ${date}`, `Time: ${time}`) },
+    { text: LINE },
+    { text: "ITEM".padEnd(14) + "QTY".padStart(3) + "RATE".padStart(7) + "AMT".padStart(8), bold: true },
+    { text: LINE },
   )
-  return lines.join("\n")
+  for (const item of consolidateItems(p.rounds)) {
+    for (const row of itemRows(item)) segs.push({ text: row })
+  }
+  segs.push(
+    { text: LINE },
+    { text: amountLine("Subtotal", p.subtotal) },
+    { text: amountLine(`GST @ ${p.gstRate}%`, p.gstAmount) },
+    { text: LINE },
+    { text: amountLine("TOTAL", p.total), bold: true, size: "tall" },
+    { text: LINE },
+  )
+  if (p.upiId) {
+    segs.push(
+      { qr: upiLink(p) },
+      { text: "Scan to pay via UPI", center: true },
+      { text: `UPI: ${p.upiId}`, center: true },
+      { text: "" },
+    )
+  }
+  segs.push({ text: "Thank you! Visit again", center: true })
+  return segs
+}
+
+// ── Renderers ───────────────────────────────────────────────────────────────
+
+export function segsToText(segs: Seg[]): string {
+  return segs
+    .map(s => {
+      if ("qr" in s) return `[UPI QR] ${s.qr}`
+      if (!s.center) return s.text
+      const pad = Math.max(0, Math.floor((WIDTH - s.text.length) / 2))
+      return " ".repeat(pad) + s.text
+    })
+    .join("\n")
+}
+
+// ESC/POS: model-2 QR, size 6, error correction M, store + print
+function qrBuffer(data: string): Buffer {
+  const bytes = Buffer.from(data, "ascii")
+  const len = bytes.length + 3
+  return Buffer.concat([
+    Buffer.from([0x1b, 0x61, 0x01]),                                   // center
+    Buffer.from([0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]), // model 2
+    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x06]),       // module size 6
+    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31]),       // EC level M
+    Buffer.from([0x1d, 0x28, 0x6b, len & 0xff, (len >> 8) & 0xff, 0x31, 0x50, 0x30]),
+    bytes,                                                                // store data
+    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]),       // print
+  ])
+}
+
+function compile(segs: Seg[]): Buffer {
+  const out: Buffer[] = [Buffer.from([0x1b, 0x40])] // init
+  for (const s of segs) {
+    if ("qr" in s) {
+      out.push(qrBuffer(s.qr))
+      continue
+    }
+    out.push(Buffer.from([0x1b, 0x61, s.center ? 0x01 : 0x00]))          // align
+    out.push(Buffer.from([0x1b, 0x45, s.bold ? 0x01 : 0x00]))            // bold
+    // GS ! — 0x11 doubles width+height, 0x01 doubles height only (keeps 32 cols)
+    out.push(Buffer.from([0x1d, 0x21, s.size === "big" ? 0x11 : s.size === "tall" ? 0x01 : 0x00]))
+    out.push(Buffer.from(s.text + "\n", "ascii"))
+  }
+  out.push(Buffer.from([0x1d, 0x21, 0x00]))       // reset size
+  out.push(Buffer.from("\n\n\n", "ascii"))         // feed before cut
+  out.push(Buffer.from([0x1d, 0x56, 0x42, 0x00])) // partial cut
+  return Buffer.concat(out)
 }
 
 // ── TCP send (real ESC/POS mode) ────────────────────────────────────────────
 
-function sendToprinter(ip: string, data: string): Promise<void> {
+function sendToPrinter(ip: string, data: Buffer): Promise<void> {
   return new Promise((resolve, reject) => {
     const sock = new net.Socket()
     sock.connect(PRINTER_PORT, ip, () => {
-      // ESC/POS init + text + cut
-      const ESC_INIT = Buffer.from([0x1b, 0x40])
-      const CUT      = Buffer.from([0x1d, 0x56, 0x42, 0x00])
-      sock.write(Buffer.concat([ESC_INIT, Buffer.from(data, "utf8"), CUT]))
+      sock.write(data)
       sock.end()
     })
     sock.on("close", () => resolve())
@@ -133,20 +275,16 @@ async function tick() {
 
     for (const job of jobs as PrintJob[]) {
       try {
+        const segs = job.type === "kot"
+          ? kotSegments(job.payload as KotPayload)
+          : billSegments(job.payload as BillPayload)
+
         if (MOCK_PRINT) {
-          if (job.type === "kot") {
-            console.log("\n[MOCK KOT]")
-            console.log(formatKot(job.payload as KotPayload))
-          } else {
-            console.log("\n[MOCK BILL]")
-            console.log(formatBill(job.payload as BillPayload))
-          }
+          console.log(`\n[MOCK ${job.type.toUpperCase()}]`)
+          console.log(segsToText(segs))
         } else {
-          const ip   = job.type === "kot" ? KITCHEN_PRINTER_IP : RECEPTION_PRINTER_IP
-          const text = job.type === "kot"
-            ? formatKot(job.payload as KotPayload)
-            : formatBill(job.payload as BillPayload)
-          await sendToprinter(ip, text)
+          const ip = job.type === "kot" ? KITCHEN_PRINTER_IP : RECEPTION_PRINTER_IP
+          await sendToPrinter(ip, compile(segs))
         }
 
         const { error: upErr } = await db
