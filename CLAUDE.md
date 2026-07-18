@@ -68,8 +68,9 @@ npm run lint      # ESLint
 /admin/preview           → admin preview of guest-facing menu
 /captain                 → captain login (C02); shared account captain@taksh.com, app_metadata.role = "captain"
 /captain/tables          → captain panel (C03–C07): mobile-first table grid + pending-approval strip (Realtime);
-                           tap table → bottom sheet (KOT view, reprint KOT, edit item qty, Print Bill,
-                           Print Bill & Take Payment, Move Table, Settle & Save)
+                           tap table → bottom sheet (KOT view, reprint KOT, edit item qty, Add Item,
+                           Print Bill, Print Bill & Take Payment, Edit Bill + Reprint Bill after
+                           billing, Move Table, Settle & Save)
 ```
 
 **Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, or revenue. Users without a role are admins and may also open `/captain/tables`. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`).
