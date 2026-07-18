@@ -8,7 +8,7 @@ import { requireAdmin, requireStaff } from './auth-guard'
 
 const adminSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
 function parseHostname(value: string | null | undefined) {

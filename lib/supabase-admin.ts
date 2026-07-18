@@ -6,11 +6,11 @@
 import { createClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 if (!supabaseServiceKey) {
   console.warn(
-    "[supabase-admin] NEXT_PUBLIC_SUPABASE_SERVICE_ROLE is not set. " +
+    "[supabase-admin] SUPABASE_SERVICE_ROLE_KEY is not set. " +
       "Admin write operations will fail with permission denied."
   )
 }
