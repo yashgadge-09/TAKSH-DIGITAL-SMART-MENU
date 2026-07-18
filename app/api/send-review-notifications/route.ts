@@ -29,7 +29,8 @@ async function sendOneSignalNotification(playerId: string, title: string, body: 
     })
   });
   const data = await response.json();
-  console.log('OneSignal response:', JSON.stringify(data));
+  // Log only non-PII status fields — the full response echoes recipient/subscription info.
+  console.log('OneSignal response:', JSON.stringify({ id: data.id, recipients: data.recipients }));
   if (data.errors) throw new Error(JSON.stringify(data.errors));
   return data;
 }

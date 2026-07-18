@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
 import { supabase } from "@/lib/supabase"
+import { anonymizeCustomer } from "@/lib/database"
 import { toast } from "sonner"
-import { Users } from "lucide-react"
+import { Users, Trash2 } from "lucide-react"
 
 type Customer = {
+  id: string
   name: string
   phone: string | null
   whatsapp_opted_in: boolean
@@ -36,7 +38,7 @@ export default function CustomersPage() {
 
       const { data, error } = await supabase
         .from("customers")
-        .select("name, phone, whatsapp_opted_in, created_at")
+        .select("id, name, phone, whatsapp_opted_in, created_at")
         .eq("restaurant_id", rest.id)
         .order("created_at", { ascending: false })
 
@@ -47,6 +49,19 @@ export default function CustomersPage() {
     })()
     return () => { mounted = false }
   }, [])
+
+  const handleDelete = async (c: Customer) => {
+    if (!confirm(`Permanently erase personal data for "${c.name}"?\n\nName and phone number will be removed. Past order history is kept but anonymized. This cannot be undone.`)) return
+    try {
+      await anonymizeCustomer(c.id)
+      setCustomers(prev => prev.map(row =>
+        row.id === c.id ? { ...row, name: "Deleted guest", phone: null, whatsapp_opted_in: false } : row
+      ))
+      toast.success("Customer data erased")
+    } catch {
+      toast.error("Failed to erase customer data")
+    }
+  }
 
   return (
     <AdminLayout>
@@ -73,10 +88,10 @@ export default function CustomersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E8D5BC]">
-                  {["Name", "Phone", "WhatsApp", "Joined"].map(h => (
+                  {["Name", "Phone", "WhatsApp", "Joined", "Actions"].map(h => (
                     <th
                       key={h}
-                      className={`px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#8E6D4E] ${h === "WhatsApp" ? "text-center" : "text-left"}`}
+                      className={`px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[#8E6D4E] ${h === "WhatsApp" || h === "Actions" ? "text-center" : "text-left"}`}
                     >
                       {h}
                     </th>
@@ -94,6 +109,19 @@ export default function CustomersPage() {
                         : <span className="text-[#A89080]">–</span>}
                     </td>
                     <td className="px-5 py-3 text-[#6B5744]">{formatDate(c.created_at)}</td>
+                    <td className="px-5 py-3 text-center">
+                      {c.name === "Deleted guest" ? (
+                        <span className="text-xs text-[#A89080]">Erased</span>
+                      ) : (
+                        <button
+                          onClick={() => handleDelete(c)}
+                          title="Erase this customer's personal data"
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#E0B4A0] px-2.5 py-1.5 text-xs font-medium text-[#A23A22] transition-colors hover:bg-[#FBE9E2]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Erase
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

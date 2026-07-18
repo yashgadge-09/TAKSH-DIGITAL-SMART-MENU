@@ -2404,3 +2404,23 @@ export async function findOrCreateCustomer({
   if (error || !customer) throw new Error('Failed to create customer')
   return { customerId: customer.id }
 }
+
+/**
+ * Data-deletion / "right to be forgotten" for a customer (T-privacy).
+ * Anonymizes rather than hard-deletes so historical orders/bills keep their FK
+ * integrity and daily-sales totals stay correct — but ALL personal data (name,
+ * phone, WhatsApp opt-in) is irreversibly stripped. Admin-only.
+ */
+export async function anonymizeCustomer(customerId: string): Promise<void> {
+  await requireAdmin()
+  if (!customerId) throw new Error('customerId is required')
+  const { error } = await adminSupabase
+    .from('customers')
+    .update({
+      name: 'Deleted guest',
+      phone: null,
+      whatsapp_opted_in: false,
+    })
+    .eq('id', customerId)
+  if (error) throw new Error(error.message)
+}

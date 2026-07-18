@@ -15,7 +15,8 @@ export async function POST(request: Request) {
 
     // Validate FCM token format (should be a long string, typically 150+ chars)
     if (typeof fcm_token !== 'string' || fcm_token.trim().length < 10) {
-      console.warn('Invalid FCM token format:', fcm_token?.substring(0, 50));
+      // Do NOT log the token itself — it is a device push identifier (PII).
+      console.warn('Invalid FCM token format (failed length/type check)');
       return NextResponse.json({ error: 'Invalid FCM token format' }, { status: 400 });
     }
 
@@ -32,8 +33,8 @@ export async function POST(request: Request) {
       .single();
 
     if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Error checking existing session:', JSON.stringify(checkError, null, 2));
-      return NextResponse.json({ error: 'Database error', details: checkError }, { status: 500 });
+      console.error('save-token: error checking existing session:', checkError.message);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
     const now = new Date();
@@ -56,13 +57,13 @@ export async function POST(request: Request) {
       ]);
 
     if (error) {
-      console.error('Error saving token:', JSON.stringify(error, null, 2));
-      return NextResponse.json({ error: 'Database error', details: error }, { status: 500 });
+      console.error('save-token: error saving token:', error.message);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error in save-token catch block:', error instanceof Error ? error.message : JSON.stringify(error));
-    return NextResponse.json({ error: 'Internal server error', details: String(error) }, { status: 500 });
+    console.error('save-token: unexpected error:', error instanceof Error ? error.message : 'unknown');
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
