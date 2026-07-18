@@ -2,6 +2,7 @@
 
 import { supabase } from './supabase'
 import { createClient } from '@supabase/supabase-js'
+import { randomInt } from 'crypto'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
 import { requireAdmin, requireStaff } from './auth-guard'
@@ -1240,7 +1241,9 @@ export async function createOrJoinSession({
   }
 
   if (!activeSession) {
-    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    // CSPRNG — Math.random() is predictable and would let an attacker guess a
+    // table's join PIN. randomInt() is crypto-secure and uniform over 1000–9999.
+    const pin = String(randomInt(1000, 10000))
     const { data: newSession, error: insertError } = await adminSupabase
       .from('table_sessions')
       .insert({ restaurant_id: restaurantId, table_id: tableId, pin, status: 'active' })
@@ -1292,12 +1295,37 @@ export async function placeOrder({
     throw new Error('sessionId, customerId, restaurantId, and items are required')
   }
 
+  // Validate client-supplied quantities BEFORE anything else. Without this a
+  // caller could POST a negative quantity (→ negative bill line, lowering the
+  // total) or an absurd quantity. Require positive integers with a sane cap.
+  for (const item of items) {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+      throw new Error('Item quantity must be a whole number between 1 and 99')
+    }
+  }
+
+  // Verify the target session actually exists, belongs to this restaurant, and
+  // is still ACTIVE. Prevents injecting orders into another table's session, a
+  // closed session, or one whose bill was already generated.
+  const { data: sessionRow, error: sessionRowError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (sessionRowError || !sessionRow) throw new Error('Session not found')
+  if (sessionRow.restaurant_id !== restaurantId) {
+    throw new Error('Session does not belong to this restaurant')
+  }
+  if (sessionRow.status !== 'active') {
+    throw new Error('This table is not currently accepting orders')
+  }
+
   // Snapshot dish name + price at order time.
   // Use the public anon client — dishes are public-readable via RLS, no service-role needed.
   const dishIds = items.map((i) => i.dishId)
   const { data: dishes, error: dishError } = await supabase
     .from('dishes')
-    .select('id, name_en, price')
+    .select('id, name_en, price, is_available')
     .in('id', dishIds)
   if (dishError || !dishes?.length) throw new Error('Failed to fetch dish details')
 
@@ -1308,6 +1336,8 @@ export async function placeOrder({
   const validatedItems = items.map((item) => {
     const dish = dishMap.get(item.dishId)
     if (!dish) throw new Error(`Dish ${item.dishId} not found`)
+    // Never let an unavailable dish be ordered, even if the client sends its id.
+    if (!dish.is_available) throw new Error(`${dish.name_en} is no longer available`)
     return {
       dish_id: item.dishId,
       name: dish.name_en,
@@ -1650,6 +1680,7 @@ export async function generateBill({
     .eq('id', sessionId)
     .single()
   if (sessionError || !session) throw new Error('Session not found')
+  if (session.status === 'closed') throw new Error('Session is closed')
 
   // Guard: if already billed, return the existing bill (no duplicate rows/jobs)
   if (session.status === 'bill_generated') {
@@ -2121,7 +2152,9 @@ export async function joinTable({
   }
 
   if (!activeSession) {
-    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    // CSPRNG — Math.random() is predictable and would let an attacker guess a
+    // table's join PIN. randomInt() is crypto-secure and uniform over 1000–9999.
+    const pin = String(randomInt(1000, 10000))
     const { data: newSession, error: insertError } = await adminSupabase
       .from('table_sessions')
       .insert({

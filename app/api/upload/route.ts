@@ -10,6 +10,7 @@ export const runtime = 'nodejs';
 
 const MAX_DIMENSION = 1600;
 const WEBP_QUALITY = 85;
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB — cap before buffering into memory
 const HEIC_MIME_TYPES = new Set([
   'image/heic',
   'image/heif',
@@ -76,6 +77,10 @@ export async function POST(request: Request) {
 
     if (!isSupportedImageUpload(file)) {
       return NextResponse.json({ error: 'Only image uploads are supported' }, { status: 400 });
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: 'File too large (max 15 MB)' }, { status: 413 });
     }
 
     const bytes = await file.arrayBuffer();
