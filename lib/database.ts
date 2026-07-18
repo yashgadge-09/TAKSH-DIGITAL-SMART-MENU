@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import { createClient } from '@supabase/supabase-js'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
+import { requireAdmin, requireStaff } from './auth-guard'
 
 const adminSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -345,6 +346,7 @@ export async function getDishById(id: string, timestamp?: number) {
 }
 
 export async function getAllDishesAdmin(timestamp?: number) {
+  await requireAdmin()
   let query = adminSupabase
     .from('dishes')
     .select('*');
@@ -362,6 +364,7 @@ export async function getAllDishesAdmin(timestamp?: number) {
 }
 
 export async function addDish(dish: any) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('dishes')
     .insert(dish)
@@ -373,6 +376,7 @@ export async function addDish(dish: any) {
 }
 
 export async function updateDish(id: string, dish: any) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('dishes')
     .update(dish)
@@ -385,6 +389,7 @@ export async function updateDish(id: string, dish: any) {
 }
 
 export async function deleteDish(id: string) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('dishes')
     .delete()
@@ -397,6 +402,7 @@ export async function toggleAvailability(
   id: string,
   isAvailable: boolean
 ) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('dishes')
     .update({ is_available: isAvailable })
@@ -415,6 +421,7 @@ export async function getCategories() {
 }
 
 export async function addCategory(name: string) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('categories')
     .insert({ name })
@@ -425,6 +432,7 @@ export async function addCategory(name: string) {
 }
 
 export async function deleteCategory(id: string) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('categories')
     .delete()
@@ -433,6 +441,7 @@ export async function deleteCategory(id: string) {
 }
 
 export async function updateCategory(id: string, payload: { image_url?: string | null }) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('categories')
     .update(payload)
@@ -454,6 +463,7 @@ export async function getPublicReviews() {
 }
 
 export async function getAllReviewsAdmin() {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('reviews')
     .select('*')
@@ -479,6 +489,7 @@ export async function toggleReviewVisibility(
   id: string,
   isPublic: boolean
 ) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('reviews')
     .update({ is_public: isPublic })
@@ -862,6 +873,7 @@ function getFavouriteIdentity(event: { session_id?: string | null; id?: string |
 }
 
 export async function getAnalyticsData(days = 7) {
+  await requireAdmin()
   const safeDays = Math.max(1, Math.min(90, Math.floor(Number(days) || 7)))
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -1378,6 +1390,7 @@ function formatTimeIST(value: string | Date): string {
 export async function approveOrder(
   orderId: string
 ): Promise<{ orderId: string; status: 'approved' }> {
+  await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   // Load order + idempotency guard
@@ -1444,6 +1457,7 @@ export async function approveOrder(
 export async function rejectOrder(
   orderId: string
 ): Promise<{ orderId: string; status: 'rejected' }> {
+  await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   const { data: order, error: orderError } = await adminSupabase
@@ -1478,6 +1492,7 @@ export type PendingOrder = {
 }
 
 export async function getPendingOrders(): Promise<PendingOrder[]> {
+  await requireStaff()
   const { data, error } = await adminSupabase
     .from('orders')
     .select(
@@ -1496,6 +1511,7 @@ export async function getPendingOrders(): Promise<PendingOrder[]> {
 // ── Admin tables page server actions ────────────────────────────────────────
 
 export async function getRestaurantId(slug: string): Promise<string | null> {
+  await requireStaff()
   const { data } = await adminSupabase
     .from('restaurants')
     .select('id')
@@ -1524,6 +1540,7 @@ export type RawTableRow = {
 }
 
 export async function getTablesWithSessions(restaurantId: string): Promise<RawTableRow[]> {
+  await requireStaff()
   const { data, error } = await adminSupabase
     .from('restaurant_tables')
     .select(`
@@ -1549,6 +1566,7 @@ export type DailyBillsSummary = {
 }
 
 export async function getDailyBillsSummary(restaurantId: string): Promise<DailyBillsSummary> {
+  await requireStaff()
   const now = new Date()
   const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
   const d = istNow.toISOString().slice(0, 10)
@@ -1570,6 +1588,7 @@ export async function getDailyBillsSummary(restaurantId: string): Promise<DailyB
 }
 
 export async function closeTable(sessionId: string): Promise<void> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   const { error } = await adminSupabase
     .from('table_sessions')
@@ -1579,6 +1598,7 @@ export async function closeTable(sessionId: string): Promise<void> {
 }
 
 export async function forceResetTable(sessionId: string): Promise<void> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   await adminSupabase
     .from('table_sessions')
@@ -1746,6 +1766,7 @@ export async function settleBill({
   sessionId: string
   paymentMethod: PaymentMethod
 }): Promise<{ billId: string; total: number }> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   if (!['cash', 'upi', 'card', 'other'].includes(paymentMethod)) {
     throw new Error('Invalid payment method')
@@ -1788,6 +1809,7 @@ export type SessionBill = {
 
 /** Latest bill for a session, or null if none generated yet. */
 export async function getSessionBill(sessionId: string): Promise<SessionBill | null> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   const { data, error } = await adminSupabase
     .from('bills')
@@ -1819,6 +1841,7 @@ export async function moveTableSession({
   sessionId: string
   targetTableId: string
 }): Promise<{ targetTableNumber: number }> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   if (!targetTableId) throw new Error('targetTableId is required')
 
@@ -1865,6 +1888,7 @@ export async function moveTableSession({
  * jam, kitchen lost the slip). Never changes order status.
  */
 export async function reprintKot(orderId: string): Promise<void> {
+  await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   const { data: order, error: orderError } = await adminSupabase
@@ -1922,6 +1946,7 @@ export async function updateOrderItemQuantity({
   orderItemId: string
   quantity: number
 }): Promise<void> {
+  await requireStaff()
   if (!orderItemId) throw new Error('orderItemId is required')
   if (!Number.isInteger(quantity) || quantity < 0 || quantity > 99) {
     throw new Error('Quantity must be between 0 and 99')
