@@ -4,16 +4,10 @@
  * NEVER import this in client components.
  */
 import { createClient } from "@supabase/supabase-js"
+import { requireServerEnv } from "./env"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-if (!supabaseServiceKey) {
-  console.warn(
-    "[supabase-admin] SUPABASE_SERVICE_ROLE_KEY is not set. " +
-      "Admin write operations will fail with permission denied."
-  )
-}
+const supabaseUrl = requireServerEnv("NEXT_PUBLIC_SUPABASE_URL")
+const supabaseServiceKey = requireServerEnv("SUPABASE_SERVICE_ROLE_KEY")
 
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {

@@ -3,6 +3,8 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import heicConvert from 'heic-convert';
 import sharp from 'sharp';
+import { requireStaff } from '@/lib/auth-guard';
+import { errorResponse } from '@/lib/api-error';
 
 export const runtime = 'nodejs';
 
@@ -57,6 +59,13 @@ function getR2Client() {
 }
 
 export async function POST(request: Request) {
+  // Admin/captain only — prevents anonymous abuse of R2 storage + image processing.
+  try {
+    await requireStaff();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -113,7 +122,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: `${publicBase}/${key}` });
   } catch (error) {
-    console.error('Error uploading to R2:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return errorResponse('Upload failed', 500, error);
   }
 }

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireServerEnv } from '@/lib/env';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  requireServerEnv('SUPABASE_SERVICE_ROLE_KEY')
 );
 
 async function sendOneSignalNotification(playerId: string, title: string, body: string, url: string) {

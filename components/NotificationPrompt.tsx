@@ -18,7 +18,6 @@ export function NotificationPrompt() {
         return;
       }
       try {
-        console.log("Initializing OneSignal...");
         await OneSignal.init({
           appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!,
           allowLocalhostAsSecureOrigin: true,
@@ -33,7 +32,6 @@ export function NotificationPrompt() {
         });
         oneSignalInitialized = true;
         setInitialized(true);
-        console.log("OneSignal initialized successfully!");
       } catch (e) {
         console.error("OneSignal init error:", e);
       }
@@ -72,9 +70,7 @@ export function NotificationPrompt() {
     setShowPrompt(false);
     sessionStorage.setItem("notification_accepted", "true");
     try {
-      console.log("Requesting OneSignal notification permission...");
       await OneSignal.Notifications.requestPermission();
-      console.log("OneSignal permission requested.");
 
       let playerId = null;
       let attempts = 0;
@@ -88,8 +84,6 @@ export function NotificationPrompt() {
         console.error('OneSignal Player ID not available after 10 attempts');
         return;
       }
-
-      console.log('OneSignal Player ID:', playerId);
 
       // Save to localStorage for in-app fallback
       localStorage.setItem('onesignal_player_id', playerId);

@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireServerEnv } from '@/lib/env';
+import { errorResponse } from '@/lib/api-error';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  requireServerEnv('SUPABASE_SERVICE_ROLE_KEY')
+);
 
 export async function POST(request: Request) {
   try {
@@ -33,8 +36,7 @@ export async function POST(request: Request) {
       .single();
 
     if (checkError && checkError.code !== 'PGRST116') {
-      console.error('save-token: error checking existing session:', checkError.message);
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+      return errorResponse('Database error', 500, checkError.message);
     }
 
     const now = new Date();
@@ -57,13 +59,11 @@ export async function POST(request: Request) {
       ]);
 
     if (error) {
-      console.error('save-token: error saving token:', error.message);
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+      return errorResponse('Database error', 500, error.message);
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('save-token: unexpected error:', error instanceof Error ? error.message : 'unknown');
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse('Internal server error', 500, error);
   }
 }

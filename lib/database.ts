@@ -5,10 +5,11 @@ import { createClient } from '@supabase/supabase-js'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
 import { requireAdmin, requireStaff } from './auth-guard'
+import { requireServerEnv } from './env'
 
 const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  requireServerEnv('SUPABASE_SERVICE_ROLE_KEY')
 )
 
 function parseHostname(value: string | null | undefined) {
