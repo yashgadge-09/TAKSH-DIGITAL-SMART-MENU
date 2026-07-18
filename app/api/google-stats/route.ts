@@ -81,10 +81,11 @@ async function resolvePlaceId(apiKey: string) {
 }
 
 export async function GET() {
+  // Server-only key. Never fall back to a NEXT_PUBLIC_ var — that would inline a
+  // billable Google Maps key into the browser bundle.
   const apiKey =
     process.env.GOOGLE_MAPS_API_KEY ||
-    process.env.GOOGLE_PLACES_API_KEY ||
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    process.env.GOOGLE_PLACES_API_KEY
 
   if (!apiKey) {
     return NextResponse.json(
