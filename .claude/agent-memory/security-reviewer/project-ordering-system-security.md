@@ -23,6 +23,13 @@ Security audit of 378-line ordering system block added to lib/database.ts on the
 9. PIN is generated with Math.random() (not cryptographically secure) but acceptable for 4-digit restaurant POS.
 10. No rate limiting or brute-force lockout on PIN verification in createOrJoinSession.
 
-**How to apply:** When reviewing any future Server Action that touches orders, bills, or print_jobs, always check for server-side admin auth before the first DB mutation. The client-side layout guard is NOT sufficient.
+**STATUS (updated 2026-07-18):** Findings #1, #2, #8 FIXED, and the broader "server actions have no auth" gap closed.
+- lib/auth-guard.ts added: `requireStaff()` (any authenticated admin/captain) and `requireAdmin()` (authenticated, non-captain). Both use `createServerClient` + `cookies()` + `getUser()` (verifies JWT, not just decode).
+- Guards wired into 24 privileged server actions in lib/database.ts: requireAdmin on dish/category/review CRUD + getAnalyticsData + getAllDishesAdmin; requireStaff on approveOrder, rejectOrder, getPendingOrders, getRestaurantId, getTablesWithSessions, getDailyBillsSummary, closeTable, forceResetTable, settleBill, getSessionBill, moveTableSession, reprintKot, updateOrderItemQuantity.
+- Guest actions intentionally remain unguarded: createOrJoinSession, joinTable, registerHost, placeOrder, generateBill (guest "Request Bill"), getOrdersForSession, shared-cart ops, findOrCreateCustomer, getTableEntry, submitReview, ratings/favourites.
+- Migration 2026071801_lock_down_ordering_rls.sql: dropped all anon public SELECT/INSERT on the 8 ordering tables (killed world-readable table_sessions.pin + customers PII + public print_jobs INSERT). SELECT now TO authenticated only; restaurants keeps an authenticated UPDATE path. session_cart_items untouched (guest Realtime).
+- STILL OPEN from this list: #3 (createOrJoinSession cross-tenant), #4/#5 (placeOrder is_available + quantity>0 validation), #6 (session↔caller binding), #7 (NEXT_PUBLIC_SUPABASE_SERVICE_ROLE rename+rotate), #9/#10 (PIN Math.random + brute-force). Migration must be applied to prod (`supabase db push`) — writing the file does NOT apply it.
+
+**How to apply:** When reviewing any future Server Action that touches orders, bills, or print_jobs, always check for server-side admin auth before the first DB mutation. The client-side layout guard is NOT sufficient. Use requireStaff()/requireAdmin() from lib/auth-guard.ts.
 
 See [[project-rls-policies]] for the full RLS policy set on ordering tables.
