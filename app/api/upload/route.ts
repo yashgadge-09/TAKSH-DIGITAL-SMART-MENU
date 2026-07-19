@@ -3,11 +3,14 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import heicConvert from 'heic-convert';
 import sharp from 'sharp';
+import { requireStaff } from '@/lib/auth-guard';
+import { errorResponse } from '@/lib/api-error';
 
 export const runtime = 'nodejs';
 
 const MAX_DIMENSION = 1600;
 const WEBP_QUALITY = 85;
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB — cap before buffering into memory
 const HEIC_MIME_TYPES = new Set([
   'image/heic',
   'image/heif',
@@ -57,6 +60,13 @@ function getR2Client() {
 }
 
 export async function POST(request: Request) {
+  // Admin/captain only — prevents anonymous abuse of R2 storage + image processing.
+  try {
+    await requireStaff();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -67,6 +77,10 @@ export async function POST(request: Request) {
 
     if (!isSupportedImageUpload(file)) {
       return NextResponse.json({ error: 'Only image uploads are supported' }, { status: 400 });
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: 'File too large (max 15 MB)' }, { status: 413 });
     }
 
     const bytes = await file.arrayBuffer();
@@ -113,7 +127,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: `${publicBase}/${key}` });
   } catch (error) {
-    console.error('Error uploading to R2:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return errorResponse('Upload failed', 500, error);
   }
 }

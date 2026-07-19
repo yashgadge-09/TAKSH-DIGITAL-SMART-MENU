@@ -2,13 +2,15 @@
 
 import { supabase } from './supabase'
 import { createClient } from '@supabase/supabase-js'
+import { randomInt } from 'crypto'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
 import { requireAdmin, requireStaff } from './auth-guard'
+import { requireServerEnv } from './env'
 
 const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  requireServerEnv('SUPABASE_SERVICE_ROLE_KEY')
 )
 
 function parseHostname(value: string | null | undefined) {
@@ -478,10 +480,22 @@ export async function submitReview(review: {
   reviewer: string
   dishes: string[]
 }) {
-  const isPublic = review.stars >= 4
+  // Public, unauthenticated endpoint whose content is shown on the site — validate
+  // strictly. Never spread the raw client object into the insert (mass-assignment:
+  // a caller could set is_public/source/etc). Pick only the allowed fields.
+  const stars = Number(review?.stars)
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+    throw new Error('Rating must be a whole number between 1 and 5')
+  }
+  const text = String(review?.text ?? '').trim().slice(0, 2000)
+  const reviewer = String(review?.reviewer ?? '').trim().slice(0, 80) || 'Guest'
+  const dishes = Array.isArray(review?.dishes)
+    ? review.dishes.filter((d) => typeof d === 'string').slice(0, 50).map((d) => d.slice(0, 120))
+    : []
+
   const { error } = await supabase
     .from('reviews')
-    .insert({ ...review, is_public: isPublic })
+    .insert({ stars, text, reviewer, dishes, is_public: stars >= 4 })
   if (error) throw error
 }
 
@@ -1199,6 +1213,51 @@ async function closeStaleSession(sessionId: string): Promise<void> {
     .eq('id', sessionId)
 }
 
+// ── PIN brute-force lockout ──────────────────────────────────────────────────
+const MAX_PIN_ATTEMPTS = 5
+const PIN_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
+
+type PinGuardSession = {
+  id: string
+  pin: string
+  pin_failed_attempts?: number | null
+  pin_locked_until?: string | null
+}
+
+/**
+ * Verifies a PIN attempt against a session with brute-force protection.
+ * - If the session is currently locked, throws immediately (no PIN check).
+ * - On a wrong PIN, increments the failure counter and locks the session for
+ *   15 minutes once MAX_PIN_ATTEMPTS is reached.
+ * - On the correct PIN, clears the counter/lock.
+ * State lives in Postgres (via the service-role client), so the limit holds
+ * across all serverless instances — unlike per-instance in-memory counters.
+ */
+async function verifyPinWithLockout(session: PinGuardSession, pinAttempt: string): Promise<void> {
+  if (session.pin_locked_until && new Date(session.pin_locked_until) > new Date()) {
+    const mins = Math.max(1, Math.ceil((new Date(session.pin_locked_until).getTime() - Date.now()) / 60000))
+    throw new Error(`Too many incorrect PIN attempts. Please try again in ${mins} minute${mins === 1 ? '' : 's'}.`)
+  }
+
+  if (String(pinAttempt).trim() === session.pin) {
+    if ((session.pin_failed_attempts ?? 0) > 0 || session.pin_locked_until) {
+      await adminSupabase
+        .from('table_sessions')
+        .update({ pin_failed_attempts: 0, pin_locked_until: null })
+        .eq('id', session.id)
+    }
+    return
+  }
+
+  const attempts = (session.pin_failed_attempts ?? 0) + 1
+  const update: { pin_failed_attempts: number; pin_locked_until?: string } = { pin_failed_attempts: attempts }
+  if (attempts >= MAX_PIN_ATTEMPTS) {
+    update.pin_locked_until = new Date(Date.now() + PIN_LOCKOUT_MS).toISOString()
+  }
+  await adminSupabase.from('table_sessions').update(update).eq('id', session.id)
+  throw new Error('Incorrect PIN')
+}
+
 export type SessionResult =
   | { exists: false; sessionId: string; tableNumber: number; pin: string }
   | { exists: true; requiresPin: true }
@@ -1226,7 +1285,7 @@ export async function createOrJoinSession({
 
   const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, opened_at')
+    .select('id, pin, opened_at, pin_failed_attempts, pin_locked_until')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
@@ -1239,7 +1298,9 @@ export async function createOrJoinSession({
   }
 
   if (!activeSession) {
-    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    // CSPRNG — Math.random() is predictable and would let an attacker guess a
+    // table's join PIN. randomInt() is crypto-secure and uniform over 1000–9999.
+    const pin = String(randomInt(1000, 10000))
     const { data: newSession, error: insertError } = await adminSupabase
       .from('table_sessions')
       .insert({ restaurant_id: restaurantId, table_id: tableId, pin, status: 'active' })
@@ -1257,7 +1318,7 @@ export async function createOrJoinSession({
 
     const { data: winner } = await adminSupabase
       .from('table_sessions')
-      .select('id, pin, opened_at')
+      .select('id, pin, opened_at, pin_failed_attempts, pin_locked_until')
       .eq('table_id', tableId)
       .eq('status', 'active')
       .maybeSingle()
@@ -1269,11 +1330,9 @@ export async function createOrJoinSession({
     return { exists: true, requiresPin: true }
   }
 
-  if (String(pinAttempt).trim() === activeSession.pin) {
-    return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
-  }
-
-  throw new Error('Incorrect PIN')
+  // Throws 'Incorrect PIN' on mismatch, or a lockout message after too many tries.
+  await verifyPinWithLockout(activeSession, String(pinAttempt))
+  return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
 }
 
 export async function placeOrder({
@@ -1291,12 +1350,37 @@ export async function placeOrder({
     throw new Error('sessionId, customerId, restaurantId, and items are required')
   }
 
+  // Validate client-supplied quantities BEFORE anything else. Without this a
+  // caller could POST a negative quantity (→ negative bill line, lowering the
+  // total) or an absurd quantity. Require positive integers with a sane cap.
+  for (const item of items) {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+      throw new Error('Item quantity must be a whole number between 1 and 99')
+    }
+  }
+
+  // Verify the target session actually exists, belongs to this restaurant, and
+  // is still ACTIVE. Prevents injecting orders into another table's session, a
+  // closed session, or one whose bill was already generated.
+  const { data: sessionRow, error: sessionRowError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (sessionRowError || !sessionRow) throw new Error('Session not found')
+  if (sessionRow.restaurant_id !== restaurantId) {
+    throw new Error('Session does not belong to this restaurant')
+  }
+  if (sessionRow.status !== 'active') {
+    throw new Error('This table is not currently accepting orders')
+  }
+
   // Snapshot dish name + price at order time.
   // Use the public anon client — dishes are public-readable via RLS, no service-role needed.
   const dishIds = items.map((i) => i.dishId)
   const { data: dishes, error: dishError } = await supabase
     .from('dishes')
-    .select('id, name_en, price')
+    .select('id, name_en, price, is_available')
     .in('id', dishIds)
   if (dishError || !dishes?.length) throw new Error('Failed to fetch dish details')
 
@@ -1307,6 +1391,8 @@ export async function placeOrder({
   const validatedItems = items.map((item) => {
     const dish = dishMap.get(item.dishId)
     if (!dish) throw new Error(`Dish ${item.dishId} not found`)
+    // Never let an unavailable dish be ordered, even if the client sends its id.
+    if (!dish.is_available) throw new Error(`${dish.name_en} is no longer available`)
     return {
       dish_id: item.dishId,
       name: dish.name_en,
@@ -1566,7 +1652,9 @@ export type DailyBillsSummary = {
 }
 
 export async function getDailyBillsSummary(restaurantId: string): Promise<DailyBillsSummary> {
-  await requireStaff()
+  // Revenue figure — admins only. Captains are blocked (they call the table/order
+  // actions, not this one), matching the customers/bills RLS restriction.
+  await requireAdmin()
   const now = new Date()
   const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
   const d = istNow.toISOString().slice(0, 10)
@@ -1649,6 +1737,7 @@ export async function generateBill({
     .eq('id', sessionId)
     .single()
   if (sessionError || !session) throw new Error('Session not found')
+  if (session.status === 'closed') throw new Error('Session is closed')
 
   // Guard: if already billed, return the existing bill (no duplicate rows/jobs)
   if (session.status === 'bill_generated') {
@@ -2105,7 +2194,7 @@ export async function joinTable({
 
   const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
+    .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids, pin_failed_attempts, pin_locked_until')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
@@ -2120,7 +2209,9 @@ export async function joinTable({
   }
 
   if (!activeSession) {
-    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    // CSPRNG — Math.random() is predictable and would let an attacker guess a
+    // table's join PIN. randomInt() is crypto-secure and uniform over 1000–9999.
+    const pin = String(randomInt(1000, 10000))
     const { data: newSession, error: insertError } = await adminSupabase
       .from('table_sessions')
       .insert({
@@ -2148,7 +2239,7 @@ export async function joinTable({
 
     const { data: winner } = await adminSupabase
       .from('table_sessions')
-      .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
+      .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids, pin_failed_attempts, pin_locked_until')
       .eq('table_id', tableId)
       .eq('status', 'active')
       .maybeSingle()
@@ -2167,9 +2258,8 @@ export async function joinTable({
     if (!pinAttempt) {
       return { requiresPin: true }
     }
-    if (String(pinAttempt).trim() !== activeSession.pin) {
-      throw new Error('Incorrect PIN')
-    }
+    // Throws 'Incorrect PIN' on mismatch, or a lockout message after too many tries.
+    await verifyPinWithLockout(activeSession, String(pinAttempt))
     await adminSupabase
       .from('table_sessions')
       .update({ joined_device_ids: [...joinedDeviceIds, deviceId] })
@@ -2403,4 +2493,24 @@ export async function findOrCreateCustomer({
     .single()
   if (error || !customer) throw new Error('Failed to create customer')
   return { customerId: customer.id }
+}
+
+/**
+ * Data-deletion / "right to be forgotten" for a customer (T-privacy).
+ * Anonymizes rather than hard-deletes so historical orders/bills keep their FK
+ * integrity and daily-sales totals stay correct — but ALL personal data (name,
+ * phone, WhatsApp opt-in) is irreversibly stripped. Admin-only.
+ */
+export async function anonymizeCustomer(customerId: string): Promise<void> {
+  await requireAdmin()
+  if (!customerId) throw new Error('customerId is required')
+  const { error } = await adminSupabase
+    .from('customers')
+    .update({
+      name: 'Deleted guest',
+      phone: null,
+      whatsapp_opted_in: false,
+    })
+    .eq('id', customerId)
+  if (error) throw new Error(error.message)
 }
