@@ -1213,6 +1213,51 @@ async function closeStaleSession(sessionId: string): Promise<void> {
     .eq('id', sessionId)
 }
 
+// ── PIN brute-force lockout ──────────────────────────────────────────────────
+const MAX_PIN_ATTEMPTS = 5
+const PIN_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
+
+type PinGuardSession = {
+  id: string
+  pin: string
+  pin_failed_attempts?: number | null
+  pin_locked_until?: string | null
+}
+
+/**
+ * Verifies a PIN attempt against a session with brute-force protection.
+ * - If the session is currently locked, throws immediately (no PIN check).
+ * - On a wrong PIN, increments the failure counter and locks the session for
+ *   15 minutes once MAX_PIN_ATTEMPTS is reached.
+ * - On the correct PIN, clears the counter/lock.
+ * State lives in Postgres (via the service-role client), so the limit holds
+ * across all serverless instances — unlike per-instance in-memory counters.
+ */
+async function verifyPinWithLockout(session: PinGuardSession, pinAttempt: string): Promise<void> {
+  if (session.pin_locked_until && new Date(session.pin_locked_until) > new Date()) {
+    const mins = Math.max(1, Math.ceil((new Date(session.pin_locked_until).getTime() - Date.now()) / 60000))
+    throw new Error(`Too many incorrect PIN attempts. Please try again in ${mins} minute${mins === 1 ? '' : 's'}.`)
+  }
+
+  if (String(pinAttempt).trim() === session.pin) {
+    if ((session.pin_failed_attempts ?? 0) > 0 || session.pin_locked_until) {
+      await adminSupabase
+        .from('table_sessions')
+        .update({ pin_failed_attempts: 0, pin_locked_until: null })
+        .eq('id', session.id)
+    }
+    return
+  }
+
+  const attempts = (session.pin_failed_attempts ?? 0) + 1
+  const update: { pin_failed_attempts: number; pin_locked_until?: string } = { pin_failed_attempts: attempts }
+  if (attempts >= MAX_PIN_ATTEMPTS) {
+    update.pin_locked_until = new Date(Date.now() + PIN_LOCKOUT_MS).toISOString()
+  }
+  await adminSupabase.from('table_sessions').update(update).eq('id', session.id)
+  throw new Error('Incorrect PIN')
+}
+
 export type SessionResult =
   | { exists: false; sessionId: string; tableNumber: number; pin: string }
   | { exists: true; requiresPin: true }
@@ -1240,7 +1285,7 @@ export async function createOrJoinSession({
 
   const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, opened_at')
+    .select('id, pin, opened_at, pin_failed_attempts, pin_locked_until')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
@@ -1273,7 +1318,7 @@ export async function createOrJoinSession({
 
     const { data: winner } = await adminSupabase
       .from('table_sessions')
-      .select('id, pin, opened_at')
+      .select('id, pin, opened_at, pin_failed_attempts, pin_locked_until')
       .eq('table_id', tableId)
       .eq('status', 'active')
       .maybeSingle()
@@ -1285,11 +1330,9 @@ export async function createOrJoinSession({
     return { exists: true, requiresPin: true }
   }
 
-  if (String(pinAttempt).trim() === activeSession.pin) {
-    return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
-  }
-
-  throw new Error('Incorrect PIN')
+  // Throws 'Incorrect PIN' on mismatch, or a lockout message after too many tries.
+  await verifyPinWithLockout(activeSession, String(pinAttempt))
+  return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
 }
 
 export async function placeOrder({
@@ -2151,7 +2194,7 @@ export async function joinTable({
 
   const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
+    .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids, pin_failed_attempts, pin_locked_until')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
@@ -2196,7 +2239,7 @@ export async function joinTable({
 
     const { data: winner } = await adminSupabase
       .from('table_sessions')
-      .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
+      .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids, pin_failed_attempts, pin_locked_until')
       .eq('table_id', tableId)
       .eq('status', 'active')
       .maybeSingle()
@@ -2215,9 +2258,8 @@ export async function joinTable({
     if (!pinAttempt) {
       return { requiresPin: true }
     }
-    if (String(pinAttempt).trim() !== activeSession.pin) {
-      throw new Error('Incorrect PIN')
-    }
+    // Throws 'Incorrect PIN' on mismatch, or a lockout message after too many tries.
+    await verifyPinWithLockout(activeSession, String(pinAttempt))
     await adminSupabase
       .from('table_sessions')
       .update({ joined_device_ids: [...joinedDeviceIds, deviceId] })
