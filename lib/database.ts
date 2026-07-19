@@ -480,10 +480,22 @@ export async function submitReview(review: {
   reviewer: string
   dishes: string[]
 }) {
-  const isPublic = review.stars >= 4
+  // Public, unauthenticated endpoint whose content is shown on the site — validate
+  // strictly. Never spread the raw client object into the insert (mass-assignment:
+  // a caller could set is_public/source/etc). Pick only the allowed fields.
+  const stars = Number(review?.stars)
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+    throw new Error('Rating must be a whole number between 1 and 5')
+  }
+  const text = String(review?.text ?? '').trim().slice(0, 2000)
+  const reviewer = String(review?.reviewer ?? '').trim().slice(0, 80) || 'Guest'
+  const dishes = Array.isArray(review?.dishes)
+    ? review.dishes.filter((d) => typeof d === 'string').slice(0, 50).map((d) => d.slice(0, 120))
+    : []
+
   const { error } = await supabase
     .from('reviews')
-    .insert({ ...review, is_public: isPublic })
+    .insert({ stars, text, reviewer, dishes, is_public: stars >= 4 })
   if (error) throw error
 }
 
@@ -1597,7 +1609,9 @@ export type DailyBillsSummary = {
 }
 
 export async function getDailyBillsSummary(restaurantId: string): Promise<DailyBillsSummary> {
-  await requireStaff()
+  // Revenue figure — admins only. Captains are blocked (they call the table/order
+  // actions, not this one), matching the customers/bills RLS restriction.
+  await requireAdmin()
   const now = new Date()
   const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
   const d = istNow.toISOString().slice(0, 10)
