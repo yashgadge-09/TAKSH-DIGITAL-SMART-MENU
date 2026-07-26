@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireServerEnv } from '@/lib/env';
 import { errorResponse } from '@/lib/api-error';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
+
+// An FCM/OneSignal token is a long-but-bounded string; reject anything larger to
+// stop oversized payloads inflating push_sessions.
+const MAX_TOKEN_LENGTH = 4096;
 
 const supabase = createClient(
   requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
@@ -10,6 +15,16 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   try {
+    // Unauthenticated endpoint: throttle per-IP to prevent flooding push_sessions.
+    const ip = getClientIp(request);
+    const { allowed, retryAfterSec } = rateLimit(`save-token:${ip}`, 10, 60_000);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(retryAfterSec) } }
+      );
+    }
+
     const { fcm_token } = await request.json();
 
     if (!fcm_token) {
@@ -17,7 +32,11 @@ export async function POST(request: Request) {
     }
 
     // Validate FCM token format (should be a long string, typically 150+ chars)
-    if (typeof fcm_token !== 'string' || fcm_token.trim().length < 10) {
+    if (
+      typeof fcm_token !== 'string' ||
+      fcm_token.trim().length < 10 ||
+      fcm_token.length > MAX_TOKEN_LENGTH
+    ) {
       // Do NOT log the token itself — it is a device push identifier (PII).
       console.warn('Invalid FCM token format (failed length/type check)');
       return NextResponse.json({ error: 'Invalid FCM token format' }, { status: 400 });
