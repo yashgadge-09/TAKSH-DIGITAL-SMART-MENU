@@ -7,7 +7,7 @@ import { TakshBrand } from "@/components/TakshBrand"
 
 export default function CaptainLoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState("captain@taksh.com")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -58,7 +58,8 @@ export default function CaptainLoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="h-12 w-full rounded-lg border border-[#7F5331] bg-[#23150D] px-4 text-[#F3D9B5] placeholder:text-[#A9825C] transition-colors focus:border-[#F0A33D] focus:outline-none"
-              placeholder="captain@taksh.com"
+              placeholder="you@restaurant.com"
+              autoComplete="off"
             />
           </div>
 

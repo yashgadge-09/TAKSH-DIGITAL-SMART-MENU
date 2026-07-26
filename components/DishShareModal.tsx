@@ -62,8 +62,8 @@ export function DishShareModal({ isOpen, onClose, dish }: DishShareModalProps) {
           text: `Check out this delicious ${dish.name} at Taksh!`,
           url: window.location.href,
         });
-      } catch (err) {
-        console.log("Error sharing", err);
+      } catch {
+        // User cancelled the share sheet, or share failed — no action needed.
       }
     } else {
       handleCopyLink();

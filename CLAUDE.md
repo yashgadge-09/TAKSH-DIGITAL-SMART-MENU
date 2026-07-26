@@ -31,8 +31,7 @@ npm run lint      # ESLint
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (browser) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-only writes) |
-| `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE` | Fallback service role key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-only writes; **never** expose to the client) |
 | `NEXT_PUBLIC_IMAGE_CDN_HOST` | CDN host (default: `res.tastefy.food`) |
 | `ANALYTICS_ALLOWED_HOSTS` | Comma-separated hosts for analytics gating |
 | `NEXT_PUBLIC_SITE_URL` / `NEXT_PUBLIC_APP_URL` | Production URL for analytics gating |

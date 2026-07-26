@@ -222,6 +222,15 @@ function qrBuffer(data: string): Buffer {
   ])
 }
 
+// Thermal printers can't render UTF-8 like ₹ and ─ — map them to ASCII so the
+// printer doesn't emit garbage bytes for characters outside the 7-bit range.
+function toPrinterSafe(text: string): string {
+  return text
+    .replace(/₹/g, "Rs.")
+    .replace(/─/g, "-")
+    .replace(/[^\x00-\x7F]/g, "?")
+}
+
 function compile(segs: Seg[]): Buffer {
   const out: Buffer[] = [Buffer.from([0x1b, 0x40])] // init
   for (const s of segs) {
@@ -233,7 +242,7 @@ function compile(segs: Seg[]): Buffer {
     out.push(Buffer.from([0x1b, 0x45, s.bold ? 0x01 : 0x00]))            // bold
     // GS ! — 0x11 doubles width+height, 0x01 doubles height only (keeps 32 cols)
     out.push(Buffer.from([0x1d, 0x21, s.size === "big" ? 0x11 : s.size === "tall" ? 0x01 : 0x00]))
-    out.push(Buffer.from(s.text + "\n", "ascii"))
+    out.push(Buffer.from(toPrinterSafe(s.text) + "\n", "ascii"))
   }
   out.push(Buffer.from([0x1d, 0x21, 0x00]))       // reset size
   out.push(Buffer.from("\n\n\n", "ascii"))         // feed before cut

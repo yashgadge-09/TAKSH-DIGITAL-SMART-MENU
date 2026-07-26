@@ -14,6 +14,37 @@ interface CheckoutFormProps {
   prefilled?: { customerId: string; name: string };
 }
 
+/** Itemised review of everything in this order — shown before the Confirm Order button. */
+export function OrderItemsList({ items }: { items: CartItem[] }) {
+  if (items.length === 0) return null;
+  const total = items.reduce((a, i) => a + i.price * i.quantity, 0);
+
+  return (
+    <div className="rounded-2xl border border-[color:var(--brand-gold)]/15 bg-[color:var(--brand-bg)] px-4 py-3">
+      <p className="mb-2 text-[10px] uppercase tracking-widest text-[color:var(--brand-gold-muted)] opacity-60">
+        Your Order
+      </p>
+      <ul className="max-h-52 space-y-2 overflow-y-auto no-scrollbar">
+        {items.map(item => (
+          <li key={item.id} className="flex items-baseline justify-between gap-3">
+            <span className="text-[13px] leading-snug text-[color:var(--brand-gold-soft)]/80">
+              {item.name}
+              <span className="ml-1.5 text-[12px] opacity-60">× {item.quantity}</span>
+            </span>
+            <span className="shrink-0 text-[13px] text-[color:var(--brand-gold-soft)]/60">
+              ₹{item.price * item.quantity}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-baseline justify-between border-t border-[color:var(--brand-gold)]/15 pt-2.5">
+        <span className="text-[12px] uppercase tracking-wide text-[color:var(--brand-gold-muted)]">Total</span>
+        <span className="font-serif text-[16px] font-semibold text-[color:var(--brand-gold)]">₹{total}</span>
+      </div>
+    </div>
+  );
+}
+
 export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefilled }: CheckoutFormProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -84,6 +115,8 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
           <p className="text-[12px] text-[color:var(--brand-gold-soft)]/50">Ordering as {prefilled.name}</p>
         </div>
 
+        <OrderItemsList items={items} />
+
         {error && (
           <p className="text-center text-[13px] font-medium text-red-400">{error}</p>
         )}
@@ -103,11 +136,13 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
   return (
     <div className="flex flex-col gap-5 py-2">
       <div className="space-y-1 text-center">
-        <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Almost there!</h2>
+        <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Confirm Order</h2>
         <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
-          {items.reduce((a, i) => a + i.quantity, 0)} item{items.reduce((a, i) => a + i.quantity, 0) !== 1 ? "s" : ""} · ₹{items.reduce((a, i) => a + i.price * i.quantity, 0)}
+          {itemCount} item{itemCount !== 1 ? "s" : ""} · ₹{itemTotal}
         </p>
       </div>
+
+      <OrderItemsList items={items} />
 
       <div className="flex flex-col gap-3">
         {/* Name */}

@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, QrCode, Lock, Loader2 } from "lucide-react";
+import { X, QrCode, Loader2 } from "lucide-react";
 import { useTableSession } from "@/context/TableSessionContext";
 import { useSharedSession } from "@/context/SharedSessionContext";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { createOrJoinSession, clearSharedCart } from "@/lib/database";
-import { CheckoutForm } from "@/components/CheckoutForm";
+import { CheckoutForm, OrderItemsList } from "@/components/CheckoutForm";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
 
-type View = "idle" | "show-pin" | "enter-pin" | "checkout" | "confirmation";
+type View = "idle" | "enter-pin" | "checkout" | "confirmation";
 
 interface OrderFlowProps {
   isOpen: boolean;
@@ -24,7 +24,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
 
   const [view, setView] = useState<View>("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [displayPin, setDisplayPin] = useState("");
   const [pinInputs, setPinInputs] = useState(["", "", "", ""]);
   const [confirmedSessionId, setConfirmedSessionId] = useState<string | null>(null);
   const [confirmedTableNumber, setConfirmedTableNumber] = useState<number | null>(null);
@@ -61,7 +60,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
   const handleClose = () => {
     setView("idle");
     setIsSubmitting(false);
-    setDisplayPin("");
     setPinInputs(["", "", "", ""]);
     setConfirmedSessionId(null);
     setConfirmedTableNumber(null);
@@ -101,8 +99,8 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     const pin = sharedSession.pin;
     const tableNumber = table.tableNumber;
 
-    // checkout view
-    if (view === "checkout") {
+    // checkout view — also the landing view: guests review their items, then Confirm Order
+    if (view === "checkout" || view === "idle") {
       return (
         <Overlay onClose={handleClose}>
           <Sheet>
@@ -149,46 +147,7 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
       );
     }
 
-    // idle — show order summary + PIN reference
-    return (
-      <Overlay onClose={handleClose}>
-        <Sheet>
-          <CloseBtn onClose={handleClose} />
-          <div className="flex flex-col gap-5 py-2">
-            <div className="space-y-1 text-center">
-              <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Place Your Order</h2>
-              <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
-                Table {tableNumber} · {itemCount} item{itemCount !== 1 ? "s" : ""}
-              </p>
-            </div>
-
-            {/* PIN reference for the host */}
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-[11px] text-[color:var(--brand-gold-muted)] opacity-60 flex items-center gap-1">
-                <Lock size={10} /> Table PIN (share with friends)
-              </p>
-              <div className="flex gap-2">
-                {pin.split("").map((d, i) => (
-                  <div
-                    key={i}
-                    className="grid h-10 w-9 place-items-center rounded-lg border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg)] font-serif text-xl font-bold text-[color:var(--brand-gold)]"
-                  >
-                    {d}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <GoldButton
-              onClick={() => setView("checkout")}
-              disabled={itemCount === 0}
-            >
-              {`Confirm & Checkout · ₹${sharedSession.sharedItems.reduce((s, i) => s + i.price * i.quantity, 0)}`}
-            </GoldButton>
-          </div>
-        </Sheet>
-      </Overlay>
-    );
+    return null;
   }
 
   // ── Legacy mode (no shared session — solo diner on /menu or session not yet loaded) ──
@@ -200,11 +159,12 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
     try {
       const result = await createOrJoinSession({ restaurantId: table.restaurantId, tableId: table.tableId });
       if (!result.exists) {
-        setDisplayPin(result.pin);
+        // PIN is revealed at onboarding and again on the confirmation screen —
+        // no PIN interstitial between reviewing items and confirming.
         setConfirmedPin(result.pin);
         setConfirmedSessionId(result.sessionId);
         setConfirmedTableNumber(result.tableNumber);
-        setView("show-pin");
+        setView("checkout");
       } else if (result.requiresPin) {
         setView("enter-pin");
         setTimeout(() => pinRefs.current[0]?.focus(), 50);
@@ -256,40 +216,6 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
       setIsSubmitting(false);
     }
   };
-
-  if (view === "show-pin") {
-    return (
-      <Overlay onClose={handleClose}>
-        <Sheet>
-          <CloseBtn onClose={handleClose} />
-          <div className="flex flex-col items-center gap-5 py-2 text-center">
-            <IconCircle>
-              <Lock size={24} className="text-[color:var(--brand-gold)]" />
-            </IconCircle>
-            <div className="space-y-1.5">
-              <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Your Table PIN</h2>
-              <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
-                Share this PIN with your table so others can join your order.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              {displayPin.split("").map((d, i) => (
-                <div
-                  key={i}
-                  className="grid h-14 w-12 place-items-center rounded-xl border border-[color:var(--brand-gold)]/40 bg-[color:var(--brand-bg)] font-serif text-3xl font-bold text-[color:var(--brand-gold)]"
-                >
-                  {d}
-                </div>
-              ))}
-            </div>
-            <GoldButton onClick={() => setView("checkout")} className="mt-2">
-              Continue to Checkout
-            </GoldButton>
-          </div>
-        </Sheet>
-      </Overlay>
-    );
-  }
 
   if (view === "enter-pin") {
     return (
@@ -384,11 +310,14 @@ export function OrderFlow({ isOpen, onClose, onOrderConfirmed }: OrderFlowProps)
         <CloseBtn onClose={handleClose} />
         <div className="flex flex-col gap-5 py-2">
           <div className="space-y-1 text-center">
-            <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Place Your Order</h2>
+            <h2 className="font-serif text-xl text-[color:var(--brand-gold)]">Review Your Order</h2>
             <p className="text-[13px] text-[color:var(--brand-gold-soft)]/70">
-              Table {table.tableNumber} · {itemCount} item{itemCount !== 1 ? "s" : ""} · ₹{totalPrice}
+              Table {table.tableNumber} · {itemCount} item{itemCount !== 1 ? "s" : ""}
             </p>
           </div>
+
+          <OrderItemsList items={localItems} />
+
           {pinError && (
             <p className="text-center text-[13px] font-medium text-red-400">{pinError}</p>
           )}

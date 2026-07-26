@@ -291,19 +291,17 @@ export function TableSheet({
                 <Wallet className="h-4 w-4" />
                 {actionLoading ? "Working…" : "Print Bill & Take Payment"}
               </button>
-              <button
-                onClick={() => setEditingBill(v => !v)}
-                disabled={actionLoading || table.rounds.length === 0}
-                data-testid="edit-bill"
-                className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-sm font-bold disabled:opacity-50 ${
-                  editingBill
-                    ? "border-[#A46833] bg-[#A46833] text-white active:bg-[#8B5A2B]"
-                    : "border-[#A46833] text-[#A46833] active:bg-[#FFF3E0]"
-                }`}
-              >
-                <Pencil className="h-4 w-4" />
-                {editingBill ? "Done Editing" : "Edit Bill"}
-              </button>
+              {!editingBill && (
+                <button
+                  onClick={() => setEditingBill(true)}
+                  disabled={actionLoading || table.rounds.length === 0}
+                  data-testid="edit-bill"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit Bill
+                </button>
+              )}
               <button
                 onClick={() => handlePrintBill(false)}
                 disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
@@ -333,19 +331,17 @@ export function TableSheet({
                 Take Payment · Settle & Save
               </button>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setEditingBill(v => !v)}
-                  disabled={actionLoading}
-                  data-testid="edit-bill"
-                  className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border text-sm font-bold disabled:opacity-50 ${
-                    editingBill
-                      ? "border-[#A46833] bg-[#A46833] text-white active:bg-[#8B5A2B]"
-                      : "border-[#A46833] text-[#A46833] active:bg-[#FFF3E0]"
-                  }`}
-                >
-                  <Pencil className="h-4 w-4" />
-                  {editingBill ? "Done Editing" : "Edit Bill"}
-                </button>
+                {!editingBill && (
+                  <button
+                    onClick={() => setEditingBill(true)}
+                    disabled={actionLoading}
+                    data-testid="edit-bill"
+                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit Bill
+                  </button>
+                )}
                 <button
                   onClick={handleReprintBill}
                   disabled={actionLoading || table.pendingCount > 0}

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireServerEnv } from '@/lib/env';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  requireServerEnv('SUPABASE_SERVICE_ROLE_KEY')
 );
 
 async function sendOneSignalNotification(playerId: string, title: string, body: string, url: string) {
@@ -29,7 +30,8 @@ async function sendOneSignalNotification(playerId: string, title: string, body: 
     })
   });
   const data = await response.json();
-  console.log('OneSignal response:', JSON.stringify(data));
+  // Log only non-PII status fields — the full response echoes recipient/subscription info.
+  console.log('OneSignal response:', JSON.stringify({ id: data.id, recipients: data.recipients }));
   if (data.errors) throw new Error(JSON.stringify(data.errors));
   return data;
 }

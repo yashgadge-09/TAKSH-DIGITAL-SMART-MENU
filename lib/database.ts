@@ -2,12 +2,15 @@
 
 import { supabase } from './supabase'
 import { createClient } from '@supabase/supabase-js'
+import { randomInt } from 'crypto'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
+import { requireAdmin, requireStaff } from './auth-guard'
+import { requireServerEnv } from './env'
 
 const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE!
+  requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  requireServerEnv('SUPABASE_SERVICE_ROLE_KEY')
 )
 
 function parseHostname(value: string | null | undefined) {
@@ -345,6 +348,7 @@ export async function getDishById(id: string, timestamp?: number) {
 }
 
 export async function getAllDishesAdmin(timestamp?: number) {
+  await requireAdmin()
   let query = adminSupabase
     .from('dishes')
     .select('*');
@@ -362,6 +366,7 @@ export async function getAllDishesAdmin(timestamp?: number) {
 }
 
 export async function addDish(dish: any) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('dishes')
     .insert(dish)
@@ -373,6 +378,7 @@ export async function addDish(dish: any) {
 }
 
 export async function updateDish(id: string, dish: any) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('dishes')
     .update(dish)
@@ -385,6 +391,7 @@ export async function updateDish(id: string, dish: any) {
 }
 
 export async function deleteDish(id: string) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('dishes')
     .delete()
@@ -397,6 +404,7 @@ export async function toggleAvailability(
   id: string,
   isAvailable: boolean
 ) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('dishes')
     .update({ is_available: isAvailable })
@@ -415,6 +423,7 @@ export async function getCategories() {
 }
 
 export async function addCategory(name: string) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('categories')
     .insert({ name })
@@ -425,6 +434,7 @@ export async function addCategory(name: string) {
 }
 
 export async function deleteCategory(id: string) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('categories')
     .delete()
@@ -433,6 +443,7 @@ export async function deleteCategory(id: string) {
 }
 
 export async function updateCategory(id: string, payload: { image_url?: string | null }) {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('categories')
     .update(payload)
@@ -454,6 +465,7 @@ export async function getPublicReviews() {
 }
 
 export async function getAllReviewsAdmin() {
+  await requireAdmin()
   const { data, error } = await adminSupabase
     .from('reviews')
     .select('*')
@@ -468,10 +480,22 @@ export async function submitReview(review: {
   reviewer: string
   dishes: string[]
 }) {
-  const isPublic = review.stars >= 4
+  // Public, unauthenticated endpoint whose content is shown on the site — validate
+  // strictly. Never spread the raw client object into the insert (mass-assignment:
+  // a caller could set is_public/source/etc). Pick only the allowed fields.
+  const stars = Number(review?.stars)
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+    throw new Error('Rating must be a whole number between 1 and 5')
+  }
+  const text = String(review?.text ?? '').trim().slice(0, 2000)
+  const reviewer = String(review?.reviewer ?? '').trim().slice(0, 80) || 'Guest'
+  const dishes = Array.isArray(review?.dishes)
+    ? review.dishes.filter((d) => typeof d === 'string').slice(0, 50).map((d) => d.slice(0, 120))
+    : []
+
   const { error } = await supabase
     .from('reviews')
-    .insert({ ...review, is_public: isPublic })
+    .insert({ stars, text, reviewer, dishes, is_public: stars >= 4 })
   if (error) throw error
 }
 
@@ -479,6 +503,7 @@ export async function toggleReviewVisibility(
   id: string,
   isPublic: boolean
 ) {
+  await requireAdmin()
   const { error } = await adminSupabase
     .from('reviews')
     .update({ is_public: isPublic })
@@ -862,6 +887,7 @@ function getFavouriteIdentity(event: { session_id?: string | null; id?: string |
 }
 
 export async function getAnalyticsData(days = 7) {
+  await requireAdmin()
   const safeDays = Math.max(1, Math.min(90, Math.floor(Number(days) || 7)))
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -1187,6 +1213,51 @@ async function closeStaleSession(sessionId: string): Promise<void> {
     .eq('id', sessionId)
 }
 
+// ── PIN brute-force lockout ──────────────────────────────────────────────────
+const MAX_PIN_ATTEMPTS = 5
+const PIN_LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
+
+type PinGuardSession = {
+  id: string
+  pin: string
+  pin_failed_attempts?: number | null
+  pin_locked_until?: string | null
+}
+
+/**
+ * Verifies a PIN attempt against a session with brute-force protection.
+ * - If the session is currently locked, throws immediately (no PIN check).
+ * - On a wrong PIN, increments the failure counter and locks the session for
+ *   15 minutes once MAX_PIN_ATTEMPTS is reached.
+ * - On the correct PIN, clears the counter/lock.
+ * State lives in Postgres (via the service-role client), so the limit holds
+ * across all serverless instances — unlike per-instance in-memory counters.
+ */
+async function verifyPinWithLockout(session: PinGuardSession, pinAttempt: string): Promise<void> {
+  if (session.pin_locked_until && new Date(session.pin_locked_until) > new Date()) {
+    const mins = Math.max(1, Math.ceil((new Date(session.pin_locked_until).getTime() - Date.now()) / 60000))
+    throw new Error(`Too many incorrect PIN attempts. Please try again in ${mins} minute${mins === 1 ? '' : 's'}.`)
+  }
+
+  if (String(pinAttempt).trim() === session.pin) {
+    if ((session.pin_failed_attempts ?? 0) > 0 || session.pin_locked_until) {
+      await adminSupabase
+        .from('table_sessions')
+        .update({ pin_failed_attempts: 0, pin_locked_until: null })
+        .eq('id', session.id)
+    }
+    return
+  }
+
+  const attempts = (session.pin_failed_attempts ?? 0) + 1
+  const update: { pin_failed_attempts: number; pin_locked_until?: string } = { pin_failed_attempts: attempts }
+  if (attempts >= MAX_PIN_ATTEMPTS) {
+    update.pin_locked_until = new Date(Date.now() + PIN_LOCKOUT_MS).toISOString()
+  }
+  await adminSupabase.from('table_sessions').update(update).eq('id', session.id)
+  throw new Error('Incorrect PIN')
+}
+
 export type SessionResult =
   | { exists: false; sessionId: string; tableNumber: number; pin: string }
   | { exists: true; requiresPin: true }
@@ -1214,7 +1285,7 @@ export async function createOrJoinSession({
 
   const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, opened_at')
+    .select('id, pin, opened_at, pin_failed_attempts, pin_locked_until')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
@@ -1227,7 +1298,9 @@ export async function createOrJoinSession({
   }
 
   if (!activeSession) {
-    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    // CSPRNG — Math.random() is predictable and would let an attacker guess a
+    // table's join PIN. randomInt() is crypto-secure and uniform over 1000–9999.
+    const pin = String(randomInt(1000, 10000))
     const { data: newSession, error: insertError } = await adminSupabase
       .from('table_sessions')
       .insert({ restaurant_id: restaurantId, table_id: tableId, pin, status: 'active' })
@@ -1245,7 +1318,7 @@ export async function createOrJoinSession({
 
     const { data: winner } = await adminSupabase
       .from('table_sessions')
-      .select('id, pin, opened_at')
+      .select('id, pin, opened_at, pin_failed_attempts, pin_locked_until')
       .eq('table_id', tableId)
       .eq('status', 'active')
       .maybeSingle()
@@ -1257,11 +1330,9 @@ export async function createOrJoinSession({
     return { exists: true, requiresPin: true }
   }
 
-  if (String(pinAttempt).trim() === activeSession.pin) {
-    return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
-  }
-
-  throw new Error('Incorrect PIN')
+  // Throws 'Incorrect PIN' on mismatch, or a lockout message after too many tries.
+  await verifyPinWithLockout(activeSession, String(pinAttempt))
+  return { exists: true, sessionId: activeSession.id, tableNumber, pin: activeSession.pin }
 }
 
 export async function placeOrder({
@@ -1279,12 +1350,37 @@ export async function placeOrder({
     throw new Error('sessionId, customerId, restaurantId, and items are required')
   }
 
+  // Validate client-supplied quantities BEFORE anything else. Without this a
+  // caller could POST a negative quantity (→ negative bill line, lowering the
+  // total) or an absurd quantity. Require positive integers with a sane cap.
+  for (const item of items) {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+      throw new Error('Item quantity must be a whole number between 1 and 99')
+    }
+  }
+
+  // Verify the target session actually exists, belongs to this restaurant, and
+  // is still ACTIVE. Prevents injecting orders into another table's session, a
+  // closed session, or one whose bill was already generated.
+  const { data: sessionRow, error: sessionRowError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (sessionRowError || !sessionRow) throw new Error('Session not found')
+  if (sessionRow.restaurant_id !== restaurantId) {
+    throw new Error('Session does not belong to this restaurant')
+  }
+  if (sessionRow.status !== 'active') {
+    throw new Error('This table is not currently accepting orders')
+  }
+
   // Snapshot dish name + price at order time.
   // Use the public anon client — dishes are public-readable via RLS, no service-role needed.
   const dishIds = items.map((i) => i.dishId)
   const { data: dishes, error: dishError } = await supabase
     .from('dishes')
-    .select('id, name_en, price')
+    .select('id, name_en, price, is_available')
     .in('id', dishIds)
   if (dishError || !dishes?.length) throw new Error('Failed to fetch dish details')
 
@@ -1295,6 +1391,8 @@ export async function placeOrder({
   const validatedItems = items.map((item) => {
     const dish = dishMap.get(item.dishId)
     if (!dish) throw new Error(`Dish ${item.dishId} not found`)
+    // Never let an unavailable dish be ordered, even if the client sends its id.
+    if (!dish.is_available) throw new Error(`${dish.name_en} is no longer available`)
     return {
       dish_id: item.dishId,
       name: dish.name_en,
@@ -1378,6 +1476,7 @@ function formatTimeIST(value: string | Date): string {
 export async function approveOrder(
   orderId: string
 ): Promise<{ orderId: string; status: 'approved' }> {
+  await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   // Load order + idempotency guard
@@ -1444,6 +1543,7 @@ export async function approveOrder(
 export async function rejectOrder(
   orderId: string
 ): Promise<{ orderId: string; status: 'rejected' }> {
+  await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   const { data: order, error: orderError } = await adminSupabase
@@ -1478,6 +1578,7 @@ export type PendingOrder = {
 }
 
 export async function getPendingOrders(): Promise<PendingOrder[]> {
+  await requireStaff()
   const { data, error } = await adminSupabase
     .from('orders')
     .select(
@@ -1496,6 +1597,7 @@ export async function getPendingOrders(): Promise<PendingOrder[]> {
 // ── Admin tables page server actions ────────────────────────────────────────
 
 export async function getRestaurantId(slug: string): Promise<string | null> {
+  await requireStaff()
   const { data } = await adminSupabase
     .from('restaurants')
     .select('id')
@@ -1524,6 +1626,7 @@ export type RawTableRow = {
 }
 
 export async function getTablesWithSessions(restaurantId: string): Promise<RawTableRow[]> {
+  await requireStaff()
   const { data, error } = await adminSupabase
     .from('restaurant_tables')
     .select(`
@@ -1549,6 +1652,9 @@ export type DailyBillsSummary = {
 }
 
 export async function getDailyBillsSummary(restaurantId: string): Promise<DailyBillsSummary> {
+  // Revenue figure — admins only. Captains are blocked (they call the table/order
+  // actions, not this one), matching the customers/bills RLS restriction.
+  await requireAdmin()
   const now = new Date()
   const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
   const d = istNow.toISOString().slice(0, 10)
@@ -1570,6 +1676,7 @@ export async function getDailyBillsSummary(restaurantId: string): Promise<DailyB
 }
 
 export async function closeTable(sessionId: string): Promise<void> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   const { error } = await adminSupabase
     .from('table_sessions')
@@ -1604,6 +1711,7 @@ export async function forceResetTableById(tableId: string): Promise<void> {
 }
 
 export async function forceResetTable(sessionId: string): Promise<void> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   await adminSupabase
     .from('table_sessions')
@@ -1747,6 +1855,7 @@ export async function generateBill({
     .eq('id', sessionId)
     .single()
   if (sessionError || !session) throw new Error('Session not found')
+  if (session.status === 'closed') throw new Error('Session is closed')
 
   // Guard: if already billed, return the existing bill (no duplicate rows/jobs).
   // Use reprintBill to print a billed session again.
@@ -1802,6 +1911,7 @@ export async function reprintBill({
 }: {
   sessionId: string
 }): Promise<{ billId: string; total: number }> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
 
   const { data: session, error: sessionError } = await adminSupabase
@@ -1857,6 +1967,7 @@ export async function settleBill({
   sessionId: string
   paymentMethod: PaymentMethod
 }): Promise<{ billId: string; total: number }> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   if (!['cash', 'upi', 'card', 'other'].includes(paymentMethod)) {
     throw new Error('Invalid payment method')
@@ -1899,6 +2010,7 @@ export type SessionBill = {
 
 /** Latest bill for a session, or null if none generated yet. */
 export async function getSessionBill(sessionId: string): Promise<SessionBill | null> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   const { data, error } = await adminSupabase
     .from('bills')
@@ -1930,6 +2042,7 @@ export async function moveTableSession({
   sessionId: string
   targetTableId: string
 }): Promise<{ targetTableNumber: number }> {
+  await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   if (!targetTableId) throw new Error('targetTableId is required')
 
@@ -1976,6 +2089,7 @@ export async function moveTableSession({
  * jam, kitchen lost the slip). Never changes order status.
  */
 export async function reprintKot(orderId: string): Promise<void> {
+  await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   const { data: order, error: orderError } = await adminSupabase
@@ -2035,6 +2149,7 @@ export async function updateOrderItemQuantity({
   orderItemId: string
   quantity: number
 }): Promise<void> {
+  await requireStaff()
   if (!orderItemId) throw new Error('orderItemId is required')
   if (!Number.isInteger(quantity) || quantity < 0 || quantity > 99) {
     throw new Error('Quantity must be between 0 and 99')
@@ -2266,7 +2381,7 @@ export async function joinTable({
 
   const { data: foundSession } = await adminSupabase
     .from('table_sessions')
-    .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
+    .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids, pin_failed_attempts, pin_locked_until')
     .eq('table_id', tableId)
     .eq('status', 'active')
     .maybeSingle()
@@ -2281,7 +2396,9 @@ export async function joinTable({
   }
 
   if (!activeSession) {
-    const pin = String(Math.floor(1000 + Math.random() * 9000))
+    // CSPRNG — Math.random() is predictable and would let an attacker guess a
+    // table's join PIN. randomInt() is crypto-secure and uniform over 1000–9999.
+    const pin = String(randomInt(1000, 10000))
     const { data: newSession, error: insertError } = await adminSupabase
       .from('table_sessions')
       .insert({
@@ -2309,7 +2426,7 @@ export async function joinTable({
 
     const { data: winner } = await adminSupabase
       .from('table_sessions')
-      .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids')
+      .select('id, pin, host_device_id, host_name, host_customer_id, opened_at, joined_device_ids, pin_failed_attempts, pin_locked_until')
       .eq('table_id', tableId)
       .eq('status', 'active')
       .maybeSingle()
@@ -2328,9 +2445,8 @@ export async function joinTable({
     if (!pinAttempt) {
       return { requiresPin: true }
     }
-    if (String(pinAttempt).trim() !== activeSession.pin) {
-      throw new Error('Incorrect PIN')
-    }
+    // Throws 'Incorrect PIN' on mismatch, or a lockout message after too many tries.
+    await verifyPinWithLockout(activeSession, String(pinAttempt))
     await adminSupabase
       .from('table_sessions')
       .update({ joined_device_ids: [...joinedDeviceIds, deviceId] })
@@ -2564,4 +2680,24 @@ export async function findOrCreateCustomer({
     .single()
   if (error || !customer) throw new Error('Failed to create customer')
   return { customerId: customer.id }
+}
+
+/**
+ * Data-deletion / "right to be forgotten" for a customer (T-privacy).
+ * Anonymizes rather than hard-deletes so historical orders/bills keep their FK
+ * integrity and daily-sales totals stay correct — but ALL personal data (name,
+ * phone, WhatsApp opt-in) is irreversibly stripped. Admin-only.
+ */
+export async function anonymizeCustomer(customerId: string): Promise<void> {
+  await requireAdmin()
+  if (!customerId) throw new Error('customerId is required')
+  const { error } = await adminSupabase
+    .from('customers')
+    .update({
+      name: 'Deleted guest',
+      phone: null,
+      whatsapp_opted_in: false,
+    })
+    .eq('id', customerId)
+  if (error) throw new Error(error.message)
 }

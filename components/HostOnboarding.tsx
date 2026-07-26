@@ -54,7 +54,7 @@ export function HostOnboarding({ tableNumber, pin, isSubmitting, error, initialN
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-[12px] font-medium text-[color:var(--brand-gold-soft)]/70 uppercase tracking-wide">
-                Name <span className="text-red-400">*</span>
+                What should we call you? <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
@@ -70,7 +70,7 @@ export function HostOnboarding({ tableNumber, pin, isSubmitting, error, initialN
 
             <div className="flex flex-col gap-1">
               <label className="text-[12px] font-medium text-[color:var(--brand-gold-soft)]/70 uppercase tracking-wide">
-                Phone <span className="text-[color:var(--brand-gold-soft)]/40">(optional)</span>
+                Phone Number <span className="text-[color:var(--brand-gold-soft)]/40">(for exclusive offers)</span>
               </label>
               <input
                 type="tel"
