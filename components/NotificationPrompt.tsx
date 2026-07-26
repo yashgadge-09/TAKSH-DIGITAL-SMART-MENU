@@ -17,9 +17,13 @@ export function NotificationPrompt() {
         setInitialized(true);
         return;
       }
+      // Push is optional — skip init entirely when no app id is configured
+      // (local dev, preview deploys) rather than letting OneSignal throw.
+      const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
+      if (!appId) return;
       try {
         await OneSignal.init({
-          appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID!,
+          appId,
           allowLocalhostAsSecureOrigin: true,
           serviceWorkerParam: { scope: '/' },
           serviceWorkerPath: '/OneSignalSDKWorker.js',

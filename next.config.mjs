@@ -29,20 +29,29 @@ const nextConfig = {
     // uses: Supabase (REST + Realtime websockets), OneSignal (push SDK + iframe),
     // Vercel Analytics, Google Fonts, and image CDNs. Scripts are limited to our
     // own origin + these hosts.
+    //
+    // Dev-only relaxations (never shipped to production): React/Turbopack need
+    // 'unsafe-eval' for dev-mode debugging features, and HMR needs a websocket
+    // back to localhost.
+    const isDev = process.env.NODE_ENV === 'development'
+    const devScriptSrc = isDev ? " 'unsafe-eval'" : ''
+    const devConnectSrc = isDev ? ' ws://localhost:* http://localhost:*' : ''
+
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://onesignal.com https://*.onesignal.com https://va.vercel-scripts.com",
+      `script-src 'self' 'unsafe-inline'${devScriptSrc} https://cdn.onesignal.com https://onesignal.com https://*.onesignal.com https://va.vercel-scripts.com`,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://*.r2.dev https://vitals.vercel-insights.com https://maps.googleapis.com",
+      `connect-src 'self'${devConnectSrc} https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://*.r2.dev https://vitals.vercel-insights.com https://maps.googleapis.com`,
       "frame-src 'self' https://onesignal.com https://*.onesignal.com",
       "worker-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
       "frame-ancestors 'none'",
-      'upgrade-insecure-requests',
+      // Would break plain-http LAN testing (e.g. phone on http://192.168.x.x:3000).
+      ...(isDev ? [] : ['upgrade-insecure-requests']),
     ].join('; ')
 
     const securityHeaders = [
