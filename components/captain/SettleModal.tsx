@@ -43,6 +43,10 @@ export function SettleModal({
     return () => { mounted = false }
   }, [table.sessionId])
 
+  // Bill drifts when items were edited/added after printing — force a reprint
+  // (reprintBill syncs the bills row) before money changes hands.
+  const billStale = bill !== null && Math.abs(bill.subtotal - table.runningTotal) > 0.01
+
   async function handleSettle() {
     if (!table.sessionId || !method) return
     setSettling(true)
@@ -99,6 +103,13 @@ export function SettleModal({
           )}
         </div>
 
+        {billStale && (
+          <p className="mb-4 rounded-lg bg-[#FEF0D8] px-3 py-2 text-xs font-medium text-[#8B4513]" data-testid="settle-stale-warning">
+            Items changed after the bill was printed — reprint the bill first so the
+            total is up to date.
+          </p>
+        )}
+
         {/* Payment method */}
         <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-[#A46833]">Payment Type</p>
         <div className="mb-5 grid grid-cols-2 gap-2">
@@ -121,7 +132,7 @@ export function SettleModal({
 
         <button
           onClick={handleSettle}
-          disabled={!method || !bill || settling}
+          disabled={!method || !bill || settling || billStale}
           data-testid="settle-save"
           className="flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] py-3.5 text-sm font-bold text-white active:bg-[#235930] disabled:opacity-40"
         >

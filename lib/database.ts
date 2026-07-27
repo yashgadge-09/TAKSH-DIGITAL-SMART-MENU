@@ -1723,33 +1723,28 @@ export async function forceResetTable(sessionId: string): Promise<void> {
     .eq('session_id', sessionId)
 }
 
-export async function generateBill({
-  sessionId,
-}: {
-  sessionId: string
-}): Promise<{ billId: string; total: number }> {
-  if (!sessionId) throw new Error('sessionId is required')
+type BillPayload = {
+  restaurantName: string
+  address: string
+  gstin: string
+  upiId: string
+  tableNumber: number | null
+  customerName: string
+  rounds: { number: number; time: string; items: { name: string; qty: number; price: number }[] }[]
+  subtotal: number
+  gstRate: number
+  gstAmount: number
+  total: number
+}
 
-  // Load session + restaurant + table for the bill header
-  const { data: session, error: sessionError } = await adminSupabase
-    .from('table_sessions')
-    .select('id, status, restaurant_id, table_id')
-    .eq('id', sessionId)
-    .single()
-  if (sessionError || !session) throw new Error('Session not found')
-  if (session.status === 'closed') throw new Error('Session is closed')
-
-  // Guard: if already billed, return the existing bill (no duplicate rows/jobs)
-  if (session.status === 'bill_generated') {
-    const { data: existing } = await adminSupabase
-      .from('bills')
-      .select('id, total')
-      .eq('session_id', sessionId)
-      .order('generated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (existing) return { billId: existing.id, total: Number(existing.total) }
-  }
+// Shared by generateBill (first print) and reprintBill (after captain edits):
+// aggregates the session's non-rejected rounds into the print-bridge payload.
+async function computeBillForSession(session: {
+  id: string
+  restaurant_id: string
+  table_id: string
+}): Promise<{ payload: BillPayload; subtotal: number; gstAmount: number; total: number }> {
+  const sessionId = session.id
 
   // Billable orders only — rejected never appears on the bill
   const { data: orders, error: ordersError } = await adminSupabase
@@ -1826,19 +1821,7 @@ export async function generateBill({
     .eq('id', session.table_id)
     .maybeSingle()
 
-  // Persist the bill
-  const { data: bill, error: billError } = await adminSupabase
-    .from('bills')
-    .insert({ session_id: sessionId, subtotal, gst_amount: gstAmount, total })
-    .select('id')
-    .single()
-  if (billError || !bill) throw new Error('Failed to create bill')
-
-  // Queue the bill print job
-  const { error: printError } = await adminSupabase.from('print_jobs').insert({
-    restaurant_id: session.restaurant_id,
-    type: 'bill',
-    status: 'pending',
+  return {
     payload: {
       restaurantName: restaurant?.name ?? '',
       address: restaurant?.address ?? '',
@@ -1852,6 +1835,57 @@ export async function generateBill({
       gstAmount,
       total,
     },
+    subtotal,
+    gstAmount,
+    total,
+  }
+}
+
+export async function generateBill({
+  sessionId,
+}: {
+  sessionId: string
+}): Promise<{ billId: string; total: number }> {
+  if (!sessionId) throw new Error('sessionId is required')
+
+  // Load session + restaurant + table for the bill header
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id, table_id')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+  if (session.status === 'closed') throw new Error('Session is closed')
+
+  // Guard: if already billed, return the existing bill (no duplicate rows/jobs).
+  // Use reprintBill to print a billed session again.
+  if (session.status === 'bill_generated') {
+    const { data: existing } = await adminSupabase
+      .from('bills')
+      .select('id, total')
+      .eq('session_id', sessionId)
+      .order('generated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (existing) return { billId: existing.id, total: Number(existing.total) }
+  }
+
+  const { payload, subtotal, gstAmount, total } = await computeBillForSession(session)
+
+  // Persist the bill
+  const { data: bill, error: billError } = await adminSupabase
+    .from('bills')
+    .insert({ session_id: sessionId, subtotal, gst_amount: gstAmount, total })
+    .select('id')
+    .single()
+  if (billError || !bill) throw new Error('Failed to create bill')
+
+  // Queue the bill print job
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'bill',
+    status: 'pending',
+    payload,
   })
   if (printError) throw new Error('Failed to queue bill print job')
 
@@ -1861,6 +1895,59 @@ export async function generateBill({
     .update({ status: 'bill_generated' })
     .eq('id', sessionId)
   if (sessionUpdateError) throw new Error('Failed to update session status')
+
+  return { billId: bill.id, total }
+}
+
+/**
+ * Reprints the bill for an already-billed session. Recomputes totals from the
+ * session's CURRENT items (the captain may have edited quantities or added a
+ * round after the first print), updates the existing bills row in place —
+ * never inserts a second row, so daily reports stay accurate — and queues a
+ * fresh bill print job. Blocked once the bill is settled.
+ */
+export async function reprintBill({
+  sessionId,
+}: {
+  sessionId: string
+}): Promise<{ billId: string; total: number }> {
+  await requireStaff()
+  if (!sessionId) throw new Error('sessionId is required')
+
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id, table_id')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+  if (session.status === 'closed') throw new Error('Session is closed — cannot reprint bill')
+
+  const { data: bill, error: billError } = await adminSupabase
+    .from('bills')
+    .select('id, settled_at')
+    .eq('session_id', sessionId)
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (billError) throw new Error(billError.message)
+  if (!bill) throw new Error('No bill found — generate the bill first')
+  if (bill.settled_at) throw new Error('Bill already settled — cannot reprint')
+
+  const { payload, subtotal, gstAmount, total } = await computeBillForSession(session)
+
+  const { error: updateError } = await adminSupabase
+    .from('bills')
+    .update({ subtotal, gst_amount: gstAmount, total })
+    .eq('id', bill.id)
+  if (updateError) throw new Error('Failed to update bill')
+
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'bill',
+    status: 'pending',
+    payload,
+  })
+  if (printError) throw new Error('Failed to queue bill print job')
 
   return { billId: bill.id, total }
 }
@@ -2049,9 +2136,11 @@ export async function reprintKot(orderId: string): Promise<void> {
 }
 
 /**
- * Captain bill edit: change the quantity of an order item before the bill is
- * generated (e.g. wrongly punched). Quantity 0 removes the item. Blocked once
- * the session is bill_generated — regenerating bills would drift from print.
+ * Captain bill edit: change the quantity of an order item (e.g. wrongly
+ * punched, or guest cancels one). Quantity 0 removes the item. Allowed while
+ * the session is active OR bill_generated — after editing a printed bill the
+ * captain must call reprintBill so the printed total matches. Blocked once
+ * the session is closed.
  */
 export async function updateOrderItemQuantity({
   orderItemId,
@@ -2080,9 +2169,6 @@ export async function updateOrderItemQuantity({
   } | null
   if (!order) throw new Error('Parent order not found')
   if (order.status === 'rejected') throw new Error('Cannot edit a rejected order')
-  if (order.table_sessions?.status === 'bill_generated') {
-    throw new Error('Bill already generated — cannot edit items')
-  }
   if (order.table_sessions?.status === 'closed') {
     throw new Error('Session is closed — cannot edit items')
   }
@@ -2100,6 +2186,107 @@ export async function updateOrderItemQuantity({
       .eq('id', orderItemId)
     if (error) throw new Error('Failed to update quantity')
   }
+}
+
+/**
+ * Captain adds items directly to a live session (e.g. guest orders more after
+ * the bill is printed, or orders verbally). Creates a new round already
+ * 'approved' — the captain is the approver — and queues a KOT so the kitchen
+ * prepares the items. On a bill_generated session, follow with reprintBill so
+ * the printed bill picks up the new round.
+ */
+export async function addItemsToSession({
+  sessionId,
+  items,
+}: {
+  sessionId: string
+  items: { dishId: string; quantity: number }[]
+}): Promise<{ orderId: string; roundNumber: number }> {
+  if (!sessionId || !items?.length) throw new Error('sessionId and items are required')
+  for (const item of items) {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+      throw new Error('Quantity must be between 1 and 99')
+    }
+  }
+
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id, table_id')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+  if (session.status === 'closed') throw new Error('Session is closed — cannot add items')
+
+  // Snapshot dish name + price at order time (same pattern as placeOrder)
+  const dishIds = items.map((i) => i.dishId)
+  const { data: dishes, error: dishError } = await supabase
+    .from('dishes')
+    .select('id, name_en, price')
+    .in('id', dishIds)
+  if (dishError || !dishes?.length) throw new Error('Failed to fetch dish details')
+  const dishMap = new Map(dishes.map((d) => [d.id, d]))
+  const validatedItems = items.map((item) => {
+    const dish = dishMap.get(item.dishId)
+    if (!dish) throw new Error(`Dish ${item.dishId} not found`)
+    return {
+      dish_id: item.dishId,
+      name: dish.name_en,
+      price: dish.price,
+      quantity: item.quantity,
+    }
+  })
+
+  // Next round number; reuse the latest round's customer for attribution
+  const { data: lastOrder } = await adminSupabase
+    .from('orders')
+    .select('round_number, customer_id')
+    .eq('session_id', sessionId)
+    .order('round_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const roundNumber = (lastOrder?.round_number ?? 0) + 1
+
+  const { data: order, error: orderError } = await adminSupabase
+    .from('orders')
+    .insert({
+      session_id: sessionId,
+      customer_id: lastOrder?.customer_id ?? null,
+      round_number: roundNumber,
+      status: 'approved',
+    })
+    .select('id, placed_at')
+    .single()
+  if (orderError || !order) throw new Error('Failed to create order')
+
+  const orderItems = validatedItems.map((item) => ({ ...item, order_id: order.id }))
+  const { error: itemsError } = await adminSupabase.from('order_items').insert(orderItems)
+  if (itemsError) {
+    // Best-effort rollback so no empty approved round lingers on the table
+    await adminSupabase.from('orders').delete().eq('id', order.id)
+    throw new Error('Failed to save order items')
+  }
+
+  // Kitchen must still cook captain-added items — queue the KOT
+  const { data: table } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', session.table_id)
+    .maybeSingle()
+
+  const { error: printError } = await adminSupabase.from('print_jobs').insert({
+    restaurant_id: session.restaurant_id,
+    type: 'kot',
+    status: 'pending',
+    payload: {
+      tableNumber: table?.table_number ?? null,
+      roundNumber,
+      time: formatTimeIST(order.placed_at),
+      items: validatedItems.map((i) => ({ name: i.name, qty: i.quantity })),
+    },
+  })
+  if (printError) throw new Error('Items added but failed to queue KOT print job')
+
+  return { orderId: order.id, roundNumber }
 }
 
 export interface TableEntry {

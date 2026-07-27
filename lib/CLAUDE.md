@@ -126,7 +126,9 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 - `getSessionBill(sessionId)` → `SessionBill | null` — latest bill for a session (used by the settle popup to show the GST-inclusive total).
 - `moveTableSession({ sessionId, targetTableId })` — moves a live session to another table; rejects occupied targets and cross-restaurant moves.
 - `reprintKot(orderId)` — re-queues a `kot` print job for an approved order; never changes order status.
-- `updateOrderItemQuantity({ orderItemId, quantity })` — captain bill edit; quantity `0` deletes the item. Throws once the session is `bill_generated` or `closed`.
+- `updateOrderItemQuantity({ orderItemId, quantity })` — captain bill edit; quantity `0` deletes the item. Allowed while the session is `active` **or** `bill_generated` (follow with `reprintBill` after editing a printed bill). Throws once the session is `closed`.
+- `addItemsToSession({ sessionId, items })` — captain adds items as a **new round already `approved`** (captain is the approver) and queues a KOT print job. `items` is `{ dishId, quantity }[]`. Reuses the latest round's `customer_id`. Throws on a `closed` session.
+- `reprintBill({ sessionId })` — recomputes the bill from the session's current items, **updates the existing `bills` row in place** (never inserts a second row — daily reports stay accurate), and queues a fresh `bill` print job. Throws if no bill exists, the bill is settled, or the session is closed. Shares `computeBillForSession()` with `generateBill`.
 
 ---
 

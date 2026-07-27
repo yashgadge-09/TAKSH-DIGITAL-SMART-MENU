@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { generateBill, reprintKot, updateOrderItemQuantity, forceResetTableById } from "@/lib/database"
+import { generateBill, reprintBill, reprintKot, updateOrderItemQuantity, forceResetTableById } from "@/lib/database"
 import { toast } from "sonner"
 import {
   X, Clock, Users, ChefHat, Receipt, Printer, ArrowLeftRight,
-  Wallet, CheckCircle2, Minus, Plus, Trash2,
+  Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil,
 } from "lucide-react"
+import { AddItemModal } from "@/components/captain/AddItemModal"
 import type { CaptainTable } from "@/app/captain/tables/page"
 
 function timeIST(iso: string) {
@@ -42,14 +43,17 @@ export function TableSheet({
   const [actionLoading, setActionLoading] = useState(false)
   const [reprintingId, setReprintingId] = useState<string | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editingBill, setEditingBill] = useState(false)
+  const [addItemOpen, setAddItemOpen] = useState(false)
+  const [billStale, setBillStale] = useState(false)
 
   const approvedRounds = table.rounds.filter(r => r.status !== "pending_approval").length
   // Mirrors isServing() in the captain page. Kept local rather than imported:
   // this component is imported *by* that page, so pulling a value back out of
   // it would make the two modules circular at runtime.
   const serving = table.status === "active" || table.status === "bill_generated"
-  // Bill edits (qty / remove) are only allowed before the bill is printed
-  const canEditItems = table.status === "active"
+  // Qty edits + Add Item only in Edit Bill mode (active or billed tables)
+  const canEditItems = editingBill && serving
 
   async function handleQuantityChange(itemId: string, itemName: string, newQty: number) {
     if (newQty === 0 && !confirm(`Remove "${itemName}" from the order?`)) return
@@ -57,11 +61,28 @@ export function TableSheet({
     try {
       await updateOrderItemQuantity({ orderItemId: itemId, quantity: newQty })
       toast.success(newQty === 0 ? `${itemName} removed` : `${itemName} × ${newQty}`)
+      if (table.status === "bill_generated") setBillStale(true)
       onChanged()
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to update item")
     } finally {
       setEditingItemId(null)
+    }
+  }
+
+  async function handleReprintBill() {
+    if (!table.sessionId) return
+    setActionLoading(true)
+    try {
+      await reprintBill({ sessionId: table.sessionId })
+      toast.success("Updated bill sent to printer")
+      setBillStale(false)
+      setEditingBill(false)
+      onChanged()
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to reprint bill")
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -235,6 +256,16 @@ export function TableSheet({
               )
             })
           )}
+
+          {canEditItems && table.sessionId && (
+            <button
+              onClick={() => setAddItemOpen(true)}
+              data-testid="add-item-open"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#CFAF8C] bg-white/60 py-3 text-sm font-semibold text-[#A46833] active:bg-[#FFF3E0]"
+            >
+              <Plus className="h-4 w-4" /> Add Item
+            </button>
+          )}
         </div>
 
         {/* ── Footer actions ─────────────────────────────────────────────── */}
@@ -263,6 +294,17 @@ export function TableSheet({
                 <Wallet className="h-4 w-4" />
                 {actionLoading ? "Working…" : "Print Bill & Take Payment"}
               </button>
+              {!editingBill && (
+                <button
+                  onClick={() => setEditingBill(true)}
+                  disabled={actionLoading || table.rounds.length === 0}
+                  data-testid="edit-bill"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit Bill
+                </button>
+              )}
               <button
                 onClick={() => handlePrintBill(false)}
                 disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
@@ -276,15 +318,44 @@ export function TableSheet({
           )}
 
           {table.status === "bill_generated" && (
-            <button
-              onClick={onRequestSettle}
-              disabled={actionLoading}
-              data-testid="settle-open"
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white active:bg-[#8B5A2B] disabled:opacity-50"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Take Payment · Settle & Save
-            </button>
+            <>
+              {billStale && (
+                <p className="text-xs font-medium text-[#C47A20]" data-testid="bill-stale-hint">
+                  Items changed after printing — reprint the bill before taking payment.
+                </p>
+              )}
+              <button
+                onClick={onRequestSettle}
+                disabled={actionLoading || billStale}
+                data-testid="settle-open"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white active:bg-[#8B5A2B] disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Take Payment · Settle & Save
+              </button>
+              <div className="flex gap-2">
+                {!editingBill && (
+                  <button
+                    onClick={() => setEditingBill(true)}
+                    disabled={actionLoading}
+                    data-testid="edit-bill"
+                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit Bill
+                  </button>
+                )}
+                <button
+                  onClick={handleReprintBill}
+                  disabled={actionLoading || table.pendingCount > 0}
+                  data-testid="reprint-bill"
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] active:bg-[#EAF5ED] disabled:opacity-50"
+                >
+                  <Printer className="h-4 w-4" />
+                  {actionLoading ? "Printing…" : "Reprint Bill"}
+                </button>
+              </div>
+            </>
           )}
 
           {/* Nothing to carry across on a scanned or awaiting-approval table. */}
@@ -311,6 +382,19 @@ export function TableSheet({
           </button>
         </div>
       </div>
+
+      {addItemOpen && table.sessionId && (
+        <AddItemModal
+          sessionId={table.sessionId}
+          tableNumber={table.tableNumber}
+          onClose={() => setAddItemOpen(false)}
+          onAdded={() => {
+            setAddItemOpen(false)
+            if (table.status === "bill_generated") setBillStale(true)
+            onChanged()
+          }}
+        />
+      )}
     </>
   )
 }
