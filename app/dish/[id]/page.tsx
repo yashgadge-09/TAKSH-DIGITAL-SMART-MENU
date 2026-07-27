@@ -8,6 +8,7 @@ import { getOrCreateSessionId } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
+import { thumbUrl } from "@/lib/media";
 
 function LanguageToggle() {
   const langs = ["EN", "HI", "MR"] as const;
@@ -345,8 +346,10 @@ export default function DishDetailPage() {
                       />
                     ) : (
                       <img
-                        src={mediaUrl}
+                        src={thumbUrl(mediaUrl, 800)}
                         alt={`${dish.name} image ${index + 1}`}
+                        loading={index === 0 ? undefined : "lazy"}
+                        decoding="async"
                         className="h-full w-full object-cover"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
@@ -558,8 +561,10 @@ export default function DishDetailPage() {
                           <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
                         ) : (
                           <img
-                            src={String(getRecommendationImage(item))}
+                            src={thumbUrl(String(getRecommendationImage(item)), 340)}
                             alt={getRecommendationName(item)}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
                             onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
                           />
@@ -625,8 +630,10 @@ export default function DishDetailPage() {
                             <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
                           ) : (
                             <img
-                              src={String(getRecommendationImage(item))}
+                              src={thumbUrl(String(getRecommendationImage(item)), 340)}
                               alt={getRecommendationName(item)}
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
                               onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
                             />

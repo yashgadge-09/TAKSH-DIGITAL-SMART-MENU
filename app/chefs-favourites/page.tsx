@@ -8,6 +8,7 @@ import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
+import { thumbUrl } from "@/lib/media";
 
 export default function ChefsFavouritesPage() {
   const router = useRouter();
@@ -200,9 +201,11 @@ function DishCard({ dish, index, onAdd, onClick }: any) {
           {(dish.image?.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image?.includes("/video/upload/")) ? (
             <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
           ) : (
-            <img 
-              src={dish.image} 
-              alt={dish.name} 
+            <img
+              src={thumbUrl(dish.image, 400)}
+              alt={dish.name}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover transition duration-300 hover:scale-105"
               onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop"; }} 
             />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useState, useRef, useMemo, useCallback, memo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Plus, ChefHat, Lock } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
@@ -9,7 +9,9 @@ import { OrderFlow } from "@/components/OrderFlow";
 import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
-import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView, addSharedCartItem, trackCartEvent } from "@/lib/database";
+import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView, addSharedCartItem } from "@/lib/database";
+import { trackCartEventClient } from "@/lib/client-analytics";
+import { playChime, thumbUrl, isVideoUrl } from "@/lib/media";
 import { getOrCreateSessionId, shouldTrackClientEvent } from "@/lib/session";
 import { useSharedSession } from "@/context/SharedSessionContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -18,35 +20,150 @@ import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { isSameCategory, normalizeCategory, toSingular } from "@/lib/utils";
 
 const PREVIEW_LIMIT = 6;
-
-function playChime() {
-  try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const playNote = (freq: number, startTime: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gain.gain.setValueAtTime(0, startTime);
-      gain.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(startTime);
-      osc.stop(startTime + 1.0);
-    };
-    playNote(1046.50, ctx.currentTime);
-    playNote(1318.51, ctx.currentTime + 0.1);
-  } catch {
-    // ignore if audio is blocked
-  }
-}
-
-
+const MENU_REFETCH_COOLDOWN_MS = 60_000;
 
 type MostLovedRatingRow = { dishId: string; averageRating: number; ratingsCount: number };
+
+type AddToCartDish = { id: string; name: string; price: number; image: string; category: string };
+
+/**
+ * Dish media. Kept at module scope and memoised: when these lived inside
+ * MenuPageContent, every parent render produced a brand-new component type, so
+ * React unmounted and rebuilt every card — re-downloading hundreds of images on
+ * each keystroke or cart tap.
+ */
+const DishMedia = memo(function DishMedia({
+  image,
+  alt,
+  width,
+  fallbackTextClass,
+}: {
+  image: string;
+  alt: string;
+  width: number;
+  fallbackTextClass: string;
+}) {
+  if (!image) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
+        <span className={`font-medium leading-tight text-[color:var(--brand-gold-muted)] ${fallbackTextClass}`}>Image to be added</span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {isVideoUrl(image) ? (
+        <video src={image} muted loop autoPlay playsInline preload="none" className="h-full w-full object-cover" />
+      ) : (
+        <img
+          src={thumbUrl(image, width)}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover transition duration-300 hover:scale-105"
+          onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+        />
+      )}
+      <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
+        <span className={`font-medium leading-tight text-[color:var(--brand-gold-muted)] ${fallbackTextClass}`}>Image to be added</span>
+      </div>
+    </>
+  );
+});
+
+const DishCard = memo(function DishCard({
+  dish,
+  onAdd,
+  onOpen,
+}: {
+  dish: any;
+  onAdd: (dish: AddToCartDish) => void;
+  onOpen: (dish: any) => void;
+}) {
+  const isSpecial = dish.isChefSpecial;
+
+  return (
+    <article
+      onClick={() => onOpen(dish)}
+      className={`relative flex cursor-pointer items-center gap-4 rounded-2xl shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5 ${isSpecial
+        ? "p-4 -mx-3 my-3 animated-gradient-bg border border-[color:var(--brand-gold)]/50"
+        : "p-3 bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15"
+        }`}
+    >
+      {isSpecial && (
+        <div className="absolute -top-2.5 -left-2 bg-gradient-to-r from-[color:var(--brand-gold)] to-[#b37435] text-[color:var(--brand-bg-deep)] px-2.5 py-0.5 text-[9px] font-extrabold tracking-widest uppercase rounded shadow-[0_4px_10px_rgba(212,140,70,0.4)] border border-[color:var(--brand-gold)] z-10 flex items-center gap-1">
+          <ChefHat className="h-3 w-3" strokeWidth={2.5} /> Chef's Pick
+        </div>
+      )}
+      <div className="relative flex-1 min-w-0">
+        <h3 className={`font-serif leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 ${isSpecial ? "text-[17px]" : "text-[15px]"}`}>{dish.name}</h3>
+        {dish.tasteDescription && <p className={`mt-0.5 italic text-[color:var(--brand-gold-muted)] line-clamp-1 ${isSpecial ? "text-[13px]" : "text-[12px]"}`}>{dish.tasteDescription}</p>}
+        {dish.spiceLevel > 0 && (
+          <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>
+            {"🔥".repeat(dish.spiceLevel)} {dish.spiceLevel === 1 ? "Low" : dish.spiceLevel === 2 ? "Medium" : "High"}
+          </span>
+        )}
+        <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>₹{dish.price}</p>
+      </div>
+      <div className="relative flex shrink-0 flex-col items-center">
+        <div className={`relative overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
+          <DishMedia image={dish.image} alt={dish.name} width={isSpecial ? 300 : 264} fallbackTextClass="text-[10px]" />
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onAdd({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category }); }}
+          className={`absolute -bottom-3 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ${isSpecial ? "px-4 py-1.5 text-[11px]" : "px-3 py-1 text-[10px]"}`}
+          aria-label={`Add ${dish.name} to cart`}
+        >
+          ADD <Plus className={`h-3 w-3 ${isSpecial ? "scale-110" : ""}`} strokeWidth={2.4} />
+        </button>
+      </div>
+    </article>
+  );
+});
+
+const ScrollCard = memo(function ScrollCard({
+  dish,
+  showRating = false,
+  onAdd,
+  onOpen,
+}: {
+  dish: any;
+  showRating?: boolean;
+  onAdd: (dish: AddToCartDish) => void;
+  onOpen: (dish: any) => void;
+}) {
+  return (
+    <article
+      onClick={() => onOpen(dish)}
+      className="flex w-[170px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-20px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
+    >
+      <div className="relative aspect-[4/3] w-full overflow-hidden">
+        <DishMedia image={dish.image} alt={dish.name} width={340} fallbackTextClass="text-[12px]" />
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-3">
+        <h3 className="font-serif text-[14px] leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 min-h-[2.4em]">{dish.name}</h3>
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-serif text-[15px] text-[color:var(--brand-gold)]">₹{dish.price}</p>
+          <button
+            onClick={(e) => { e.stopPropagation(); onAdd({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category }); }}
+            className="inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] px-2.5 py-1 text-[10px] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)]"
+            aria-label={`Add ${dish.name} to cart`}
+          >
+            ADD <Plus className="h-3 w-3" strokeWidth={2.4} />
+          </button>
+        </div>
+        {showRating && Number.isFinite(Number(dish.averageRating)) && (
+          <div className="inline-flex w-fit items-center gap-1 rounded-full border border-[color:var(--brand-gold)]/30 px-2 py-0.5">
+            <Star className="h-3 w-3 fill-[color:var(--brand-gold)] text-[color:var(--brand-gold)]" />
+            <span className="text-[10px] font-semibold text-[color:var(--brand-gold)]">{Number(dish.averageRating).toFixed(1)}</span>
+            <span className="text-[9px] tracking-wider text-[color:var(--brand-gold-muted)]">· {Number(dish.ratingsCount) || 0} RATINGS</span>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+});
 
 function MenuPageContent() {
   const router = useRouter();
@@ -82,6 +199,7 @@ function MenuPageContent() {
   const [isSavingDishRatings, setIsSavingDishRatings] = useState(false);
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const pendingScrollCategoryRef = useRef<string | null>(null);
+  const lastLoadRef = useRef(0);
 
   useEffect(() => {
     if (searchParams.get("cart") === "open") {
@@ -109,6 +227,7 @@ function MenuPageContent() {
 
   const loadData = async () => {
     try {
+      lastLoadRef.current = Date.now();
       setIsLoading(true);
       const [data, categoryData, liveMostLovedRatings] = await Promise.all([
         getAllDishes(),
@@ -165,33 +284,61 @@ function MenuPageContent() {
     if (shouldTrackClientEvent("menu-view", 30000)) {
       void trackMenuView().catch(() => { });
     }
-    const handleFocus = () => loadData();
+    // Refetching the whole menu on every focus is far too eager on mobile, where
+    // focus fires on every app switch and notification pull-down. The menu barely
+    // changes during service, so throttle it.
+    const handleFocus = () => {
+      if (Date.now() - lastLoadRef.current < MENU_REFETCH_COOLDOWN_MS) return;
+      loadData();
+    };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   const getCategorySectionId = (cat: string) => `category-${cat.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
-  const menuTabs = [...categories].filter(c => c.toLowerCase() !== "all");
-  const previewCategories = menuTabs.map(c => ({ label: c, categoryValue: c }));
+  const menuTabs = useMemo(() => categories.filter(c => c.toLowerCase() !== "all"), [categories]);
+  const previewCategories = useMemo(() => menuTabs.map(c => ({ label: c, categoryValue: c })), [menuTabs]);
 
-  const filteredDishes = dishes.filter(d => {
-    const name = (d.nameRaw[lang] || "").toLowerCase();
-    const desc = (d.descriptionRaw[lang] || "").toLowerCase();
+  // Localising 440 dishes is the single most expensive thing this component does.
+  // Do it once per (dishes, lang) instead of on every keystroke and cart tap.
+  const localizedDishes = useMemo(
+    () => dishes.map(d => ({
+      ...d,
+      name: d.nameRaw[lang],
+      description: d.descriptionRaw[lang],
+      tasteDescription: d.tasteRaw[lang],
+      ingredients: d.ingredientsRaw[lang],
+    })),
+    [dishes, lang]
+  );
+
+  const filteredDishes = useMemo(() => {
     const sl = searchQuery.toLowerCase().trim();
-    const matchesSearch = !sl || name.includes(sl) || desc.includes(sl);
-    const matchesCategory = sl ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
-    return matchesSearch && matchesCategory;
-  }).map(d => ({ ...d, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }));
+    return localizedDishes.filter(d => {
+      const matchesSearch = !sl
+        || (d.name || "").toLowerCase().includes(sl)
+        || (d.description || "").toLowerCase().includes(sl);
+      const matchesCategory = sl ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
+      return matchesSearch && matchesCategory;
+    });
+  }, [localizedDishes, searchQuery, activeCategory]);
 
-  const getGuestFavorites = () => {
+  const guestFavorites = useMemo(() => {
     if (mostLovedRatings.length === 0) return [];
-    const byId = new Map(dishes.map(d => [String(d.id), d]));
-    return mostLovedRatings.map(r => { const d = byId.get(String(r.dishId)); if (!d) return null; return { ...d, averageRating: r.averageRating, ratingsCount: r.ratingsCount, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }; }).filter((d): d is any => Boolean(d));
-  };
-  const getChefSpecials = () => dishes.filter(d => d.isChefSpecial).map(d => ({ ...d, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }));
-  const getTodaysSpecials = () => dishes.filter(d => d.isTodaysSpecial).map(d => ({ ...d, name: d.nameRaw[lang], description: d.descriptionRaw[lang], tasteDescription: d.tasteRaw[lang], ingredients: d.ingredientsRaw[lang] }));
+    const byId = new Map(localizedDishes.map(d => [String(d.id), d]));
+    return mostLovedRatings
+      .map(r => {
+        const d = byId.get(String(r.dishId));
+        if (!d) return null;
+        return { ...d, averageRating: r.averageRating, ratingsCount: r.ratingsCount };
+      })
+      .filter((d): d is any => Boolean(d));
+  }, [localizedDishes, mostLovedRatings]);
 
-  const handleAddDishToCart = (dish: { id: string; name: string; price: number; image: string; category: string }) => {
+  const chefSpecials = useMemo(() => localizedDishes.filter(d => d.isChefSpecial), [localizedDishes]);
+  const todaysSpecials = useMemo(() => localizedDishes.filter(d => d.isTodaysSpecial), [localizedDishes]);
+
+  const handleAddDishToCart = useCallback((dish: AddToCartDish) => {
     setLastAddedCategory(dish.category);
 
     if (sharedSession) {
@@ -202,19 +349,26 @@ function MenuPageContent() {
         displayName: sharedSession.displayName,
         dish,
       }).catch(() => {});
-      void trackCartEvent(dish.id, dish.name, dish.category || "General", Number(dish.price) || 0).catch(() => {});
+      trackCartEventClient(dish.id, dish.name, dish.category || "General", Number(dish.price) || 0);
     } else {
       addItem(dish);
     }
-  };
+  }, [sharedSession, addItem]);
 
-  const cartIds = new Set(items.map(item => item.id));
-  const recommendationCategory = normalizeCategory(lastAddedCategory || items[items.length - 1]?.category);
-  const sameCategoryRecommendations = recommendationCategory
-    ? dishes.filter(d => isSameCategory(d.category, recommendationCategory)).filter(d => !cartIds.has(d.id))
+  const handleOpenDish = useCallback((dish: any) => {
+    router.push(`/dish/${dish.id}?from=${encodeURIComponent(dish.category || '')}`);
+  }, [router]);
+
+  const sameCategoryRecommendations = useMemo(() => {
+    const recommendationCategory = normalizeCategory(lastAddedCategory || items[items.length - 1]?.category);
+    if (!recommendationCategory) return [];
+    const cartIds = new Set(items.map(item => item.id));
+    return localizedDishes
+      .filter(d => isSameCategory(d.category, recommendationCategory) && !cartIds.has(d.id))
       .sort((a, b) => ((b.isGuestFavorite ? 3 : 0) + (b.isChefSpecial ? 2 : 0) + (b.isTrending ? 1 : 0)) - ((a.isGuestFavorite ? 3 : 0) + (a.isChefSpecial ? 2 : 0) + (a.isTrending ? 1 : 0)))
-      .slice(0, 4).map(d => ({ id: d.id, name: d.nameRaw?.[lang] || d.name || "", price: d.price, image: d.image, category: d.category }))
-    : [];
+      .slice(0, 4)
+      .map(d => ({ id: d.id, name: d.name || "", price: d.price, image: d.image, category: d.category }));
+  }, [localizedDishes, items, lastAddedCategory]);
 
   const scrollToCategory = (target: HTMLElement) => {
     const header = document.getElementById("sticky-header");
@@ -248,12 +402,15 @@ function MenuPageContent() {
     pendingScrollCategoryRef.current = null;
   }, [activeCategory, filteredDishes.length]);
 
-  const groupedDishes: Record<string, any[]> = {};
-  filteredDishes.forEach(dish => {
-    const canon = menuTabs.find(tab => isSameCategory(tab, dish.category)) || dish.category;
-    if (!groupedDishes[canon]) groupedDishes[canon] = [];
-    groupedDishes[canon].push(dish);
-  });
+  const groupedDishes = useMemo(() => {
+    const grouped: Record<string, any[]> = {};
+    filteredDishes.forEach(dish => {
+      const canon = menuTabs.find(tab => isSameCategory(tab, dish.category)) || dish.category;
+      if (!grouped[canon]) grouped[canon] = [];
+      grouped[canon].push(dish);
+    });
+    return grouped;
+  }, [filteredDishes, menuTabs]);
 
   const handleOrderConfirmed = (orderedItems: CartItem[]) => {
     const sanitized = orderedItems.filter(item => item?.id && item?.name);
@@ -278,111 +435,6 @@ function MenuPageContent() {
     finally { setIsSavingDishRatings(false); }
   };
 
-  /* ── Card Components ── */
-  const DishCard = ({ dish }: { dish: any }) => {
-    const isSpecial = dish.isChefSpecial;
-
-    return (
-      <article
-        onClick={() => router.push(`/dish/${dish.id}?from=${encodeURIComponent(dish.category || '')}`)}
-        className={`relative flex cursor-pointer items-center gap-4 rounded-2xl shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5 ${isSpecial
-          ? "p-4 -mx-3 my-3 animated-gradient-bg border border-[color:var(--brand-gold)]/50"
-          : "p-3 bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15"
-          }`}
-      >
-        {isSpecial && (
-          <div className="absolute -top-2.5 -left-2 bg-gradient-to-r from-[color:var(--brand-gold)] to-[#b37435] text-[color:var(--brand-bg-deep)] px-2.5 py-0.5 text-[9px] font-extrabold tracking-widest uppercase rounded shadow-[0_4px_10px_rgba(212,140,70,0.4)] border border-[color:var(--brand-gold)] z-10 flex items-center gap-1">
-            <ChefHat className="h-3 w-3" strokeWidth={2.5} /> Chef's Pick
-          </div>
-        )}
-        <div className="relative flex-1 min-w-0">
-          <h3 className={`font-serif leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 ${isSpecial ? "text-[17px]" : "text-[15px]"}`}>{dish.name}</h3>
-          {dish.tasteDescription && <p className={`mt-0.5 italic text-[color:var(--brand-gold-muted)] line-clamp-1 ${isSpecial ? "text-[13px]" : "text-[12px]"}`}>{dish.tasteDescription}</p>}
-          {dish.spiceLevel > 0 && (
-            <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>
-              {"🔥".repeat(dish.spiceLevel)} {dish.spiceLevel === 1 ? "Low" : dish.spiceLevel === 2 ? "Medium" : "High"}
-            </span>
-          )}
-          <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>₹{dish.price}</p>
-        </div>
-        <div className="relative flex shrink-0 flex-col items-center">
-          <div className={`relative overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
-            {dish.image ? (
-              <>
-                {(dish.image.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image.includes("/video/upload/")) ? (
-                  <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
-                ) : (
-                  <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-                )}
-                <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
-                  <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-                </div>
-              </>
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
-                <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleAddDishToCart({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category }); }}
-            className={`absolute -bottom-3 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ${isSpecial ? "px-4 py-1.5 text-[11px]" : "px-3 py-1 text-[10px]"}`}
-            aria-label={`Add ${dish.name} to cart`}
-          >
-            ADD <Plus className={`h-3 w-3 ${isSpecial ? "scale-110" : ""}`} strokeWidth={2.4} />
-          </button>
-        </div>
-      </article>
-    );
-  };
-
-  const ScrollCard = ({ dish, showRating = false }: { dish: any; showRating?: boolean }) => (
-    <article
-      onClick={() => router.push(`/dish/${dish.id}?from=${encodeURIComponent(dish.category || '')}`)}
-      className="flex w-[170px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-20px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
-    >
-      <div className="relative aspect-[4/3] w-full overflow-hidden">
-        {dish.image ? (
-          <>
-            {(dish.image.match(/\.(mp4|webm|ogg|mov|m4v)$/i) || dish.image.includes("/video/upload/")) ? (
-              <video src={dish.image} muted loop autoPlay className="h-full w-full object-cover" />
-            ) : (
-              <img src={dish.image} alt={dish.name} className="h-full w-full object-cover transition duration-300 hover:scale-105"
-                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-            )}
-            <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
-              <span className="text-[12px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-            </div>
-          </>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
-            <span className="text-[12px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-          </div>
-        )}
-      </div>
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <h3 className="font-serif text-[14px] leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 min-h-[2.4em]">{dish.name}</h3>
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-serif text-[15px] text-[color:var(--brand-gold)]">₹{dish.price}</p>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleAddDishToCart({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category }); }}
-            className="inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] px-2.5 py-1 text-[10px] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)]"
-            aria-label={`Add ${dish.name} to cart`}
-          >
-            ADD <Plus className="h-3 w-3" strokeWidth={2.4} />
-          </button>
-        </div>
-        {showRating && Number.isFinite(Number(dish.averageRating)) && (
-          <div className="inline-flex w-fit items-center gap-1 rounded-full border border-[color:var(--brand-gold)]/30 px-2 py-0.5">
-            <Star className="h-3 w-3 fill-[color:var(--brand-gold)] text-[color:var(--brand-gold)]" />
-            <span className="text-[10px] font-semibold text-[color:var(--brand-gold)]">{Number(dish.averageRating).toFixed(1)}</span>
-            <span className="text-[9px] tracking-wider text-[color:var(--brand-gold-muted)]">· {Number(dish.ratingsCount) || 0} RATINGS</span>
-          </div>
-        )}
-      </div>
-    </article>
-  );
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -517,7 +569,7 @@ function MenuPageContent() {
         {/* ── Discovery sections (All + no search + no spice filter) ── */}
         {activeCategory === "All" && !searchQuery && (
           <>
-            {getTodaysSpecials().length > 0 && (
+            {todaysSpecials.length > 0 && (
               <section className="mt-6">
                 <div
                   onClick={() => router.push("/todays-special")}
@@ -532,11 +584,11 @@ function MenuPageContent() {
                   </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {getTodaysSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
+                  {todaysSpecials.map(dish => <ScrollCard key={dish.id} dish={dish} onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
                 </div>
               </section>
             )}
-            {getChefSpecials().length > 0 && (
+            {chefSpecials.length > 0 && (
               <section className="mt-6">
                 <div
                   onClick={() => router.push("/chefs-favourites")}
@@ -551,11 +603,11 @@ function MenuPageContent() {
                   </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {getChefSpecials().map(dish => <ScrollCard key={dish.id} dish={dish} />)}
+                  {chefSpecials.map(dish => <ScrollCard key={dish.id} dish={dish} onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
                 </div>
               </section>
             )}
-            {getGuestFavorites().length > 0 && (
+            {guestFavorites.length > 0 && (
               <section className="mt-6">
                 <div
                   onClick={() => router.push("/most-loved")}
@@ -570,7 +622,7 @@ function MenuPageContent() {
                   </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {getGuestFavorites().map(dish => <ScrollCard key={dish.id} dish={dish} showRating />)}
+                  {guestFavorites.map(dish => <ScrollCard key={dish.id} dish={dish} showRating onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
                 </div>
               </section>
             )}
@@ -588,7 +640,7 @@ function MenuPageContent() {
                 <div key={tab.label} className="mb-8" id={getCategorySectionId(tab.categoryValue)}>
                   <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] mb-4">{tab.categoryValue}</h2>
                   <div className="space-y-4">
-                    {preview.map(dish => <DishCard key={dish.id} dish={dish} />)}
+                    {preview.map(dish => <DishCard key={dish.id} dish={dish} onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
                   </div>
                   {catDishes.length > PREVIEW_LIMIT && (
                     <button onClick={() => handleCategoryChange(tab.categoryValue)}
@@ -606,7 +658,7 @@ function MenuPageContent() {
                 <div key={cat} className="mb-8" id={getCategorySectionId(cat)}>
                   <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] mb-4">{cat}</h2>
                   <div className="space-y-4">
-                    {catDishes.map(dish => <DishCard key={dish.id} dish={dish} />)}
+                    {catDishes.map((dish: any) => <DishCard key={dish.id} dish={dish} onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
                   </div>
                 </div>
               );

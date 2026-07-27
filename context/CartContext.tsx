@@ -1,7 +1,8 @@
    "use client";
 
-import React, { createContext, useContext, useState, useCallback } from "react";
-import { trackCartEvent } from "@/lib/database";
+import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
+import { trackCartEventClient } from "@/lib/client-analytics";
+import { playChime } from "@/lib/media";
 
 export interface CartItem {
   id: string;
@@ -26,39 +27,6 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const playCartSound = () => {
-  try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    
-    const playNote = (freq: number, startTime: number) => {
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      
-      // Soft attack, elegant ringing decay
-      gainNode.gain.setValueAtTime(0, startTime);
-      gainNode.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0);
-      
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
-      osc.start(startTime);
-      osc.stop(startTime + 1.0);
-    };
-
-    // Play a pleasant, luxurious two-tone chime (C6 then E6)
-    playNote(1046.50, ctx.currentTime);
-    playNote(1318.51, ctx.currentTime + 0.1);
-  } catch (e) {
-    // Ignore if audio fails or is blocked by browser policies
-  }
-};
-
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
@@ -69,20 +37,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback(
     (dish: { id: string; name: string; price: number; image: string; category: string }) => {
-      // Play a satisfying pop sound
-      if (typeof window !== "undefined") {
-        playCartSound();
-      }
-
-      void trackCartEvent(
-        dish.id,
-        dish.name,
-        dish.category || "General",
-        Number(dish.price) || 0
-      ).catch(() => {
-        // Preserve cart behavior even if analytics tracking fails.
-      });
-
+      // Update cart state first so the badge/drawer react immediately; the chime
+      // and the analytics write are both side effects the guest must never wait on.
       setItems((prevItems) => {
         const existingItem = prevItems.find((item) => item.id === dish.id);
         if (existingItem) {
@@ -98,6 +54,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           },
         ];
       });
+
+      playChime();
+      trackCartEventClient(
+        dish.id,
+        dish.name,
+        dish.category || "General",
+        Number(dish.price) || 0
+      );
     },
     []
   );
@@ -120,27 +84,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems([]);
   }, []);
 
-  const validItems = items.filter(item => item.quantity >= 1);
-  const totalItems = validItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = validItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const { totalItems, totalPrice } = useMemo(() => {
+    const validItems = items.filter((item) => item.quantity >= 1);
+    return {
+      totalItems: validItems.reduce((sum, item) => sum + item.quantity, 0),
+      totalPrice: validItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    };
+  }, [items]);
 
-  return (
-    <CartContext.Provider
-      value={{
-        items,
-        addItem,
-        removeItem,
-        updateQuantity,
-        clearCart,
-        totalItems,
-        totalPrice,
-        activeSessionId,
-        setActiveSessionId,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
+  // Memoised so consumers (the whole menu tree) don't re-render on unrelated
+  // parent updates just because this object was rebuilt.
+  const value = useMemo(
+    () => ({
+      items,
+      addItem,
+      removeItem,
+      updateQuantity,
+      clearCart,
+      totalItems,
+      totalPrice,
+      activeSessionId,
+      setActiveSessionId,
+    }),
+    [items, addItem, removeItem, updateQuantity, clearCart, totalItems, totalPrice, activeSessionId, setActiveSessionId]
   );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export function useCart() {
