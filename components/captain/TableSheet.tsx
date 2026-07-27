@@ -44,6 +44,10 @@ export function TableSheet({
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
 
   const approvedRounds = table.rounds.filter(r => r.status !== "pending_approval").length
+  // Mirrors isServing() in the captain page. Kept local rather than imported:
+  // this component is imported *by* that page, so pulling a value back out of
+  // it would make the two modules circular at runtime.
+  const serving = table.status === "active" || table.status === "bill_generated"
   // Bill edits (qty / remove) are only allowed before the bill is printed
   const canEditItems = table.status === "active"
 
@@ -283,7 +287,8 @@ export function TableSheet({
             </button>
           )}
 
-          {table.status !== "open" && (
+          {/* Nothing to carry across on a scanned or awaiting-approval table. */}
+          {serving && (
             <button
               onClick={onRequestMove}
               disabled={actionLoading}

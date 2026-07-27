@@ -33,7 +33,11 @@ export type CaptainRound = {
 export type CaptainTable = {
   tableId: string
   tableNumber: number
-  status: "open" | "active" | "bill_generated"
+  // "scanned" and "engaged" are both pre-service states. Keeping them apart from
+  // "open" is what makes an abandoned scan visible: a passer-by who scans and
+  // walks off leaves a session holding the table's PIN, and without its own
+  // label that table is indistinguishable from a genuinely free one.
+  status: "open" | "scanned" | "engaged" | "active" | "bill_generated"
   sessionId?: string
   hostName?: string
   openedAt?: string
@@ -63,6 +67,16 @@ function timeIST(iso: string) {
 function elapsed(openedAt: string) {
   const mins = Math.floor((Date.now() - new Date(openedAt).getTime()) / 60000)
   return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`
+}
+
+/**
+ * True once the table has an approved order — i.e. it is really being served.
+ * Billing, settling and moving all key off this: none of them mean anything on
+ * a table that has only been scanned, or whose single order is still awaiting
+ * approval and could yet be rejected.
+ */
+export function isServing(status: CaptainTable["status"]) {
+  return status === "active" || status === "bill_generated"
 }
 
 export function buildCaptainTable(t: RawTableRow): CaptainTable {
@@ -99,32 +113,32 @@ export function buildCaptainTable(t: RawTableRow): CaptainTable {
     nonRejected.find(o => o.customers?.name)?.customers?.name ||
     null
 
-  // A scanned QR opens a session immediately, but the table only counts as
-  // occupied once its first order is approved (or a bill exists). Keep the
-  // session's rounds + pendingCount so the approval strip and badge still show.
+  // A scanned QR opens a session immediately, so "a session exists" is not the
+  // same as "guests are being served". Split the three pre-bill states:
+  //   scanned — session open, nothing ordered at all
+  //   engaged — an order exists but is still waiting in the approval queue
+  //   active  — an order has been approved and is with the kitchen
   const hasApprovedOrder = nonRejected.some(o => o.status === "approved" || o.status === "served")
-  if (!hasApprovedOrder && session.status !== "bill_generated") {
-    return {
-      tableId: t.id,
-      tableNumber: t.table_number,
-      status: "open",
-      sessionId: session.id,
-      runningTotal: 0,
-      roundCount: 0,
-      pendingCount,
-      rounds,
-    }
-  }
+  const status: CaptainTable["status"] =
+    session.status === "bill_generated" ? "bill_generated"
+      : hasApprovedOrder ? "active"
+      : nonRejected.length > 0 ? "engaged"
+      : "scanned"
+
+  // Revenue stays at zero until an order is approved — an engaged table's order
+  // can still be rejected, so it must not count towards the running total.
+  // rounds + pendingCount are kept regardless so the sheet and badge still show.
+  const preService = status === "scanned" || status === "engaged"
 
   return {
     tableId: t.id,
     tableNumber: t.table_number,
-    status: session.status as "active" | "bill_generated",
+    status,
     sessionId: session.id,
     hostName: hostName ?? undefined,
     openedAt: session.opened_at,
-    runningTotal,
-    roundCount: rounds.length,
+    runningTotal: preService ? 0 : runningTotal,
+    roundCount: preService ? 0 : rounds.length,
     pendingCount,
     rounds,
   }
@@ -132,6 +146,8 @@ export function buildCaptainTable(t: RawTableRow): CaptainTable {
 
 const STATUS = {
   open:           { label: "Empty",          dot: "bg-[#8A7A66]", card: "border-[#4A3623] bg-[#241710]",                                          text: "text-[#A08D75]" },
+  scanned:        { label: "Scanned",        dot: "bg-[#C9873A]", card: "border-[#8A5A2B] bg-[#2A1B10]",                                          text: "text-[#D8A76A]" },
+  engaged:        { label: "Engaged",        dot: "bg-[#C0392B]", card: "border-[#E8B4AC] bg-[linear-gradient(145deg,#FFF6F3_0%,#FBE4DE_100%)]",  text: "text-[#96271B]" },
   active:         { label: "Active",         dot: "bg-[#4CAF6E]", card: "border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)]",  text: "text-[#1B5E2E]" },
   bill_generated: { label: "Billed",         dot: "bg-[#E8A33C]", card: "border-[#F0C896] bg-[linear-gradient(145deg,#FFFBF4_0%,#FEF0D8_100%)]",  text: "text-[#8B4513]" },
 } satisfies Record<CaptainTable["status"], { label: string; dot: string; card: string; text: string }>
@@ -238,7 +254,11 @@ export default function CaptainTablesPage() {
     router.push("/captain")
   }
 
-  const occupiedCount = tables.filter(t => t.status !== "open").length
+  // A scanned-but-unordered table is not occupied — counting it would inflate
+  // the header every time someone scans a QR and walks away.
+  const occupiedCount = tables.filter(
+    t => t.status === "engaged" || t.status === "active" || t.status === "bill_generated"
+  ).length
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#241610_0%,#1A100A_60%,#140C08_100%)] pb-24">
@@ -354,7 +374,13 @@ export default function CaptainTablesPage() {
                   )}
 
                   <div className="mb-2 flex items-center justify-between">
-                    <span className={`text-2xl font-bold ${table.status === "open" ? "text-[#8A7A66]" : "text-[#2C1810]"}`}>
+                    <span
+                      className={`text-2xl font-bold ${
+                        table.status === "open" ? "text-[#8A7A66]"
+                          : table.status === "scanned" ? "text-[#D8A76A]"
+                          : "text-[#2C1810]"
+                      }`}
+                    >
                       {table.tableNumber}
                     </span>
                     <span className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide ${s.text}`}>
@@ -363,7 +389,19 @@ export default function CaptainTablesPage() {
                     </span>
                   </div>
 
-                  {table.status !== "open" ? (
+                  {table.status === "open" ? (
+                    <p className="text-xs text-[#6B5B4A]">Tap when guests sit</p>
+                  ) : table.status === "scanned" ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-[#C39A6B]">Menu open · no order yet</p>
+                      {table.openedAt && (
+                        <div className="flex items-center gap-1 text-xs text-[#A98D6B]">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          {elapsed(table.openedAt)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
                     <div className="space-y-1">
                       {table.hostName && (
                         <div className="flex items-center gap-1 text-xs text-[#6B5744]">
@@ -390,8 +428,6 @@ export default function CaptainTablesPage() {
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <p className="text-xs text-[#6B5B4A]">Tap when guests sit</p>
                   )}
                 </button>
               )
@@ -412,7 +448,7 @@ export default function CaptainTablesPage() {
       )}
 
       {/* ── Settle popup ────────────────────────────────────────────────── */}
-      {selectedTable && selectedTable.status !== "open" && settleOpen && (
+      {selectedTable && isServing(selectedTable.status) && settleOpen && (
         <SettleModal
           table={selectedTable}
           onClose={() => setSettleOpen(false)}
@@ -425,7 +461,7 @@ export default function CaptainTablesPage() {
       )}
 
       {/* ── Move table modal ────────────────────────────────────────────── */}
-      {selectedTable && selectedTable.status !== "open" && moveOpen && (
+      {selectedTable && isServing(selectedTable.status) && moveOpen && (
         <MoveTableModal
           table={selectedTable}
           allTables={tables}
