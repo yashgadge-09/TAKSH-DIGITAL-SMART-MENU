@@ -48,9 +48,12 @@ export function TableSheet({
   const [billStale, setBillStale] = useState(false)
 
   const approvedRounds = table.rounds.filter(r => r.status !== "pending_approval").length
+  // Mirrors isServing() in the captain page. Kept local rather than imported:
+  // this component is imported *by* that page, so pulling a value back out of
+  // it would make the two modules circular at runtime.
+  const serving = table.status === "active" || table.status === "bill_generated"
   // Qty edits + Add Item only in Edit Bill mode (active or billed tables)
-  const canEditItems =
-    editingBill && (table.status === "active" || table.status === "bill_generated")
+  const canEditItems = editingBill && serving
 
   async function handleQuantityChange(itemId: string, itemName: string, newQty: number) {
     if (newQty === 0 && !confirm(`Remove "${itemName}" from the order?`)) return
@@ -355,7 +358,8 @@ export function TableSheet({
             </>
           )}
 
-          {table.status !== "open" && (
+          {/* Nothing to carry across on a scanned or awaiting-approval table. */}
+          {serving && (
             <button
               onClick={onRequestMove}
               disabled={actionLoading}

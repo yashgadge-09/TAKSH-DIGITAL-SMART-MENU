@@ -29,7 +29,10 @@ type RoundRow = {
 type TableCard = {
   tableId: string
   tableNumber: number
-  status: "open" | "active" | "bill_generated"
+  // "scanned" = QR opened, nothing ordered; "engaged" = an order is waiting in
+  // the queue above. Both used to collapse into "open", which hid an abandoned
+  // scan behind the same "Available" card as a genuinely free table.
+  status: "open" | "scanned" | "engaged" | "active" | "bill_generated"
   sessionId?: string
   hostName?: string
   openedAt?: string
@@ -65,14 +68,33 @@ function buildCard(t: RawTableRow): TableCard {
     return { tableId: t.id, tableNumber: t.table_number, status: "open", runningTotal: 0, roundCount: 0, rounds: [] }
   }
 
-  // A scanned QR opens a session immediately, but the table only counts as
-  // occupied once its first order is approved (or a bill exists).
-  const hasApprovedOrder = session.orders.some(o => o.status === "approved" || o.status === "served")
-  if (!hasApprovedOrder && session.status !== "bill_generated") {
-    return { tableId: t.id, tableNumber: t.table_number, status: "open", runningTotal: 0, roundCount: 0, rounds: [] }
-  }
-
   const nonRejected = session.orders.filter(o => o.status !== "rejected")
+
+  // A scanned QR opens a session immediately, so a session existing does not
+  // mean the table is being served. Separate the pre-service states:
+  //   scanned — session open, nothing ordered at all
+  //   engaged — an order exists but is still awaiting approval
+  const hasApprovedOrder = nonRejected.some(o => o.status === "approved" || o.status === "served")
+  const status: TableCard["status"] =
+    session.status === "bill_generated" ? "bill_generated"
+      : hasApprovedOrder ? "active"
+      : nonRejected.length > 0 ? "engaged"
+      : "scanned"
+
+  // Neither pre-service state has billable rounds yet — an engaged table's order
+  // can still be rejected — so both report zero, as they did when they were "open".
+  if (status === "scanned" || status === "engaged") {
+    return {
+      tableId: t.id,
+      tableNumber: t.table_number,
+      status,
+      sessionId: session.id,
+      openedAt: session.opened_at,
+      runningTotal: 0,
+      roundCount: 0,
+      rounds: [],
+    }
+  }
 
   const roundMap = new Map<number, RoundRow>()
   for (const ord of nonRejected) {
@@ -100,7 +122,7 @@ function buildCard(t: RawTableRow): TableCard {
   return {
     tableId: t.id,
     tableNumber: t.table_number,
-    status: session.status as "active" | "bill_generated",
+    status,
     sessionId: session.id,
     hostName: hostName ?? undefined,
     openedAt: session.opened_at,
@@ -114,6 +136,8 @@ function buildCard(t: RawTableRow): TableCard {
 
 const STATUS = {
   open:           { label: "Open",           dot: "bg-[#B0A090]", card: "border-[#D4C4B4] bg-[#F9F5F0]",                                         text: "text-[#6B5744]" },
+  scanned:        { label: "Scanned",        dot: "bg-[#C47A20]", card: "border-[#E0C09A] bg-[#FFF6E9]",                                        text: "text-[#8B5A1B]" },
+  engaged:        { label: "Engaged",        dot: "bg-[#C0392B]", card: "border-[#E8B4AC] bg-[linear-gradient(145deg,#FFF6F3_0%,#FBE4DE_100%)]", text: "text-[#96271B]" },
   active:         { label: "Active",         dot: "bg-[#2A6B3A]", card: "border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)]",  text: "text-[#1B5E2E]" },
   bill_generated: { label: "Bill Requested", dot: "bg-[#C47A20]", card: "border-[#F0C896] bg-[linear-gradient(145deg,#FFFBF4_0%,#FEF0D8_100%)]", text: "text-[#8B4513]" },
 } satisfies Record<TableCard["status"], { label: string; dot: string; card: string; text: string }>
@@ -379,7 +403,19 @@ export default function IncomingOrdersPage() {
                     </span>
                   </div>
 
-                  {card.status !== "open" ? (
+                  {card.status === "open" ? (
+                    <p className="text-xs text-[#A89080]">Available</p>
+                  ) : card.status === "scanned" ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-[#8B5A1B]">Menu open · no order yet</p>
+                      {card.openedAt && (
+                        <div className="flex items-center gap-1 text-xs text-[#A07740]">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          {elapsed(card.openedAt)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
                     <div className="space-y-1">
                       {card.hostName && (
                         <div className="flex items-center gap-1 text-xs text-[#6B5744]">
@@ -406,8 +442,6 @@ export default function IncomingOrdersPage() {
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <p className="text-xs text-[#A89080]">Available</p>
                   )}
                 </button>
               )
@@ -490,7 +524,10 @@ export default function IncomingOrdersPage() {
             </div>
 
             <div className="shrink-0 border-t border-[#E8D5BC] bg-[#FFF8EE] px-6 py-5 space-y-3">
-              {selectedCard.status !== "open" && (
+              {/* Scanned and engaged tables have no approved rounds, so a
+                  running total there would always read ₹0 — misleading next to
+                  an order that is still sitting in the approval queue. */}
+              {(selectedCard.status === "active" || selectedCard.status === "bill_generated") && (
                 <div className="flex items-center justify-between rounded-xl bg-[#F7E6D2] px-4 py-3">
                   <span className="text-sm font-semibold text-[#6B5744]">Running Total</span>
                   <span className="text-lg font-bold text-[#2C1810]">
