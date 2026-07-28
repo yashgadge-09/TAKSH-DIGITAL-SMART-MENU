@@ -386,7 +386,7 @@ export function TableSheet({
       {addItemOpen && table.sessionId && (
         <AddItemModal
           sessionId={table.sessionId}
-          tableNumber={table.tableNumber}
+          label={`Table ${table.tableNumber}`}
           onClose={() => setAddItemOpen(false)}
           onAdded={() => {
             setAddItemOpen(false)

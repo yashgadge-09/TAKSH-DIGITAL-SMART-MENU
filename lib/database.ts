@@ -1473,6 +1473,50 @@ function formatTimeIST(value: string | Date): string {
   return `${hh}:${mm}`
 }
 
+export type SessionPrintContext = {
+  restaurantId: string
+  tableNumber: number | null
+  orderType: 'dine_in' | 'parcel'
+  tokenNumber: number | null
+  customerName: string | null
+}
+
+/**
+ * Everything a KOT header needs, for dine-in and parcel sessions alike.
+ * A parcel session has no table_id — it is identified by its daily token
+ * number — so the restaurant_tables lookup is skipped rather than throwing.
+ */
+async function getSessionPrintContext(sessionId: string): Promise<SessionPrintContext> {
+  const { data: session, error } = await adminSupabase
+    .from('table_sessions')
+    .select('restaurant_id, table_id, session_type, token_number, host_name')
+    .eq('id', sessionId)
+    .single()
+  if (error || !session) throw new Error('Session not found')
+
+  let tableNumber: number | null = null
+  if (session.table_id) {
+    const { data: table, error: tableError } = await adminSupabase
+      .from('restaurant_tables')
+      .select('table_number')
+      .eq('id', session.table_id)
+      .single()
+    if (tableError || !table) throw new Error('Table not found')
+    tableNumber = table.table_number
+  }
+
+  const orderType = session.session_type === 'parcel' ? 'parcel' : 'dine_in'
+  return {
+    restaurantId: session.restaurant_id,
+    tableNumber,
+    orderType,
+    tokenNumber: session.token_number ?? null,
+    // Only parcels carry a name on the KOT — it is how the counter calls the
+    // order out. Dine-in KOTs stay exactly as the kitchen already knows them.
+    customerName: orderType === 'parcel' ? (session.host_name ?? null) : null,
+  }
+}
+
 export async function approveOrder(
   orderId: string
 ): Promise<{ orderId: string; status: 'approved' }> {
@@ -1494,20 +1538,8 @@ export async function approveOrder(
     throw new Error(`Cannot approve order in status '${order.status}'`)
   }
 
-  // Resolve restaurant_id + table_number via session → table
-  const { data: session, error: sessionError } = await adminSupabase
-    .from('table_sessions')
-    .select('restaurant_id, table_id')
-    .eq('id', order.session_id)
-    .single()
-  if (sessionError || !session) throw new Error('Session not found')
-
-  const { data: table, error: tableError } = await adminSupabase
-    .from('restaurant_tables')
-    .select('table_number')
-    .eq('id', session.table_id)
-    .single()
-  if (tableError || !table) throw new Error('Table not found')
+  // Resolve restaurant_id + table number (or parcel token) for the KOT header
+  const ctx = await getSessionPrintContext(order.session_id)
 
   // Load items for the KOT payload
   const { data: items, error: itemsError } = await adminSupabase
@@ -1525,11 +1557,14 @@ export async function approveOrder(
 
   // approveOrder is the ONLY creator of a KOT print job
   const { error: printError } = await adminSupabase.from('print_jobs').insert({
-    restaurant_id: session.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     type: 'kot',
     status: 'pending',
     payload: {
-      tableNumber: table.table_number,
+      tableNumber: ctx.tableNumber,
+      orderType: ctx.orderType,
+      tokenNumber: ctx.tokenNumber,
+      customerName: ctx.customerName,
       roundNumber: order.round_number,
       time: formatTimeIST(order.placed_at),
       items: items.map((i) => ({ name: i.name, qty: i.quantity })),
@@ -1729,6 +1764,8 @@ type BillPayload = {
   gstin: string
   upiId: string
   tableNumber: number | null
+  orderType: 'dine_in' | 'parcel'
+  tokenNumber: number | null
   customerName: string
   rounds: { number: number; time: string; items: { name: string; qty: number; price: number }[] }[]
   subtotal: number
@@ -1737,12 +1774,18 @@ type BillPayload = {
   total: number
 }
 
+// Columns generateBill / reprintBill must select for computeBillForSession.
+const BILL_SESSION_COLUMNS = 'id, status, restaurant_id, table_id, session_type, token_number, host_name'
+
 // Shared by generateBill (first print) and reprintBill (after captain edits):
 // aggregates the session's non-rejected rounds into the print-bridge payload.
 async function computeBillForSession(session: {
   id: string
   restaurant_id: string
-  table_id: string
+  table_id: string | null
+  session_type?: string | null
+  token_number?: number | null
+  host_name?: string | null
 }): Promise<{ payload: BillPayload; subtotal: number; gstAmount: number; total: number }> {
   const sessionId = session.id
 
@@ -1795,7 +1838,9 @@ async function computeBillForSession(session: {
   const gstAmount = Math.round(subtotal * gstRate) / 100
   const total = subtotal + gstAmount
 
-  // Customer name = most recent order's customer
+  // Customer name = most recent order's customer. Parcel rounds are punched by
+  // the captain and carry no customer row, so fall back to the name captured
+  // when the parcel was opened.
   const latestOrder = [...orders].sort(
     (a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime()
   )[0]
@@ -1808,6 +1853,7 @@ async function computeBillForSession(session: {
       .maybeSingle()
     customerName = customer?.name ?? ''
   }
+  if (!customerName) customerName = session.host_name ?? ''
 
   const { data: restaurant } = await adminSupabase
     .from('restaurants')
@@ -1815,11 +1861,16 @@ async function computeBillForSession(session: {
     .eq('id', session.restaurant_id)
     .maybeSingle()
 
-  const { data: table } = await adminSupabase
-    .from('restaurant_tables')
-    .select('table_number')
-    .eq('id', session.table_id)
-    .maybeSingle()
+  // Parcel sessions have no table — the token number identifies them instead.
+  let tableNumber: number | null = null
+  if (session.table_id) {
+    const { data: table } = await adminSupabase
+      .from('restaurant_tables')
+      .select('table_number')
+      .eq('id', session.table_id)
+      .maybeSingle()
+    tableNumber = table?.table_number ?? null
+  }
 
   return {
     payload: {
@@ -1827,7 +1878,9 @@ async function computeBillForSession(session: {
       address: restaurant?.address ?? '',
       gstin: restaurant?.gstin ?? '',
       upiId: restaurant?.upi_id ?? '',
-      tableNumber: table?.table_number ?? null,
+      tableNumber,
+      orderType: session.session_type === 'parcel' ? 'parcel' : 'dine_in',
+      tokenNumber: session.token_number ?? null,
       customerName,
       rounds,
       subtotal,
@@ -1851,9 +1904,17 @@ export async function generateBill({
   // Load session + restaurant + table for the bill header
   const { data: session, error: sessionError } = await adminSupabase
     .from('table_sessions')
-    .select('id, status, restaurant_id, table_id')
+    .select(BILL_SESSION_COLUMNS)
     .eq('id', sessionId)
-    .single()
+    .single<{
+      id: string
+      status: string
+      restaurant_id: string
+      table_id: string | null
+      session_type: string | null
+      token_number: number | null
+      host_name: string | null
+    }>()
   if (sessionError || !session) throw new Error('Session not found')
   if (session.status === 'closed') throw new Error('Session is closed')
 
@@ -1916,9 +1977,17 @@ export async function reprintBill({
 
   const { data: session, error: sessionError } = await adminSupabase
     .from('table_sessions')
-    .select('id, status, restaurant_id, table_id')
+    .select(BILL_SESSION_COLUMNS)
     .eq('id', sessionId)
-    .single()
+    .single<{
+      id: string
+      status: string
+      restaurant_id: string
+      table_id: string | null
+      session_type: string | null
+      token_number: number | null
+      host_name: string | null
+    }>()
   if (sessionError || !session) throw new Error('Session not found')
   if (session.status === 'closed') throw new Error('Session is closed — cannot reprint bill')
 
@@ -2048,11 +2117,12 @@ export async function moveTableSession({
 
   const { data: session, error: sessionError } = await adminSupabase
     .from('table_sessions')
-    .select('id, status, restaurant_id, table_id')
+    .select('id, status, restaurant_id, table_id, session_type')
     .eq('id', sessionId)
     .single()
   if (sessionError || !session) throw new Error('Session not found')
   if (session.status === 'closed') throw new Error('Cannot move a closed session')
+  if (session.session_type === 'parcel') throw new Error('A parcel order has no table to move')
   if (session.table_id === targetTableId) throw new Error('Session is already on that table')
 
   const { data: target, error: targetError } = await adminSupabase
@@ -2102,18 +2172,7 @@ export async function reprintKot(orderId: string): Promise<void> {
     throw new Error('Only approved orders can be reprinted')
   }
 
-  const { data: session } = await adminSupabase
-    .from('table_sessions')
-    .select('restaurant_id, table_id')
-    .eq('id', order.session_id)
-    .single()
-  if (!session) throw new Error('Session not found')
-
-  const { data: table } = await adminSupabase
-    .from('restaurant_tables')
-    .select('table_number')
-    .eq('id', session.table_id)
-    .single()
+  const ctx = await getSessionPrintContext(order.session_id)
 
   const { data: items } = await adminSupabase
     .from('order_items')
@@ -2122,11 +2181,14 @@ export async function reprintKot(orderId: string): Promise<void> {
   if (!items?.length) throw new Error('Order has no items')
 
   const { error: printError } = await adminSupabase.from('print_jobs').insert({
-    restaurant_id: session.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     type: 'kot',
     status: 'pending',
     payload: {
-      tableNumber: table?.table_number ?? null,
+      tableNumber: ctx.tableNumber,
+      orderType: ctx.orderType,
+      tokenNumber: ctx.tokenNumber,
+      customerName: ctx.customerName,
       roundNumber: order.round_number,
       time: formatTimeIST(order.placed_at),
       items: items.map((i) => ({ name: i.name, qty: i.quantity })),
@@ -2202,6 +2264,8 @@ export async function addItemsToSession({
   sessionId: string
   items: { dishId: string; quantity: number }[]
 }): Promise<{ orderId: string; roundNumber: number }> {
+  // Creates an ALREADY-APPROVED round and fires a KOT — staff only.
+  await requireStaff()
   if (!sessionId || !items?.length) throw new Error('sessionId and items are required')
   for (const item of items) {
     if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
@@ -2267,18 +2331,17 @@ export async function addItemsToSession({
   }
 
   // Kitchen must still cook captain-added items — queue the KOT
-  const { data: table } = await adminSupabase
-    .from('restaurant_tables')
-    .select('table_number')
-    .eq('id', session.table_id)
-    .maybeSingle()
+  const ctx = await getSessionPrintContext(sessionId)
 
   const { error: printError } = await adminSupabase.from('print_jobs').insert({
-    restaurant_id: session.restaurant_id,
+    restaurant_id: ctx.restaurantId,
     type: 'kot',
     status: 'pending',
     payload: {
-      tableNumber: table?.table_number ?? null,
+      tableNumber: ctx.tableNumber,
+      orderType: ctx.orderType,
+      tokenNumber: ctx.tokenNumber,
+      customerName: ctx.customerName,
       roundNumber,
       time: formatTimeIST(order.placed_at),
       items: validatedItems.map((i) => ({ name: i.name, qty: i.quantity })),
@@ -2287,6 +2350,134 @@ export async function addItemsToSession({
   if (printError) throw new Error('Items added but failed to queue KOT print job')
 
   return { orderId: order.id, roundNumber }
+}
+
+// ── Parcel / takeaway (P01) ─────────────────────────────────────────────────
+
+export type RawParcelRow = {
+  id: string
+  status: string
+  opened_at: string
+  host_name: string | null
+  token_number: number | null
+  orders: {
+    id: string
+    round_number: number
+    placed_at: string
+    status: string
+    customers: { name: string } | null
+    order_items: { id: string; name: string; quantity: number; price: number }[]
+  }[]
+}
+
+/**
+ * Opens a takeaway order: a session with no table, identified by a token
+ * number that resets every IST day. The captain then punches items into it
+ * with addItemsToSession exactly as they would for a table.
+ */
+export async function createParcelSession({
+  restaurantId,
+  customerName,
+}: {
+  restaurantId: string
+  customerName?: string
+}): Promise<{ sessionId: string; tokenNumber: number }> {
+  await requireStaff()
+  if (!restaurantId) throw new Error('restaurantId is required')
+
+  const name = customerName?.trim().slice(0, 60) || null
+
+  // Atomic per-day counter — two captains tapping at once can never be handed
+  // the same token.
+  const { data: token, error: tokenError } = await adminSupabase.rpc('next_parcel_token', {
+    p_restaurant_id: restaurantId,
+  })
+  // Surface the underlying cause — a bare "failed" message hides the two
+  // things that actually go wrong here: a missing migration and a missing
+  // EXECUTE grant for service_role.
+  if (tokenError) {
+    throw new Error(`Failed to allocate a parcel token: ${tokenError.message}`)
+  }
+  if (typeof token !== 'number') {
+    throw new Error('Failed to allocate a parcel token: RPC returned no token')
+  }
+
+  const { data: session, error } = await adminSupabase
+    .from('table_sessions')
+    .insert({
+      restaurant_id: restaurantId,
+      table_id: null,
+      session_type: 'parcel',
+      token_number: token,
+      status: 'active',
+      // table_sessions.pin is NOT NULL, but no guest device ever joins a
+      // parcel. A non-numeric placeholder can never match the 4-digit PIN
+      // entry, so this session is unjoinable by construction.
+      pin: '----',
+      host_name: name,
+    })
+    .select('id')
+    .single()
+  if (error || !session) throw new Error('Failed to open parcel order')
+
+  return { sessionId: session.id, tokenNumber: token }
+}
+
+/** Live takeaway orders for the captain panel — never returns closed ones. */
+export async function getParcelSessions(restaurantId: string): Promise<RawParcelRow[]> {
+  await requireStaff()
+  if (!restaurantId) throw new Error('restaurantId is required')
+
+  const { data, error } = await adminSupabase
+    .from('table_sessions')
+    .select(`
+      id, status, opened_at, host_name, token_number,
+      orders(
+        id, round_number, placed_at, status,
+        customers(name),
+        order_items(id, name, quantity, price)
+      )
+    `)
+    .eq('restaurant_id', restaurantId)
+    .eq('session_type', 'parcel')
+    .in('status', ['active', 'bill_generated'])
+    .order('opened_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data as unknown as RawParcelRow[]) ?? []
+}
+
+/**
+ * Discards a parcel the customer walked away from. Refuses once payment has
+ * been taken — a settled parcel is already closed and belongs to the day's
+ * report.
+ */
+export async function cancelParcelSession(sessionId: string): Promise<void> {
+  await requireStaff()
+  if (!sessionId) throw new Error('sessionId is required')
+
+  const { data: session, error } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, session_type')
+    .eq('id', sessionId)
+    .single()
+  if (error || !session) throw new Error('Parcel not found')
+  if (session.session_type !== 'parcel') throw new Error('Not a parcel order')
+  if (session.status === 'closed') throw new Error('This parcel is already closed')
+
+  const { data: bill } = await adminSupabase
+    .from('bills')
+    .select('settled_at')
+    .eq('session_id', sessionId)
+    .not('settled_at', 'is', null)
+    .limit(1)
+    .maybeSingle()
+  if (bill) throw new Error('Payment already taken — cannot cancel this parcel')
+
+  const { error: closeError } = await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+  if (closeError) throw new Error(closeError.message)
 }
 
 export interface TableEntry {

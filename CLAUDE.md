@@ -69,10 +69,12 @@ npm run lint      # ESLint
 /captain/tables          → captain panel (C03–C07): mobile-first table grid + pending-approval strip (Realtime);
                            tap table → bottom sheet (KOT view, reprint KOT, edit item qty, Add Item,
                            Print Bill, Print Bill & Take Payment, Edit Bill + Reprint Bill after
-                           billing, Move Table, Settle & Save)
+                           billing, Move Table, Settle & Save).
+                           Parcel strip (P01): "New Parcel" → optional name → dish picker → KOT prints
+                           as PARCEL #token → Print Bill & Take Payment → settle. No table involved.
 ```
 
-**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, or revenue. Users without a role are admins and may also open `/captain/tables`. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`).
+**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, or revenue. Users without a role are admins and may also open `/captain/tables`. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `NewParcelModal`). `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them.
 
 API routes under `/api/`:
 - `cron/notify` — scheduled review notification trigger
@@ -155,8 +157,10 @@ Run: `cd print-bridge && npm i && npm start` (print loop) or `npm run qr` (QR PD
 Uses the **service role key** (required — `print_jobs` has no public SELECT/UPDATE RLS policy). Polls `print_jobs` every `POLL_MS` (default 2 s). `MOCK_PRINT=true` → formats KOT/bill to console. `MOCK_PRINT=false` → TCP socket to printer IP:9100 (ESC/POS). Chained `setTimeout` (not `setInterval`) prevents overlapping ticks. Per-job + per-tick try/catch → failed job marked `status: failed`, loop keeps running.
 
 Payload field names (exact — set by `approveOrder` / `generateBill`):
-- KOT: `{ tableNumber, roundNumber, time, items: { name, qty }[] }`
-- Bill: `{ restaurantName, address, gstin, upiId, tableNumber, customerName, rounds: { number, time, items: { name, qty, price }[] }[], subtotal, gstRate, gstAmount, total }`
+- KOT: `{ tableNumber, roundNumber, time, items: { name, qty }[], orderType?, tokenNumber?, customerName? }`
+- Bill: `{ restaurantName, address, gstin, upiId, tableNumber, orderType?, tokenNumber?, customerName, rounds: { number, time, items: { name, qty, price }[] }[], subtotal, gstRate, gstAmount, total }`
+
+The three optional fields carry parcel orders (`orderType: 'parcel'`): the KOT prints `P A R C E L` / `TOKEN #N` / `NAME:` in place of `TABLE N`, and the bill header reads `PARCEL #N`. They are absent on pre-parcel jobs, which still print exactly as before. **The bridge runs on the restaurant PC — it needs a `git pull` + restart there for parcel slips to format correctly.**
 
 ### Push Notifications Flow
 
@@ -193,7 +197,8 @@ Payload field names (exact — set by `approveOrder` / `generateBill`):
 **Restaurant ops (ordering system — T01 schema applied):**
 - `restaurants` — slug `taksh`, id `c7b441fe-…`
 - `restaurant_tables` — 16 tables (1–16) seeded for `taksh`
-- `table_sessions` — active sessions with 4-digit PIN; status: `active | bill_generated | closed`
+- `table_sessions` — active sessions with 4-digit PIN; status: `active | bill_generated | closed`; `session_type` (`dine_in|parcel`) + `token_number` — a parcel has `table_id NULL` and is identified by its daily token instead (P01)
+- `parcel_counters` — one row per restaurant per IST day; incremented atomically by the `next_parcel_token()` RPC so concurrent parcels never share a token. Service-role only (no RLS policies), same as `print_jobs`
 - `customers` — name + optional phone; reused by phone per restaurant
 - `orders` — status: `pending_approval | approved | rejected | served`; default `pending_approval`
 - `order_items` — snapshotted dish name + price at order time

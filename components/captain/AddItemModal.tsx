@@ -10,12 +10,13 @@ type PickerDish = { id: string; name_en: string; price: number }
 
 export function AddItemModal({
   sessionId,
-  tableNumber,
+  label,
   onClose,
   onAdded,
 }: {
   sessionId: string
-  tableNumber: number
+  /** What this round is being added to, e.g. "Table 6" or "Parcel #7". */
+  label: string
   onClose: () => void
   onAdded: () => void
 }) {
@@ -86,7 +87,7 @@ export function AddItemModal({
           <div className="mb-3 flex items-start justify-between">
             <div>
               <h2 className="text-lg font-bold text-[#2C1810]">Add Items</h2>
-              <p className="text-xs text-[#8E6D4E]">Table {tableNumber} — new KOT round</p>
+              <p className="text-xs text-[#8E6D4E]">{label} — new KOT round</p>
             </div>
             <button onClick={onClose} data-testid="add-item-close" className="p-1 text-[#A08060]">
               <X className="h-5 w-5" />

@@ -5,16 +5,21 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import {
   approveOrder, rejectOrder,
-  getRestaurantId, getTablesWithSessions, type RawTableRow,
+  getRestaurantId, getTablesWithSessions, getParcelSessions,
+  type RawTableRow, type RawParcelRow,
 } from "@/lib/database"
 import { toast } from "sonner"
 import {
   CheckCircle, XCircle, Clock, Users, ChefHat, Receipt, LogOut, Bell,
+  ShoppingBag, Plus,
 } from "lucide-react"
 import { TakshBrand } from "@/components/TakshBrand"
 import { TableSheet } from "@/components/captain/TableSheet"
 import { MoveTableModal } from "@/components/captain/MoveTableModal"
 import { SettleModal } from "@/components/captain/SettleModal"
+import { ParcelSheet } from "@/components/captain/ParcelSheet"
+import { NewParcelModal } from "@/components/captain/NewParcelModal"
+import { AddItemModal } from "@/components/captain/AddItemModal"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +46,22 @@ export type CaptainTable = {
   sessionId?: string
   hostName?: string
   openedAt?: string
+  runningTotal: number
+  roundCount: number
+  pendingCount: number
+  rounds: CaptainRound[]
+}
+
+/**
+ * A takeaway order. Shares CaptainRound with tables — a parcel is the same
+ * session/orders/bill pipeline with a token number where the table would be.
+ */
+export type CaptainParcel = {
+  sessionId: string
+  tokenNumber: number
+  status: "active" | "bill_generated"
+  customerName: string | null
+  openedAt: string
   runningTotal: number
   roundCount: number
   pendingCount: number
@@ -144,6 +165,36 @@ export function buildCaptainTable(t: RawTableRow): CaptainTable {
   }
 }
 
+export function buildCaptainParcel(p: RawParcelRow): CaptainParcel {
+  const nonRejected = (p.orders ?? []).filter(o => o.status !== "rejected")
+
+  const rounds: CaptainRound[] = nonRejected
+    .map(o => ({
+      orderId: o.id,
+      roundNumber: o.round_number,
+      placedAt: o.placed_at,
+      status: o.status,
+      customerName: o.customers?.name ?? null,
+      items: o.order_items,
+      roundTotal: o.order_items.reduce((s, i) => s + i.price * i.quantity, 0),
+    }))
+    .sort((a, b) => a.roundNumber - b.roundNumber)
+
+  return {
+    sessionId: p.id,
+    tokenNumber: p.token_number ?? 0,
+    status: p.status === "bill_generated" ? "bill_generated" : "active",
+    customerName: p.host_name ?? null,
+    openedAt: p.opened_at,
+    // Captain-punched parcel rounds are approved on creation, so unlike a
+    // table there is no pre-service state to hold revenue back from.
+    runningTotal: rounds.reduce((s, r) => s + r.roundTotal, 0),
+    roundCount: rounds.length,
+    pendingCount: nonRejected.filter(o => o.status === "pending_approval").length,
+    rounds,
+  }
+}
+
 const STATUS = {
   open:           { label: "Empty",          dot: "bg-[#8A7A66]", card: "border-[#4A3623] bg-[#241710]",                                          text: "text-[#A08D75]" },
   scanned:        { label: "Scanned",        dot: "bg-[#C9873A]", card: "border-[#8A5A2B] bg-[#2A1B10]",                                          text: "text-[#D8A76A]" },
@@ -157,23 +208,44 @@ const STATUS = {
 export default function CaptainTablesPage() {
   const router = useRouter()
   const [tables, setTables] = useState<CaptainTable[]>([])
+  const [parcels, setParcels] = useState<CaptainParcel[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [moveOpen, setMoveOpen] = useState(false)
   const [settleOpen, setSettleOpen] = useState(false)
+  const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null)
+  const [newParcelOpen, setNewParcelOpen] = useState(false)
+  const [parcelSettleOpen, setParcelSettleOpen] = useState(false)
+  // Set right after "New Parcel" so the dish picker opens immediately on the
+  // fresh session — the captain never has to hunt for the new card.
+  const [pendingParcelAdd, setPendingParcelAdd] = useState<{ sessionId: string; token: number } | null>(null)
 
   const restIdRef = useRef<string | null>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const selectedTable = tables.find(t => t.tableId === selectedId) ?? null
+  const selectedParcel = parcels.find(p => p.sessionId === selectedParcelId) ?? null
 
+  // Settled, not all: the table grid is the captain's core screen and must
+  // survive a parcel query failure. A shared catch would blank every table
+  // because the additive half of the fetch errored.
   async function fetchTables(restaurantId: string) {
-    try {
-      const rows = await getTablesWithSessions(restaurantId)
-      setTables(rows.map(buildCaptainTable))
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load tables")
+    const [tableResult, parcelResult] = await Promise.allSettled([
+      getTablesWithSessions(restaurantId),
+      getParcelSessions(restaurantId),
+    ])
+
+    if (tableResult.status === "fulfilled") {
+      setTables(tableResult.value.map(buildCaptainTable))
+    } else {
+      toast.error(tableResult.reason?.message ?? "Failed to load tables")
+    }
+
+    if (parcelResult.status === "fulfilled") {
+      setParcels(parcelResult.value.map(buildCaptainParcel))
+    } else {
+      toast.error(parcelResult.reason?.message ?? "Failed to load parcels")
     }
   }
 
@@ -272,6 +344,7 @@ export default function CaptainTablesPage() {
               <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#F2C786]">Captain</p>
               <p className="text-[11px] text-[#A98D6B]">
                 {occupiedCount} of {tables.length || "…"} tables occupied
+                {parcels.length > 0 && ` · ${parcels.length} parcel${parcels.length !== 1 ? "s" : ""}`}
               </p>
             </div>
           </div>
@@ -346,6 +419,66 @@ export default function CaptainTablesPage() {
           </div>
         </section>
       )}
+
+      {/* ── Parcel / takeaway ───────────────────────────────────────────── */}
+      <section className="px-4 pt-5" data-testid="parcel-strip">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.1em] text-[#F2C786]">
+            <ShoppingBag className="h-4 w-4 text-[#7FC9A0]" /> Parcel · Takeaway
+          </h2>
+          <button
+            onClick={() => setNewParcelOpen(true)}
+            data-testid="new-parcel-open"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#2A6B3A] px-3 text-xs font-bold text-white active:bg-[#235930]"
+          >
+            <Plus className="h-3.5 w-3.5" /> New Parcel
+          </button>
+        </div>
+
+        {parcels.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-[#4A3623] px-4 py-3 text-xs text-[#8A7A66]">
+            No takeaway orders right now.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {parcels.map(parcel => (
+              <button
+                key={parcel.sessionId}
+                onClick={() => setSelectedParcelId(parcel.sessionId)}
+                data-testid={`parcel-card-${parcel.tokenNumber}`}
+                className="rounded-2xl border border-[#7FC9A0]/50 bg-[linear-gradient(145deg,#F2FBF5_0%,#DFF1E6_100%)] p-4 text-left shadow-sm transition-transform active:scale-[0.97]"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-2xl font-bold text-[#1B5E2E]">#{parcel.tokenNumber}</span>
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#1B5E2E]">
+                    <span className={`h-1.5 w-1.5 rounded-full ${parcel.status === "bill_generated" ? "bg-[#E8A33C]" : "bg-[#4CAF6E]"}`} />
+                    {parcel.status === "bill_generated" ? "Billed" : "Building"}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {parcel.customerName && (
+                    <div className="flex items-center gap-1 text-xs text-[#3F6B4C]">
+                      <Users className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{parcel.customerName}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 text-xs text-[#3F6B4C]">
+                    <ChefHat className="h-3 w-3 shrink-0" />
+                    {parcel.roundCount} round{parcel.roundCount !== 1 ? "s" : ""}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-[#3F6B4C]">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    {elapsed(parcel.openedAt)}
+                  </div>
+                  <div className="mt-1.5 text-base font-bold text-[#14401F]">
+                    ₹{parcel.runningTotal.toLocaleString("en-IN")}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* ── Table grid ──────────────────────────────────────────────────── */}
       <section className="px-4 pt-5">
@@ -448,13 +581,69 @@ export default function CaptainTablesPage() {
       )}
 
       {/* ── Settle popup ────────────────────────────────────────────────── */}
-      {selectedTable && isServing(selectedTable.status) && settleOpen && (
+      {selectedTable && isServing(selectedTable.status) && settleOpen && selectedTable.sessionId && (
         <SettleModal
-          table={selectedTable}
+          sessionId={selectedTable.sessionId}
+          label={`Table ${selectedTable.tableNumber}`}
+          runningTotal={selectedTable.runningTotal}
           onClose={() => setSettleOpen(false)}
           onSettled={() => {
             setSettleOpen(false)
             setSelectedId(null)
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
+
+      {/* ── Parcel sheet + popups ───────────────────────────────────────── */}
+      {selectedParcel && (
+        <ParcelSheet
+          parcel={selectedParcel}
+          onClose={() => setSelectedParcelId(null)}
+          onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
+          onRequestSettle={() => setParcelSettleOpen(true)}
+        />
+      )}
+
+      {selectedParcel && parcelSettleOpen && (
+        <SettleModal
+          sessionId={selectedParcel.sessionId}
+          label={`Parcel #${selectedParcel.tokenNumber}`}
+          runningTotal={selectedParcel.runningTotal}
+          subtitle="Collect payment and close this parcel."
+          onClose={() => setParcelSettleOpen(false)}
+          onSettled={() => {
+            setParcelSettleOpen(false)
+            setSelectedParcelId(null)
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
+
+      {newParcelOpen && restIdRef.current && (
+        <NewParcelModal
+          restaurantId={restIdRef.current}
+          onClose={() => setNewParcelOpen(false)}
+          onCreated={(sessionId, tokenNumber) => {
+            setNewParcelOpen(false)
+            setPendingParcelAdd({ sessionId, token: tokenNumber })
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
+
+      {/* Straight from "New Parcel" into the dish picker — no extra tap. */}
+      {pendingParcelAdd && (
+        <AddItemModal
+          sessionId={pendingParcelAdd.sessionId}
+          label={`Parcel #${pendingParcelAdd.token}`}
+          onClose={() => {
+            setSelectedParcelId(pendingParcelAdd.sessionId)
+            setPendingParcelAdd(null)
+          }}
+          onAdded={() => {
+            setSelectedParcelId(pendingParcelAdd.sessionId)
+            setPendingParcelAdd(null)
             if (restIdRef.current) fetchTables(restIdRef.current)
           }}
         />
