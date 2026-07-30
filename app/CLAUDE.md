@@ -37,11 +37,11 @@ All admin pages are `"use client"` components wrapped in `<AdminLayout>`. Gold/d
 | `/admin/tables` | `app/admin/tables/page.tsx` | Live table grid (T12); status badges, host name, round count, running total, bill-requested tag. Drawer: per-round itemised breakdown, Generate Bill, Mark Paid & Free Table (`closeTable` server action), Force Reset (`forceResetTable` server action). Browser `supabase` used only for Realtime subscription — all data via `getTablesWithSessions` + `getDailyBillsSummary` server actions |
 | `/admin/menu` | `app/admin/menu/page.tsx` | Dish CRUD — add/edit/delete/toggle availability |
 | `/admin/categories` | `app/admin/categories/page.tsx` | Category ordering and images |
-| `/admin/analytics` | `app/admin/analytics/page.tsx` | Engagement charts (menu views, cart, favourites, reviews) |
+| `/admin/analytics` | `app/admin/analytics/page.tsx` | Revenue + engagement dashboard. Settled-revenue tiles (day / month-to-date), revenue trend bar chart (7/30/90d), payment mix, top earning dishes, settled-bills table — all from `getRevenueAnalytics` (adminSupabase). A bill is revenue **only** once `bills.settled_at` is stamped by `settleBill`; generated-but-unpaid bills show as "Awaiting settlement" and are excluded. Realtime subscription on `bills` refetches on every insert/settle (toast on settle). Engagement charts below come from `getAnalyticsData` |
 | `/admin/reviews` | `app/admin/reviews/page.tsx` | Review moderation — toggle `is_public` |
 | `/admin/todays-special` | `app/admin/todays-special/page.tsx` | Toggle `is_todays_special` per dish |
 | `/admin/customers` | `app/admin/customers/page.tsx` | Customer directory (T13) — name/phone/WhatsApp opted-in, most-recent first |
-| `/admin/reports` | `app/admin/reports/page.tsx` | Daily billing report (T13) — date picker (IST), totals/count/avg, per-bill list |
+| `/admin/reports` | `app/admin/reports/page.tsx` | Redirects to `/admin/analytics` — the daily billing report is a section there |
 | `/admin/settings` | `app/admin/settings/page.tsx` | Restaurant details (T13) — editable name/address/GSTIN/UPI; table list + disabled QR-download stub (T15) |
 | `/admin/preview` | `app/admin/preview/page.tsx` | Admin preview of guest-facing menu |
 

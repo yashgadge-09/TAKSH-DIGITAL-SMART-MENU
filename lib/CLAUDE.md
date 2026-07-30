@@ -99,6 +99,8 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 
 **Analytics**
 - `getAnalyticsData(days)` — aggregates `menu_views`, `dish_views`, `cart_events`, `favourites`, `reviews` into dashboard-ready shape
+- `getRevenueAnalytics({ restaurantId, date?, rangeDays? })` → `RevenueAnalytics` — the **settled-revenue** figures behind `/admin/analytics`. Counts only bills with `settled_at IS NOT NULL` (stamped by `settleBill`); bills that are merely generated are reported as `pendingAmount`/`pendingCount` and never as revenue. `date` is an IST `YYYY-MM-DD` (defaults to today IST), `rangeDays` clamps to 1–90. One bills query spanning `min(rangeStart, monthStart) → dayEnd` feeds the day tiles, the trend buckets and month-to-date; a second query fetches the day's non-rejected `order_items` for the dish mix. Bill labels resolve to `"Table 6"` / `"Parcel #7"` from the nested `table_sessions → restaurant_tables` embed. `requireAdmin()` — captains never see revenue.
+- `getDailyBillsSummary(restaurantId)` — **unused legacy helper**; counts by `generated_at`, not settlement. Prefer `getRevenueAnalytics`.
 
 **Ordering (T02–T05)**
 - `createOrJoinSession({ restaurantId, tableId, pinAttempt? })` → `SessionResult` — creates a new table session with a 4-digit PIN, or joins an existing one by PIN. **Throws** on wrong PIN or missing table. Auto-closes stale sessions (opened before today's IST midnight via `todayMidnightIST()`) before creating a new one — prevents cross-day session bleed.
@@ -117,7 +119,7 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 **Admin Tables (all use `adminSupabase` — required for RLS bypass)**
 - `getRestaurantId(slug)` → `string` — resolves restaurant slug to UUID.
 - `getTablesWithSessions(restaurantId)` → `RawTableRow[]` — fetches all tables with nested session → orders → order_items + customers. **Critical PostgREST rule:** `customers(name)` must be nested inside `orders(...)`, not `table_sessions(...)`, because the FK is `orders.customer_id → customers.id`.
-- `getDailyBillsSummary(restaurantId)` → `DailyBillsSummary` — today's bill totals: count, subtotal, gst, grand total.
+- `getDailyBillsSummary(restaurantId)` → `DailyBillsSummary` — today's bill totals by `generated_at`. Currently unused; `/admin/analytics` uses `getRevenueAnalytics` (settlement-based) instead.
 - `getPendingOrders()` → `PendingOrder[]` — fetches `pending_approval` orders with items and table info. Used by `/admin/incoming`. Must use `adminSupabase` — anon client fails on nested joins due to RLS.
 - `closeTable(sessionId)` — server action: sets session `status: closed` via `adminSupabase`. Never use the browser `supabase` client to update `table_sessions` — RLS blocks it even for authenticated users.
 

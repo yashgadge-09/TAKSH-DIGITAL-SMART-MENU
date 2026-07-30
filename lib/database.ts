@@ -1710,6 +1710,279 @@ export async function getDailyBillsSummary(restaurantId: string): Promise<DailyB
   }
 }
 
+// ── Revenue analytics (settled bills only) ──────────────────────────────────
+// Money is only counted once the captain settles the bill — `settleBill` stamps
+// `payment_method` + `settled_at`. A bill that has merely been generated and
+// printed is reported separately as "awaiting settlement" and is NOT revenue,
+// so the dashboard can never book cash that was not actually taken.
+
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** "YYYY-MM-DD" of an instant, as seen in IST. */
+function istDayKey(value: string | Date): string {
+  const d = typeof value === 'string' ? new Date(value) : value
+  return new Date(d.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10)
+}
+
+/** UTC instant of IST midnight starting the given IST day. */
+function istDayStart(dayKey: string): Date {
+  return new Date(`${dayKey}T00:00:00+05:30`)
+}
+
+function istDayLabel(dayKey: string): string {
+  return istDayStart(dayKey).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'Asia/Kolkata',
+  })
+}
+
+export type SettledBillRow = {
+  billId: string
+  label: string
+  customerName: string | null
+  paymentMethod: PaymentMethod | null
+  subtotal: number
+  gstAmount: number
+  total: number
+  settledAt: string
+}
+
+export type RevenueAnalytics = {
+  date: string
+  rangeDays: number
+  /** Selected day, settled bills only */
+  revenue: number
+  netSales: number
+  gstCollected: number
+  billCount: number
+  avgBill: number
+  itemsSold: number
+  /** Generated but not yet settled on the selected day — excluded from revenue */
+  pendingAmount: number
+  pendingCount: number
+  byPaymentMethod: { method: PaymentMethod; amount: number; count: number }[]
+  trend: { key: string; label: string; revenue: number; bills: number }[]
+  rangeRevenue: number
+  rangeBillCount: number
+  monthRevenue: number
+  monthBillCount: number
+  monthLabel: string
+  topDishes: { name: string; qty: number; revenue: number }[]
+  bills: SettledBillRow[]
+}
+
+type SettledBillQueryRow = {
+  id: string
+  session_id: string | null
+  subtotal: number | string
+  gst_amount: number | string
+  total: number | string
+  payment_method: string | null
+  settled_at: string
+  table_sessions: {
+    session_type: string | null
+    token_number: number | null
+    host_name: string | null
+    restaurant_tables: { table_number: number } | null
+  } | null
+}
+
+const SETTLED_BILL_SELECT = `
+  id, session_id, subtotal, gst_amount, total, payment_method, settled_at,
+  table_sessions!inner(
+    restaurant_id, session_type, token_number, host_name,
+    restaurant_tables(table_number)
+  )
+`
+
+function billLabel(session: SettledBillQueryRow['table_sessions']): string {
+  if (!session) return 'Unknown'
+  if (session.session_type === 'parcel') {
+    return session.token_number ? `Parcel #${session.token_number}` : 'Parcel'
+  }
+  const tableNumber = session.restaurant_tables?.table_number
+  return tableNumber ? `Table ${tableNumber}` : 'Table'
+}
+
+/**
+ * Settled-revenue dashboard for /admin/analytics. Reads with the service-role
+ * client (admins only) and aggregates in JS so a single bills query serves the
+ * day tiles, the trend chart and the month-to-date figure.
+ */
+export async function getRevenueAnalytics({
+  restaurantId,
+  date,
+  rangeDays = 7,
+}: {
+  restaurantId: string
+  date?: string
+  rangeDays?: number
+}): Promise<RevenueAnalytics> {
+  await requireAdmin()
+  if (!restaurantId) throw new Error('restaurantId is required')
+
+  const safeRange = Math.max(1, Math.min(90, Math.floor(Number(rangeDays) || 7)))
+  const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? (date as string) : istDayKey(new Date())
+
+  const dayStart = istDayStart(dayKey)
+  const dayEnd = new Date(dayStart.getTime() + DAY_MS)
+  const rangeStart = new Date(dayStart.getTime() - (safeRange - 1) * DAY_MS)
+  const monthStart = istDayStart(`${dayKey.slice(0, 7)}-01`)
+  // One query covers day + trend range + month-to-date.
+  const fetchStart = new Date(Math.min(rangeStart.getTime(), monthStart.getTime()))
+
+  const [settledRes, pendingRes] = await Promise.all([
+    adminSupabase
+      .from('bills')
+      .select(SETTLED_BILL_SELECT)
+      .eq('table_sessions.restaurant_id', restaurantId)
+      .not('settled_at', 'is', null)
+      .gte('settled_at', fetchStart.toISOString())
+      .lt('settled_at', dayEnd.toISOString())
+      .order('settled_at', { ascending: false }),
+    adminSupabase
+      .from('bills')
+      .select('id, total, table_sessions!inner(restaurant_id)')
+      .eq('table_sessions.restaurant_id', restaurantId)
+      .is('settled_at', null)
+      .gte('generated_at', dayStart.toISOString())
+      .lt('generated_at', dayEnd.toISOString()),
+  ])
+
+  if (settledRes.error) throw new Error(settledRes.error.message)
+
+  const settled = (settledRes.data ?? []) as unknown as SettledBillQueryRow[]
+  const rangeStartMs = rangeStart.getTime()
+  const monthStartMs = monthStart.getTime()
+
+  const trendBuckets = new Map<string, { revenue: number; bills: number }>()
+  for (let offset = safeRange - 1; offset >= 0; offset--) {
+    trendBuckets.set(istDayKey(new Date(dayStart.getTime() - offset * DAY_MS)), { revenue: 0, bills: 0 })
+  }
+
+  const dayBills: SettledBillRow[] = []
+  const methodTotals = new Map<PaymentMethod, { amount: number; count: number }>()
+  let revenue = 0
+  let netSales = 0
+  let gstCollected = 0
+  let rangeRevenue = 0
+  let rangeBillCount = 0
+  let monthRevenue = 0
+  let monthBillCount = 0
+
+  for (const row of settled) {
+    const total = Number(row.total) || 0
+    const settledMs = new Date(row.settled_at).getTime()
+    const key = istDayKey(row.settled_at)
+
+    const bucket = trendBuckets.get(key)
+    if (bucket) {
+      bucket.revenue += total
+      bucket.bills += 1
+    }
+    if (settledMs >= rangeStartMs) {
+      rangeRevenue += total
+      rangeBillCount += 1
+    }
+    if (settledMs >= monthStartMs) {
+      monthRevenue += total
+      monthBillCount += 1
+    }
+    if (key !== dayKey) continue
+
+    revenue += total
+    netSales += Number(row.subtotal) || 0
+    gstCollected += Number(row.gst_amount) || 0
+
+    const method = (row.payment_method as PaymentMethod) ?? null
+    if (method) {
+      const entry = methodTotals.get(method) ?? { amount: 0, count: 0 }
+      entry.amount += total
+      entry.count += 1
+      methodTotals.set(method, entry)
+    }
+
+    dayBills.push({
+      billId: row.id,
+      label: billLabel(row.table_sessions),
+      customerName: row.table_sessions?.host_name ?? null,
+      paymentMethod: method,
+      subtotal: Number(row.subtotal) || 0,
+      gstAmount: Number(row.gst_amount) || 0,
+      total,
+      settledAt: row.settled_at,
+    })
+  }
+
+  // Dish mix for the day — items from every non-rejected round of the settled sessions.
+  const sessionIds = Array.from(
+    new Set(settled.filter((r) => istDayKey(r.settled_at) === dayKey && r.session_id).map((r) => r.session_id as string))
+  )
+  const dishTotals = new Map<string, { qty: number; revenue: number }>()
+  let itemsSold = 0
+
+  if (sessionIds.length) {
+    const { data: orders, error: ordersError } = await adminSupabase
+      .from('orders')
+      .select('id, session_id, status, order_items(name, quantity, price)')
+      .in('session_id', sessionIds)
+      .neq('status', 'rejected')
+    if (ordersError) throw new Error(ordersError.message)
+
+    for (const order of (orders ?? []) as any[]) {
+      for (const item of order.order_items ?? []) {
+        const qty = Number(item.quantity) || 0
+        const name = item.name || 'Unknown item'
+        const entry = dishTotals.get(name) ?? { qty: 0, revenue: 0 }
+        entry.qty += qty
+        entry.revenue += qty * (Number(item.price) || 0)
+        dishTotals.set(name, entry)
+        itemsSold += qty
+      }
+    }
+  }
+
+  const pendingRows = (pendingRes.data ?? []) as any[]
+
+  return {
+    date: dayKey,
+    rangeDays: safeRange,
+    revenue,
+    netSales,
+    gstCollected,
+    billCount: dayBills.length,
+    avgBill: dayBills.length ? revenue / dayBills.length : 0,
+    itemsSold,
+    pendingAmount: pendingRows.reduce((s, b) => s + (Number(b.total) || 0), 0),
+    pendingCount: pendingRows.length,
+    byPaymentMethod: (['cash', 'upi', 'card', 'other'] as PaymentMethod[])
+      .map((method) => ({ method, ...(methodTotals.get(method) ?? { amount: 0, count: 0 }) }))
+      .filter((entry) => entry.count > 0),
+    trend: Array.from(trendBuckets.entries()).map(([key, value]) => ({
+      key,
+      label: istDayLabel(key),
+      revenue: value.revenue,
+      bills: value.bills,
+    })),
+    rangeRevenue,
+    rangeBillCount,
+    monthRevenue,
+    monthBillCount,
+    monthLabel: istDayStart(dayKey).toLocaleDateString('en-IN', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    }),
+    topDishes: Array.from(dishTotals.entries())
+      .map(([name, value]) => ({ name, qty: value.qty, revenue: value.revenue }))
+      .sort((a, b) => b.revenue - a.revenue || b.qty - a.qty)
+      .slice(0, 8),
+    bills: dayBills,
+  }
+}
+
 export async function closeTable(sessionId: string): Promise<void> {
   await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')

@@ -1,10 +1,13 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
-import { getAnalyticsData } from "@/lib/database"
+import { getAnalyticsData, getRestaurantId, getRevenueAnalytics, type RevenueAnalytics } from "@/lib/database"
 import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
 import {
+  Bar,
+  BarChart,
   LineChart,
   Line,
   XAxis,
@@ -24,6 +27,8 @@ import {
   ScanLine,
   MapPin,
   ExternalLink,
+  RefreshCw,
+  Hourglass,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -189,26 +194,61 @@ function getInitials(value: string) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
-// ── Reports helpers ──────────────────────────────────────────────────────────
-
-type BillRow = { total: number; generated_at: string }
+// ── Revenue helpers ──────────────────────────────────────────────────────────
 
 function todayIST() {
   const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
   return istNow.toISOString().slice(0, 10)
 }
 
-function getISTDayBounds(dateStr: string) {
-  return {
-    start: `${dateStr}T00:00:00+05:30`,
-    end:   `${dateStr}T23:59:59+05:30`,
-  }
-}
-
 function billTimeIST(iso: string) {
   return new Date(iso).toLocaleTimeString("en-IN", {
     hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
   })
+}
+
+/** Rounded rupees for tiles/axes. */
+function inr(value: number) {
+  return `₹${Math.round(value || 0).toLocaleString("en-IN")}`
+}
+
+/** Exact rupees — keeps the paise a GST total can carry. */
+function inrExact(value: number) {
+  const amount = value || 0
+  return `₹${amount.toLocaleString("en-IN", {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+const PAYMENT_LABELS: Record<string, string> = {
+  cash: "Cash",
+  upi: "UPI",
+  card: "Card",
+  other: "Other",
+}
+
+const RevenueTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: Array<{ payload?: { revenue: number; bills: number } }>
+  label?: string
+}) => {
+  const point = payload?.[0]?.payload
+  if (!active || !point) return null
+
+  return (
+    <div className="rounded-xl border border-[#83522D] bg-[linear-gradient(160deg,rgba(55,34,21,0.98),rgba(21,12,7,0.98))] p-3 shadow-[0_16px_30px_rgba(0,0,0,0.55)]">
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-[#F2C786]">{label}</p>
+      <p className="text-sm font-bold text-[#F7E4C4]">{inr(point.revenue)}</p>
+      <p className="text-xs text-[#C7A67E]">
+        {point.bills} settled {point.bills === 1 ? "bill" : "bills"}
+      </p>
+    </div>
+  )
 }
 
 export default function AnalyticsPage() {
@@ -220,10 +260,12 @@ export default function AnalyticsPage() {
   const [googleStats, setGoogleStats] = useState<GoogleStats | null>(null)
   const [isGoogleLoading, setIsGoogleLoading] = useState(true)
 
-  // Reports state
+  // Revenue state (settled bills)
   const [selectedDate, setSelectedDate] = useState(todayIST())
-  const [bills, setBills] = useState<BillRow[]>([])
-  const [billsLoading, setBillsLoading] = useState(true)
+  const [revenue, setRevenue] = useState<RevenueAnalytics | null>(null)
+  const [revenueLoading, setRevenueLoading] = useState(true)
+  const [revenueError, setRevenueError] = useState<string | null>(null)
+  const [lastSynced, setLastSynced] = useState<Date | null>(null)
   const [restId, setRestId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -264,39 +306,68 @@ export default function AnalyticsPage() {
     }
   }, [rangeDays])
 
-  // Reports: resolve restaurant ID once
+  // Revenue: resolve restaurant ID once (server action — anon client is RLS-blocked)
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const { data: rest, error } = await supabase
-        .from("restaurants").select("id").eq("slug", "taksh").single()
-      if (mounted && !error && rest) setRestId(rest.id)
-      else if (mounted) setBillsLoading(false)
+      try {
+        const id = await getRestaurantId("taksh")
+        if (!mounted) return
+        if (!id) throw new Error("Restaurant not found")
+        setRestId(id)
+      } catch (e: any) {
+        if (!mounted) return
+        setRevenueError(e?.message ?? "Failed to resolve restaurant")
+        setRevenueLoading(false)
+      }
     })()
     return () => { mounted = false }
   }, [])
 
-  // Reports: fetch bills when date or restId changes
+  // Revenue: load settled-bill figures. The ref keeps the current date/range so a
+  // Realtime refetch never needs to re-create the subscription.
+  const revenueArgsRef = useRef({ restId: null as string | null, date: selectedDate, rangeDays })
+
+  const loadRevenue = useCallback(async (opts?: { silent?: boolean }) => {
+    const { restId: id, date, rangeDays: days } = revenueArgsRef.current
+    if (!id) return
+    if (!opts?.silent) setRevenueLoading(true)
+    try {
+      const data = await getRevenueAnalytics({ restaurantId: id, date, rangeDays: days })
+      setRevenue(data)
+      setRevenueError(null)
+      setLastSynced(new Date())
+    } catch (e: any) {
+      setRevenueError(e?.message ?? "Failed to load revenue")
+    } finally {
+      setRevenueLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    revenueArgsRef.current = { restId, date: selectedDate, rangeDays }
+    if (!restId) return
+    loadRevenue()
+  }, [restId, selectedDate, rangeDays, loadRevenue])
+
+  // Live: every bill insert/settle pushes a refresh (bills is in supabase_realtime)
   useEffect(() => {
     if (!restId) return
-    let mounted = true
-    setBillsLoading(true)
-    ;(async () => {
-      const { start, end } = getISTDayBounds(selectedDate)
-      const { data, error } = await supabase
-        .from("bills")
-        .select("total, generated_at, table_sessions!inner(restaurant_id)")
-        .eq("table_sessions.restaurant_id", restId)
-        .gte("generated_at", start)
-        .lte("generated_at", end)
-        .order("generated_at", { ascending: false })
-      if (!mounted) return
-      if (error) { setBillsLoading(false); return }
-      setBills((data ?? []) as unknown as BillRow[])
-      setBillsLoading(false)
-    })()
-    return () => { mounted = false }
-  }, [restId, selectedDate])
+    const channel = supabase
+      .channel("admin-revenue")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bills" }, (payload: any) => {
+        // settleBill is the only writer that stamps settled_at, so an UPDATE
+        // carrying it is a payment being taken. Inserts (generateBill) just
+        // move the awaiting-settlement tile.
+        if (payload.eventType === "UPDATE" && payload.new?.settled_at) {
+          toast.success(`${inr(Number(payload.new.total) || 0)} settled — revenue updated`)
+        }
+        loadRevenue({ silent: true })
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [restId, loadRevenue])
 
   const menuViewsToday = analytics?.menuViewsToday ?? 0
   const avgRatingValue = analytics?.avgRating ?? 0
@@ -329,30 +400,282 @@ export default function AnalyticsPage() {
     <AdminLayout>
       <div className="space-y-6">
 
-        {/* Date picker */}
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-[#6B5744]">Date</label>
-          <input
-            type="date"
-            value={selectedDate}
-            max={todayIST()}
-            onChange={e => setSelectedDate(e.target.value)}
-            className="rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm text-[#2C1810] focus:outline-none focus:ring-2 focus:ring-[#A46833]"
-          />
+        {/* ── Controls ─────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-[#2C1810]">Revenue &amp; Analytics</h1>
+            <p className="text-sm text-[#8E7F71]">
+              Revenue counts a bill only after it is <span className="font-semibold">settled</span> in the captain panel.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#CFAF8C] bg-[#FFF8EE] px-3 py-1.5 text-xs font-semibold text-[#7A5A3A]">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-[#2F9E44] opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2F9E44]" />
+              </span>
+              LIVE
+              {lastSynced ? (
+                <span className="font-normal text-[#A98B69]">
+                  · {lastSynced.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              ) : null}
+            </span>
+
+            <div className="flex items-center gap-2">
+              <label htmlFor="revenue-date" className="text-sm font-medium text-[#6B5744]">Date</label>
+              <input
+                id="revenue-date"
+                type="date"
+                value={selectedDate}
+                max={todayIST()}
+                onChange={e => setSelectedDate(e.target.value)}
+                className="rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm text-[#2C1810] focus:outline-none focus:ring-2 focus:ring-[#A46833]"
+              />
+            </div>
+
+            <div className="flex overflow-hidden rounded-xl border border-[#D4B391]">
+              {DATE_RANGES.map(days => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setRangeDays(days)}
+                  className={`px-3 py-2 text-sm font-semibold transition-colors ${
+                    rangeDays === days
+                      ? "bg-[#A46833] text-[#FFF8EE]"
+                      : "bg-white text-[#7A5A3A] hover:bg-[#F7E6D2]"
+                  }`}
+                >
+                  {days}d
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadRevenue()}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm font-semibold text-[#7A5A3A] transition-colors hover:bg-[#F7E6D2]"
+            >
+              <RefreshCw className={`h-4 w-4 ${revenueLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: "Total billed", value: billsLoading ? "…" : `₹${bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}` },
-            { label: "# Bills",      value: billsLoading ? "…" : bills.length },
-            { label: "Avg bill",     value: billsLoading ? "…" : bills.length > 0 ? `₹${Math.round(bills.reduce((s, b) => s + b.total, 0) / bills.length).toLocaleString("en-IN")}` : "—" },
-          ].map(({ label, value }) => (
-            <div key={label} className="rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 text-center shadow-[0_8px_20px_rgba(90,53,25,0.1)]">
-              <div className="text-2xl font-bold text-[#2C1810]">{value}</div>
-              <div className="mt-1 text-xs text-[#8E6D4E]">{label}</div>
+        {revenueError ? (
+          <div className="rounded-xl border border-[#A63B21] bg-[#2C1510] p-4 text-[#FFB3A0]">{revenueError}</div>
+        ) : null}
+
+        {/* ── Settled revenue ──────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {/* Hero: revenue for the selected day */}
+          <div className="relative overflow-hidden rounded-2xl border border-[#6B452E] bg-[radial-gradient(circle_at_top_right,rgba(232,101,10,0.22)_0%,rgba(36,23,14,0.97)_48%,rgba(20,12,8,1)_100%)] p-6 shadow-[0_18px_48px_rgba(25,14,8,0.55)] lg:col-span-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[#B99267]">
+                  Settled revenue · {selectedDate === todayIST() ? "Today" : selectedDate}
+                </p>
+                <p className="mt-2 text-5xl font-bold leading-none text-[#F7E4C4]">
+                  {revenueLoading && !revenue ? "…" : inr(revenue?.revenue ?? 0)}
+                </p>
+                <p className="mt-3 text-sm text-[#C9A983]">
+                  {revenue?.billCount ?? 0} settled {revenue?.billCount === 1 ? "bill" : "bills"}
+                  {revenue?.itemsSold ? ` · ${revenue.itemsSold} items sold` : ""}
+                </p>
+              </div>
+              <span className="rounded-md border border-[#80512E] bg-[#3B2314]/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#F2B55A]">
+                Paid
+              </span>
             </div>
-          ))}
+
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "Net sales", value: inr(revenue?.netSales ?? 0) },
+                { label: "GST collected", value: inr(revenue?.gstCollected ?? 0) },
+                { label: "Avg bill", value: revenue?.billCount ? inr(revenue.avgBill) : "—" },
+                { label: revenue?.monthLabel ?? "This month", value: inr(revenue?.monthRevenue ?? 0) },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-xl border border-[#5F3D27] bg-[#1B120C]/80 p-3">
+                  <p className="text-lg font-bold text-[#F1DDC0]">{value}</p>
+                  <p className="mt-0.5 truncate text-[11px] uppercase tracking-[0.06em] text-[#B7946D]">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Awaiting settlement + payment split */}
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-5 shadow-[0_8px_20px_rgba(90,53,25,0.1)]">
+              <div className="flex items-center gap-2 text-[#8E6D4E]">
+                <Hourglass className="h-4 w-4" />
+                <span className="text-xs font-semibold uppercase tracking-[0.06em]">Awaiting settlement</span>
+              </div>
+              <p className="mt-2 text-3xl font-bold text-[#2C1810]">{inr(revenue?.pendingAmount ?? 0)}</p>
+              <p className="mt-1 text-xs text-[#8E6D4E]">
+                {revenue?.pendingCount ?? 0} bill{revenue?.pendingCount === 1 ? "" : "s"} printed, not yet paid — not counted as revenue.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-5 shadow-[0_8px_20px_rgba(90,53,25,0.1)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#8E6D4E]">Payment mix</p>
+              {revenue?.byPaymentMethod.length ? (
+                <div className="mt-3 space-y-2.5">
+                  {revenue.byPaymentMethod.map(({ method, amount, count }) => {
+                    const share = revenue.revenue > 0 ? (amount / revenue.revenue) * 100 : 0
+                    return (
+                      <div key={method}>
+                        <div className="flex items-baseline justify-between text-sm">
+                          <span className="font-medium text-[#4A3524]">
+                            {PAYMENT_LABELS[method] ?? method}
+                            <span className="ml-1.5 text-xs text-[#A98B69]">×{count}</span>
+                          </span>
+                          <span className="font-semibold text-[#2C1810]">{inr(amount)}</span>
+                        </div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#EADCC4]">
+                          <div
+                            className="h-full rounded-full bg-[linear-gradient(90deg,#A45B22_0%,#F0A33D_100%)]"
+                            style={{ width: `${Math.max(share, 2)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-[#A98B69]">No settled payments on this date yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Revenue trend ────────────────────────────────────────────── */}
+        <PremiumPanel
+          title="Revenue Trend"
+          subtitle={`Settled revenue per day — last ${rangeDays} days${
+            revenue ? ` · ${inr(revenue.rangeRevenue)} from ${revenue.rangeBillCount} bills` : ""
+          }`}
+          badge="SETTLED"
+        >
+          <div className="h-72">
+            {revenue && revenue.rangeRevenue > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenue.trend} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                  <CartesianGrid stroke="rgba(231,207,168,0.08)" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#CDAE8A", fontSize: 12 }}
+                    interval="preserveStartEnd"
+                    minTickGap={16}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    width={64}
+                    tick={{ fill: "#A88560", fontSize: 11 }}
+                    tickFormatter={(v: number) => inr(v)}
+                  />
+                  <Tooltip content={<RevenueTooltip />} cursor={{ fill: "rgba(240,163,61,0.08)" }} />
+                  <Bar dataKey="revenue" fill="#F0A33D" radius={[4, 4, 0, 0]} maxBarSize={38} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-[#AF8B63]">
+                <p>No settled bills in the last {rangeDays} days.</p>
+                <p className="text-xs text-[#8E6D4E]">
+                  Generate a bill in the captain panel, then tap <span className="font-semibold">Settle &amp; Save</span> — this chart updates instantly.
+                </p>
+              </div>
+            )}
+          </div>
+        </PremiumPanel>
+
+        {/* ── Top dishes by settled revenue ────────────────────────────── */}
+        <PremiumPanel
+          title="Top Earning Dishes"
+          subtitle={`Items sold on ${selectedDate === todayIST() ? "today's" : "the selected date's"} settled bills`}
+          badge="MENU REVENUE"
+        >
+          {revenue?.topDishes.length ? (
+            <div className="space-y-3">
+              {revenue.topDishes.map((dish, index) => {
+                const maxRevenue = revenue.topDishes[0]?.revenue || 1
+                return (
+                  <div key={dish.name} className="flex items-center gap-3">
+                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#8A5B37] bg-[#3B2314] text-[11px] font-semibold text-[#F2C786]">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="truncate text-sm font-semibold text-[#F1DDC0]">{dish.name}</p>
+                        <p className="shrink-0 text-sm font-bold text-[#F2B55A]">{inr(dish.revenue)}</p>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#382518]">
+                          <div
+                            className="h-full rounded-full bg-[linear-gradient(90deg,#A45B22_0%,#F0A33D_100%)]"
+                            style={{ width: `${Math.max((dish.revenue / maxRevenue) * 100, 3)}%` }}
+                          />
+                        </div>
+                        <span className="w-16 shrink-0 text-right text-xs text-[#B7946D]">{dish.qty} sold</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-[#AF8B63]">No settled sales on this date yet.</p>
+          )}
+        </PremiumPanel>
+
+        {/* ── Settled bills ────────────────────────────────────────────── */}
+        <div className="overflow-hidden rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] shadow-[0_14px_32px_rgba(90,53,25,0.14)]">
+          <div className="flex items-center justify-between border-b border-[#E8D5BC] px-5 py-3">
+            <h2 className="text-sm font-bold uppercase tracking-[0.06em] text-[#7A5A3A]">Settled bills</h2>
+            <span className="text-xs text-[#8E6D4E]">{revenue?.bills.length ?? 0} on {selectedDate}</span>
+          </div>
+
+          {revenue?.bills.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#E8D5BC]">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Settled (IST)</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Table / Parcel</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Guest</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Method</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EDE0CC]">
+                  {revenue.bills.map(bill => (
+                    <tr key={bill.billId} className="transition-colors hover:bg-[#F5EBD8]">
+                      <td className="px-5 py-3 text-[#6B5744]">{billTimeIST(bill.settledAt)}</td>
+                      <td className="px-5 py-3 font-medium text-[#4A3524]">{bill.label}</td>
+                      <td className="px-5 py-3 text-[#6B5744]">{bill.customerName || "—"}</td>
+                      <td className="px-5 py-3">
+                        <span className="rounded-md border border-[#D4B391] bg-[#FFF8EE] px-2 py-0.5 text-xs font-semibold text-[#7A5A3A]">
+                          {bill.paymentMethod ? PAYMENT_LABELS[bill.paymentMethod] ?? bill.paymentMethod : "—"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-right font-semibold text-[#2C1810]">{inrExact(bill.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex justify-between border-t border-[#E8D5BC] px-5 py-3 text-sm">
+                <span className="text-[#8E6D4E]">Total settled</span>
+                <span className="font-bold text-[#2C1810]">{inrExact(revenue.revenue)}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="px-5 py-6 text-sm text-[#8E6D4E]">
+              {revenueLoading ? "Loading settled bills…" : "No bills settled on this date."}
+            </p>
+          )}
         </div>
 
         {/* Weekly Customers */}
@@ -382,32 +705,6 @@ export default function AnalyticsPage() {
             )}
           </div>
         </PremiumPanel>
-
-        {/* Bills table */}
-        {!billsLoading && bills.length > 0 && (
-          <div className="overflow-hidden rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] shadow-[0_14px_32px_rgba(90,53,25,0.14)]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#E8D5BC]">
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Time (IST)</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#EDE0CC]">
-                {bills.map((b, i) => (
-                  <tr key={i} className="transition-colors hover:bg-[#F5EBD8]">
-                    <td className="px-5 py-3 text-[#6B5744]">{billTimeIST(b.generated_at)}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-[#2C1810]">₹{b.total.toLocaleString("en-IN")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex justify-between border-t border-[#E8D5BC] px-5 py-3 text-sm">
-              <span className="text-[#8E6D4E]">Total</span>
-              <span className="font-bold text-[#2C1810]">₹{bills.reduce((s, b) => s + b.total, 0).toLocaleString("en-IN")}</span>
-            </div>
-          </div>
-        )}
 
         {error ? (
           <div className="rounded-xl border border-[#A63B21] bg-[#2C1510] p-4 text-[#FFB3A0]">{error}</div>
