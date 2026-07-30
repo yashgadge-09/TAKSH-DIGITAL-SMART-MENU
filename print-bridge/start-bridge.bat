@@ -6,8 +6,22 @@ REM ("TAKSH Print Bridge") set to trigger "At startup" — see docs/printer-setu
 cd /d "%~dp0"
 if not exist logs mkdir logs
 
+REM Single-instance guard. Two bridges polling print_jobs at once can print the
+REM same KOT twice, and both would fight over bridge.log. File handle 9 is held
+REM open for the whole run; a second copy cannot open it and exits immediately.
+2>nul (
+  9>logs\bridge.lock (
+    call :run
+  )
+) || (
+  echo [%date% %time%] another instance is already running - exiting >> logs\bridge-skipped.log
+  exit /b 1
+)
+exit /b 0
+
+:run
 REM npm must be invoked by full path: when cmd finds "npm" through a PATH search,
-REM npm.cmd's own %~dp0 resolves to the current directory and it fails to locate
+REM npm.cmd's own %%~dp0 resolves to the current directory and it fails to locate
 REM its CLI. Task Scheduler can also start with a minimal PATH, so fall back to
 REM the standard install locations.
 set "NPM_CMD="
