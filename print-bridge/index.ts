@@ -22,11 +22,16 @@ const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
 
 // ── Payload types (match exactly what approveOrder / generateBill write) ────
 
+// orderType/tokenNumber/customerName are absent on jobs queued before parcel
+// support shipped — every read of them falls back to dine-in behaviour.
 type KotPayload = {
-  tableNumber: number
+  tableNumber: number | null
   roundNumber: number
   time: string        // "HH:MM" IST
   items: { name: string; qty: number }[]
+  orderType?: "dine_in" | "parcel"
+  tokenNumber?: number | null
+  customerName?: string | null
 }
 
 type BillPayload = {
@@ -35,6 +40,8 @@ type BillPayload = {
   gstin: string
   upiId: string
   tableNumber: number | null
+  orderType?: "dine_in" | "parcel"
+  tokenNumber?: number | null
   customerName: string
   rounds: { number: number; time: string; items: { name: string; qty: number; price: number }[] }[]
   subtotal: number
@@ -97,16 +104,27 @@ function nowIST(): { date: string; time: string } {
 // ── KOT: big & bold for kitchen readability ─────────────────────────────────
 
 export function kotSegments(p: KotPayload): Seg[] {
+  // A parcel has no table — the daily token is what the counter calls out, so
+  // it takes the table's place in the header at the same size.
+  const isParcel = p.orderType === "parcel"
+
   const segs: Seg[] = [
     { text: LINE },
-    { text: "K O T", center: true, bold: true, size: "big" },
+    { text: isParcel ? "P A R C E L" : "K O T", center: true, bold: true, size: "big" },
     { text: LINE },
-    { text: `TABLE ${p.tableNumber}`, bold: true, size: "big" },
+    isParcel
+      ? { text: `TOKEN #${p.tokenNumber ?? "-"}`, bold: true, size: "big" }
+      : { text: `TABLE ${p.tableNumber ?? "-"}`, bold: true, size: "big" },
+  ]
+  if (isParcel && p.customerName) {
+    segs.push({ text: `NAME: ${toAscii(p.customerName).toUpperCase()}`, bold: true, size: "tall" })
+  }
+  segs.push(
     { text: `Round ${p.roundNumber}   Time ${p.time}` },
     { text: LINE },
     { text: "QTY  ITEM", bold: true },
     { text: LINE },
-  ]
+  )
   for (const i of p.items) {
     segs.push({
       text: `${String(i.qty).padStart(2)} x ${toAscii(i.name).toUpperCase()}`,
@@ -163,9 +181,11 @@ export function billSegments(p: BillPayload): Seg[] {
   ]
   if (p.address) segs.push({ text: toAscii(p.address), center: true })
   if (p.gstin) segs.push({ text: `GSTIN: ${p.gstin}`, center: true })
+  const orderLabel =
+    p.orderType === "parcel" ? `PARCEL #${p.tokenNumber ?? "-"}` : `Table: ${p.tableNumber ?? "-"}`
   segs.push(
     { text: LINE },
-    { text: pair(`Table: ${p.tableNumber ?? "-"}`, `Bill To: ${toAscii(p.customerName)}`) },
+    { text: pair(orderLabel, `Bill To: ${toAscii(p.customerName)}`) },
     { text: pair(`Date: ${date}`, `Time: ${time}`) },
     { text: LINE },
     { text: "ITEM".padEnd(14) + "QTY".padStart(3) + "RATE".padStart(7) + "AMT".padStart(8), bold: true },

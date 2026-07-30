@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { getSessionBill, settleBill, type PaymentMethod, type SessionBill } from "@/lib/database"
 import { toast } from "sonner"
 import { X, Banknote, QrCode, CreditCard, MoreHorizontal, CheckCircle2 } from "lucide-react"
-import type { CaptainTable } from "@/app/captain/tables/page"
 
 const METHODS: { value: PaymentMethod; label: string; icon: typeof Banknote }[] = [
   { value: "cash", label: "Cash", icon: Banknote },
@@ -13,12 +12,21 @@ const METHODS: { value: PaymentMethod; label: string; icon: typeof Banknote }[] 
   { value: "other", label: "Other", icon: MoreHorizontal },
 ]
 
+// Deliberately keyed off a session rather than a CaptainTable: a parcel is a
+// session with no table, and settles through exactly the same path.
 export function SettleModal({
-  table,
+  sessionId,
+  label,
+  runningTotal,
+  subtitle = "Collect payment and free the table.",
   onClose,
   onSettled,
 }: {
-  table: CaptainTable
+  sessionId: string
+  /** e.g. "Table 6" or "Parcel #7" */
+  label: string
+  runningTotal: number
+  subtitle?: string
   onClose: () => void
   onSettled: () => void
 }) {
@@ -30,9 +38,8 @@ export function SettleModal({
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      if (!table.sessionId) return
       try {
-        const b = await getSessionBill(table.sessionId)
+        const b = await getSessionBill(sessionId)
         if (mounted) setBill(b)
       } catch (e: any) {
         toast.error(e?.message ?? "Failed to load bill")
@@ -41,18 +48,18 @@ export function SettleModal({
       }
     })()
     return () => { mounted = false }
-  }, [table.sessionId])
+  }, [sessionId])
 
   // Bill drifts when items were edited/added after printing — force a reprint
   // (reprintBill syncs the bills row) before money changes hands.
-  const billStale = bill !== null && Math.abs(bill.subtotal - table.runningTotal) > 0.01
+  const billStale = bill !== null && Math.abs(bill.subtotal - runningTotal) > 0.01
 
   async function handleSettle() {
-    if (!table.sessionId || !method) return
+    if (!method) return
     setSettling(true)
     try {
-      await settleBill({ sessionId: table.sessionId, paymentMethod: method })
-      toast.success(`Table ${table.tableNumber} settled — payment saved`)
+      await settleBill({ sessionId, paymentMethod: method })
+      toast.success(`${label} settled — payment saved`)
       onSettled()
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to settle")
@@ -69,8 +76,8 @@ export function SettleModal({
       >
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[#2C1810]">Settle Table {table.tableNumber}</h2>
-            <p className="text-xs text-[#8E6D4E]">Collect payment and free the table.</p>
+            <h2 className="text-lg font-bold text-[#2C1810]">Settle {label}</h2>
+            <p className="text-xs text-[#8E6D4E]">{subtitle}</p>
           </div>
           <button onClick={onClose} data-testid="settle-close" className="p-1 text-[#A08060]">
             <X className="h-5 w-5" />

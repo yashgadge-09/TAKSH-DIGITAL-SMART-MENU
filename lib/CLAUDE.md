@@ -99,6 +99,8 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 
 **Analytics**
 - `getAnalyticsData(days)` — aggregates `menu_views`, `dish_views`, `cart_events`, `favourites`, `reviews` into dashboard-ready shape
+- `getRevenueAnalytics({ restaurantId, date?, rangeDays? })` → `RevenueAnalytics` — the **settled-revenue** figures behind `/admin/analytics`. Counts only bills with `settled_at IS NOT NULL` (stamped by `settleBill`); bills that are merely generated are reported as `pendingAmount`/`pendingCount` and never as revenue. `date` is an IST `YYYY-MM-DD` (defaults to today IST), `rangeDays` clamps to 1–90. One bills query spanning `min(rangeStart, monthStart) → dayEnd` feeds the day tiles, the trend buckets and month-to-date; a second query fetches the day's non-rejected `order_items` for the dish mix. Bill labels resolve to `"Table 6"` / `"Parcel #7"` from the nested `table_sessions → restaurant_tables` embed. `requireAdmin()` — captains never see revenue.
+- `getDailyBillsSummary(restaurantId)` — **unused legacy helper**; counts by `generated_at`, not settlement. Prefer `getRevenueAnalytics`.
 
 **Ordering (T02–T05)**
 - `createOrJoinSession({ restaurantId, tableId, pinAttempt? })` → `SessionResult` — creates a new table session with a 4-digit PIN, or joins an existing one by PIN. **Throws** on wrong PIN or missing table. Auto-closes stale sessions (opened before today's IST midnight via `todayMidnightIST()`) before creating a new one — prevents cross-day session bleed.
@@ -117,7 +119,7 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 **Admin Tables (all use `adminSupabase` — required for RLS bypass)**
 - `getRestaurantId(slug)` → `string` — resolves restaurant slug to UUID.
 - `getTablesWithSessions(restaurantId)` → `RawTableRow[]` — fetches all tables with nested session → orders → order_items + customers. **Critical PostgREST rule:** `customers(name)` must be nested inside `orders(...)`, not `table_sessions(...)`, because the FK is `orders.customer_id → customers.id`.
-- `getDailyBillsSummary(restaurantId)` → `DailyBillsSummary` — today's bill totals: count, subtotal, gst, grand total.
+- `getDailyBillsSummary(restaurantId)` → `DailyBillsSummary` — today's bill totals by `generated_at`. Currently unused; `/admin/analytics` uses `getRevenueAnalytics` (settlement-based) instead.
 - `getPendingOrders()` → `PendingOrder[]` — fetches `pending_approval` orders with items and table info. Used by `/admin/incoming`. Must use `adminSupabase` — anon client fails on nested joins due to RLS.
 - `closeTable(sessionId)` — server action: sets session `status: closed` via `adminSupabase`. Never use the browser `supabase` client to update `table_sessions` — RLS blocks it even for authenticated users.
 
@@ -127,8 +129,23 @@ query.neq('name_en', `CACHE_BUST_${timestamp}`)
 - `moveTableSession({ sessionId, targetTableId })` — moves a live session to another table; rejects occupied targets and cross-restaurant moves.
 - `reprintKot(orderId)` — re-queues a `kot` print job for an approved order; never changes order status.
 - `updateOrderItemQuantity({ orderItemId, quantity })` — captain bill edit; quantity `0` deletes the item. Allowed while the session is `active` **or** `bill_generated` (follow with `reprintBill` after editing a printed bill). Throws once the session is `closed`.
-- `addItemsToSession({ sessionId, items })` — captain adds items as a **new round already `approved`** (captain is the approver) and queues a KOT print job. `items` is `{ dishId, quantity }[]`. Reuses the latest round's `customer_id`. Throws on a `closed` session.
+- `addItemsToSession({ sessionId, items })` — captain adds items as a **new round already `approved`** (captain is the approver) and queues a KOT print job. `items` is `{ dishId, quantity }[]`. Reuses the latest round's `customer_id`. Throws on a `closed` session. Guarded by `requireStaff()` — it mints approved rounds and fires KOTs, so it must never be callable by a guest. Works for both tables and parcels.
 - `reprintBill({ sessionId })` — recomputes the bill from the session's current items, **updates the existing `bills` row in place** (never inserts a second row — daily reports stay accurate), and queues a fresh `bill` print job. Throws if no bill exists, the bill is settled, or the session is closed. Shares `computeBillForSession()` with `generateBill`.
+
+**Parcel / takeaway (P01)**
+
+A parcel is a `table_sessions` row with **no table**: `session_type = 'parcel'`, `table_id NULL`, identified by `token_number` (resets daily, IST). Everything downstream — `orders`, `order_items`, `bills`, `print_jobs`, `/admin/reports` — is keyed on `session_id`, so parcels reuse the entire ordering pipeline unchanged.
+
+- `createParcelSession({ restaurantId, customerName? })` → `{ sessionId, tokenNumber }` — allocates a token via the `next_parcel_token` RPC (atomic per-restaurant-per-IST-day counter), then inserts the session. `pin` is the non-numeric placeholder `'----'`: the column is NOT NULL but no guest device ever joins a parcel, and a non-numeric value can never match 4-digit PIN entry. Optional name is stored in `host_name`.
+- `getParcelSessions(restaurantId)` → `RawParcelRow[]` — live parcels (`active` + `bill_generated`) with nested orders/items. **Cannot** come from `getTablesWithSessions` — that query starts at `restaurant_tables`, which a parcel has no row in.
+- `cancelParcelSession(sessionId)` — discards an unpaid parcel. Refuses once a bill is settled.
+- `getSessionPrintContext(sessionId)` (private) — resolves the KOT header for either session type; skips the `restaurant_tables` lookup when `table_id` is null. Used by `approveOrder`, `reprintKot`, and `addItemsToSession`, all three of which previously used `.single()` on the table and would throw for a parcel.
+- `computeBillForSession` emits `orderType` + `tokenNumber`, and falls back to `session.host_name` for `customerName` (captain-punched parcel rounds carry no `customers` row).
+- `moveTableSession` explicitly rejects parcels — there is no table to move.
+
+**Print payload additions** (optional fields; jobs queued before this shipped still print identically):
+- KOT: `orderType?: 'dine_in'|'parcel'`, `tokenNumber?`, `customerName?` → prints `P A R C E L` / `TOKEN #7` / `NAME: RAHUL` instead of `TABLE 6`
+- Bill: `orderType?`, `tokenNumber?` → header reads `PARCEL #7` instead of `Table: 6`
 
 ---
 
