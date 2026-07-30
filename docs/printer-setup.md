@@ -105,26 +105,69 @@ changing them never touches the web app. Current design (32 chars wide, fits 80m
 - Preview any format change without paper: set `MOCK_PRINT=true` and the exact slip text
   is printed to the console.
 
-## Step 6 — Keep the bridge running permanently
+## Step 6 — Keep the bridge running permanently (no one has to open PowerShell)
 
-The bridge only prints while running. On the restaurant PC:
+The bridge only prints while running, so it must start itself on every boot — no manual
+`npm start` ever again. `print-bridge/start-bridge.bat` wraps `npm start` in a loop that
+auto-restarts it if it ever crashes, and logs everything to `print-bridge/logs/bridge.log`.
+Wire it to Windows Task Scheduler so it launches at boot, before anyone logs in:
 
-```powershell
-npm install -g pm2 pm2-windows-startup
-pm2-startup install
-cd print-bridge
-pm2 start "npm start" --name taksh-print-bridge
-pm2 save
-```
+1. Open **Task Scheduler** (Start menu → type "Task Scheduler").
+2. **Action → Create Task…** (not "Create Basic Task" — need the extra options).
+3. **General** tab:
+   - Name: `TAKSH Print Bridge`
+   - Select **"Run whether user is logged on or not"**
+   - Check **"Run with highest privileges"**
+4. **Triggers** tab → **New…** → Begin the task: **"At startup"** → OK.
+5. **Actions** tab → **New…**:
+   - Action: **Start a program**
+   - Program/script: full path to `start-bridge.bat`, e.g.
+     `C:\Users\<name>\Downloads\TAKSH-DIGITAL-SMART-MENU-main\TAKSH-DIGITAL-SMART-MENU-main\print-bridge\start-bridge.bat`
+   - Start in: the `print-bridge` folder (same path, without the filename)
+6. **Settings** tab → check **"If the task fails, restart every"** → `1 minute`,
+   and **uncheck** "Stop the task if it runs longer than" (it's meant to run forever).
+7. Click OK — it will ask for the Windows account password (needed for "run whether
+   logged on or not"). Enter the restaurant PC's login password.
 
-Also set Windows power settings so the PC **never sleeps** — a sleeping PC prints nothing.
-(Alternative to PM2: a Task Scheduler task running `npm start` in `print-bridge/` "At log on".)
+Test it without waiting for a real reboot: right-click **TAKSH Print Bridge** → **Run**.
+Check `print-bridge\logs\bridge.log` — it should show `[bridge] starting — mode: REAL...`.
+Now actually restart the PC once and confirm the bridge comes back up on its own
+(place a test order and see if the KOT prints) before trusting it long-term.
+
+Also set Windows power settings (Settings → Power) so the PC **never sleeps** — a sleeping
+PC prints nothing even with the task configured correctly.
+
+From now on: the restaurant computer only needs to be powered on. No PowerShell, no
+logging in, no `npm start` — ever again. If the bridge crashes, Task Scheduler's
+"restart every 1 minute" plus the batch file's own retry loop bring it back automatically.
+
+## Daily routine — does the PC need to run 24/7?
+
+**No.** The restaurant computer only needs to be **powered on during service hours**.
+
+- **Opening:** press the power button. That's it — the bridge starts by itself at boot,
+  before anyone logs in. No PowerShell, no login, no `npm start`.
+- **Closing:** shut down **only after the last table is settled** (see caveat below).
+- Leaving it on 24/7 is fine too and costs nothing but electricity — it idles at one
+  small Supabase query every 2 seconds.
+
+**Caveat — jobs queued while the PC is off.** Print jobs live in Supabase, not on the PC.
+If a KOT or bill is created while the computer is off, the row stays `pending` and prints
+the moment the bridge next starts. That is exactly what you want after a crash or power
+cut (nothing is lost), but it means a bill generated after shutdown will print the next
+morning. Practical rule: **close all tables before shutting down.** To discard stale jobs,
+set their `status` to `failed` in Supabase → Table Editor → `print_jobs` before booting.
+
+The computer must also **never sleep** — a sleeping PC stops polling and prints nothing.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
 | Nothing prints, no bridge log line | Bridge not running, or `.env` has wrong Supabase credentials |
+| Nothing prints after a reboot | Check `print-bridge\logs\bridge.log` for the latest entry; open Task Scheduler → confirm "TAKSH Print Bridge" shows "Running"/"Ready" and last run succeeded (not "0x1" or similar error code) |
+| `bridge.log` says `FATAL: npm.cmd not found` | Node.js isn't installed on this PC, or was installed for a different Windows user — reinstall from nodejs.org (LTS) and re-run the task |
+| A whole day's KOTs print at once in the morning | Jobs queued in Supabase while the PC was off — see "Daily routine" above |
 | `job ... failed` in the log | Printer unreachable — re-check Step 3; after fixing, set the job's `status` back to `pending` in Supabase to reprint it |
 | Prints stopped after router restart | Printer IP changed — Step 2 static IP not applied |
 | UPI QR doesn't print (rest of bill fine) | Very old ESC/POS models lack native QR support (`GS ( k`) — the text `UPI: <id>` below it still prints, or remove the QR segment in `billSegments` |
