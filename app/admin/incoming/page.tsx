@@ -5,41 +5,26 @@ import { AdminLayout } from "@/components/AdminSidebar"
 import { supabase } from "@/lib/supabase"
 import {
   approveOrder, rejectOrder, getPendingOrders, type PendingOrder,
-  generateBill, forceResetTableById, closeTable,
-  getRestaurantId, getTablesWithSessions, type RawTableRow,
+  getRestaurantId, getTablesWithSessions, getParcelSessions,
 } from "@/lib/database"
 import { toast } from "sonner"
 import {
   CheckCircle, XCircle, Clock, Users, Inbox,
-  Receipt, LayoutGrid, Trash2, ChefHat, CheckCircle2, AlertCircle, X,
+  Receipt, ChefHat, ShoppingBag, Plus,
 } from "lucide-react"
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-type OrderItemRow = { name: string; quantity: number; price: number }
-
-type RoundRow = {
-  roundNumber: number
-  placedAt: string
-  customerName: string | null
-  items: OrderItemRow[]
-  roundTotal: number
-}
-
-type TableCard = {
-  tableId: string
-  tableNumber: number
-  // "scanned" = QR opened, nothing ordered; "engaged" = an order is waiting in
-  // the queue above. Both used to collapse into "open", which hid an abandoned
-  // scan behind the same "Available" card as a genuinely free table.
-  status: "open" | "scanned" | "engaged" | "active" | "bill_generated"
-  sessionId?: string
-  hostName?: string
-  openedAt?: string
-  runningTotal: number
-  roundCount: number
-  rounds: RoundRow[]
-}
+// The captain panel owns the table/parcel model and every service action on it.
+// The admin reuses both so the two screens can never drift apart — when a
+// captain is off the floor the admin has exactly the same controls.
+import {
+  buildCaptainTable, buildCaptainParcel, isServing,
+  type CaptainTable, type CaptainParcel,
+} from "@/app/captain/tables/page"
+import { TableSheet } from "@/components/captain/TableSheet"
+import { MoveTableModal } from "@/components/captain/MoveTableModal"
+import { SettleModal } from "@/components/captain/SettleModal"
+import { ParcelSheet } from "@/components/captain/ParcelSheet"
+import { NewParcelModal } from "@/components/captain/NewParcelModal"
+import { AddItemModal } from "@/components/captain/AddItemModal"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -53,85 +38,6 @@ function elapsed(openedAt: string) {
   return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`
 }
 
-function timeIST(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
-  })
-}
-
-function buildCard(t: RawTableRow): TableCard {
-  const session = t.table_sessions
-    .filter(s => s.status === "active" || s.status === "bill_generated")
-    .sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime())[0]
-
-  if (!session) {
-    return { tableId: t.id, tableNumber: t.table_number, status: "open", runningTotal: 0, roundCount: 0, rounds: [] }
-  }
-
-  const nonRejected = session.orders.filter(o => o.status !== "rejected")
-
-  // A scanned QR opens a session immediately, so a session existing does not
-  // mean the table is being served. Separate the pre-service states:
-  //   scanned — session open, nothing ordered at all
-  //   engaged — an order exists but is still awaiting approval
-  const hasApprovedOrder = nonRejected.some(o => o.status === "approved" || o.status === "served")
-  const status: TableCard["status"] =
-    session.status === "bill_generated" ? "bill_generated"
-      : hasApprovedOrder ? "active"
-      : nonRejected.length > 0 ? "engaged"
-      : "scanned"
-
-  // Neither pre-service state has billable rounds yet — an engaged table's order
-  // can still be rejected — so both report zero, as they did when they were "open".
-  if (status === "scanned" || status === "engaged") {
-    return {
-      tableId: t.id,
-      tableNumber: t.table_number,
-      status,
-      sessionId: session.id,
-      openedAt: session.opened_at,
-      runningTotal: 0,
-      roundCount: 0,
-      rounds: [],
-    }
-  }
-
-  const roundMap = new Map<number, RoundRow>()
-  for (const ord of nonRejected) {
-    if (!roundMap.has(ord.round_number)) {
-      roundMap.set(ord.round_number, {
-        roundNumber: ord.round_number,
-        placedAt: ord.placed_at,
-        customerName: ord.customers?.name ?? null,
-        items: [],
-        roundTotal: 0,
-      })
-    }
-    const r = roundMap.get(ord.round_number)!
-    r.items.push(...ord.order_items)
-    r.roundTotal += ord.order_items.reduce((s, i) => s + i.price * i.quantity, 0)
-  }
-  const rounds = Array.from(roundMap.values()).sort((a, b) => a.roundNumber - b.roundNumber)
-  const runningTotal = rounds.reduce((s, r) => s + r.roundTotal, 0)
-
-  const hostName =
-    session.host_name ||
-    nonRejected.find(o => o.customers?.name)?.customers?.name ||
-    null
-
-  return {
-    tableId: t.id,
-    tableNumber: t.table_number,
-    status,
-    sessionId: session.id,
-    hostName: hostName ?? undefined,
-    openedAt: session.opened_at,
-    runningTotal,
-    roundCount: rounds.length,
-    rounds,
-  }
-}
-
 // ── Status config ───────────────────────────────────────────────────────────
 
 const STATUS = {
@@ -140,25 +46,58 @@ const STATUS = {
   engaged:        { label: "Engaged",        dot: "bg-[#C0392B]", card: "border-[#E8B4AC] bg-[linear-gradient(145deg,#FFF6F3_0%,#FBE4DE_100%)]", text: "text-[#96271B]" },
   active:         { label: "Active",         dot: "bg-[#2A6B3A]", card: "border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)]",  text: "text-[#1B5E2E]" },
   bill_generated: { label: "Bill Requested", dot: "bg-[#C47A20]", card: "border-[#F0C896] bg-[linear-gradient(145deg,#FFFBF4_0%,#FEF0D8_100%)]", text: "text-[#8B4513]" },
-} satisfies Record<TableCard["status"], { label: string; dot: string; card: string; text: string }>
+} satisfies Record<CaptainTable["status"], { label: string; dot: string; card: string; text: string }>
+
+/**
+ * The captain sheets and modals are sized for a phone — full-bleed, edge to
+ * edge. Stretched across an admin desktop they read as a banner rather than a
+ * panel, so cap and centre them here. Scoped to this page: the captain panel
+ * keeps its full-width sheet. `margin-inline: auto` against left/right 0 does
+ * the centring so the components' own transforms stay untouched.
+ */
+const SHEET_DESKTOP_CSS = `
+@media (min-width: 768px) {
+  [data-testid="table-sheet"],
+  [data-testid="parcel-sheet"],
+  [data-testid="settle-modal"],
+  [data-testid="move-modal"],
+  [data-testid="new-parcel-modal"],
+  [data-testid="add-item-modal"] {
+    left: 0;
+    right: 0;
+    width: min(100% - 3rem, 560px);
+    margin-inline: auto;
+  }
+}
+`
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function IncomingOrdersPage() {
-  // Incoming orders state
+  // Pending approvals
   const [orders, setOrders] = useState<PendingOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
 
-  // Tables state
-  const [cards, setCards] = useState<TableCard[]>([])
+  // Tables + parcels
+  const [tables, setTables] = useState<CaptainTable[]>([])
+  const [parcels, setParcels] = useState<CaptainParcel[]>([])
   const [tablesLoading, setTablesLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [actionLoading, setActionLoading] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [settleOpen, setSettleOpen] = useState(false)
+  const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null)
+  const [newParcelOpen, setNewParcelOpen] = useState(false)
+  const [parcelSettleOpen, setParcelSettleOpen] = useState(false)
+  // Set right after "New Parcel" so the dish picker opens on the fresh session
+  // without the admin having to hunt for the new card.
+  const [pendingParcelAdd, setPendingParcelAdd] = useState<{ sessionId: string; token: number } | null>(null)
+
   const restIdRef = useRef<string | null>(null)
   const tablesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-  const selectedCard = cards.find(c => c.tableId === selectedId) ?? null
+  const selectedTable = tables.find(t => t.tableId === selectedId) ?? null
+  const selectedParcel = parcels.find(p => p.sessionId === selectedParcelId) ?? null
 
   // ── Fetch functions ──────────────────────────────────────────────────────
 
@@ -173,12 +112,24 @@ export default function IncomingOrdersPage() {
     }
   }
 
+  // Settled, not all: a parcel query failure must not blank the table grid,
+  // which is the screen's core. A shared catch would take both halves down.
   async function fetchTables(restaurantId: string) {
-    try {
-      const rows = await getTablesWithSessions(restaurantId)
-      setCards(rows.map(buildCard))
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to load tables")
+    const [tableResult, parcelResult] = await Promise.allSettled([
+      getTablesWithSessions(restaurantId),
+      getParcelSessions(restaurantId),
+    ])
+
+    if (tableResult.status === "fulfilled") {
+      setTables(tableResult.value.map(buildCaptainTable))
+    } else {
+      toast.error(tableResult.reason?.message ?? "Failed to load tables")
+    }
+
+    if (parcelResult.status === "fulfilled") {
+      setParcels(parcelResult.value.map(buildCaptainParcel))
+    } else {
+      toast.error(parcelResult.reason?.message ?? "Failed to load parcels")
     }
   }
 
@@ -223,6 +174,7 @@ export default function IncomingOrdersPage() {
       mounted = false
       if (tablesChannelRef.current) { supabase.removeChannel(tablesChannelRef.current); tablesChannelRef.current = null }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Order actions ────────────────────────────────────────────────────────
@@ -232,6 +184,7 @@ export default function IncomingOrdersPage() {
     setOrders((prev) => prev.filter((o) => o.id !== orderId))
     try {
       await approveOrder(orderId)
+      if (restIdRef.current) fetchTables(restIdRef.current)
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to approve order")
       loadOrders()
@@ -245,6 +198,7 @@ export default function IncomingOrdersPage() {
     setOrders((prev) => prev.filter((o) => o.id !== orderId))
     try {
       await rejectOrder(orderId)
+      if (restIdRef.current) fetchTables(restIdRef.current)
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to reject order")
       loadOrders()
@@ -253,61 +207,23 @@ export default function IncomingOrdersPage() {
     }
   }
 
-  // ── Table actions ────────────────────────────────────────────────────────
-
-  async function handleGenerateBill() {
-    if (!selectedCard?.sessionId) return
-    setActionLoading(true)
-    try {
-      await generateBill({ sessionId: selectedCard.sessionId })
-      toast.success("Bill generated and sent to printer")
-      if (restIdRef.current) fetchTables(restIdRef.current)
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to generate bill")
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  async function handleCloseTable() {
-    if (!selectedCard?.sessionId) return
-    setActionLoading(true)
-    try {
-      await closeTable(selectedCard.sessionId)
-      toast.success(`Table ${selectedCard.tableNumber} closed`)
-      setSelectedId(null)
-      if (restIdRef.current) fetchTables(restIdRef.current)
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to close table")
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  async function handleForceReset() {
-    if (!selectedCard) return
-    if (!confirm(`Force-reset Table ${selectedCard.tableNumber}? Clears any session and cart with no bill.`)) return
-    setActionLoading(true)
-    try {
-      await forceResetTableById(selectedCard.tableId)
-      toast.success(`Table ${selectedCard.tableNumber} force-reset`)
-      setSelectedId(null)
-      if (restIdRef.current) fetchTables(restIdRef.current)
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to reset table")
-    } finally {
-      setActionLoading(false)
-    }
-  }
+  // A scanned-but-unordered table is not occupied — counting it would inflate
+  // the header every time a guest scans a QR and walks away.
+  const occupiedCount = tables.filter(
+    t => t.status === "engaged" || t.status === "active" || t.status === "bill_generated"
+  ).length
 
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <AdminLayout>
+      <style>{SHEET_DESKTOP_CSS}</style>
 
-      {/* ── Incoming Orders ─────────────────────────────────────────────── */}
+      {/* ── Waiting approval ────────────────────────────────────────────── */}
       <section className="mb-10">
-        <h2 className="mb-4 text-lg font-bold text-[#2C1810]">Tables</h2>
+        <h2 className="mb-4 text-lg font-bold text-[#2C1810]">
+          Waiting Approval{orders.length > 0 && ` · ${orders.length}`}
+        </h2>
 
         {ordersLoading ? (
           <div className="py-10 text-center text-[#8E6D4E]">Loading orders…</div>
@@ -379,66 +295,143 @@ export default function IncomingOrdersPage() {
         )}
       </section>
 
+      {/* ── Parcel / takeaway ───────────────────────────────────────────── */}
+      <section className="mb-10">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-[#2C1810]">
+            <ShoppingBag className="h-4 w-4 text-[#2A6B3A]" /> Parcel · Takeaway
+          </h2>
+          <button
+            onClick={() => setNewParcelOpen(true)}
+            data-testid="new-parcel-open"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#2A6B3A] px-3 text-xs font-bold text-white transition-colors hover:bg-[#235930]"
+          >
+            <Plus className="h-3.5 w-3.5" /> New Parcel
+          </button>
+        </div>
+
+        {parcels.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-[#D4C4B4] px-4 py-3 text-sm text-[#A89080]">
+            No takeaway orders right now.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {parcels.map(parcel => (
+              <button
+                key={parcel.sessionId}
+                onClick={() => setSelectedParcelId(parcel.sessionId)}
+                data-testid={`parcel-card-${parcel.tokenNumber}`}
+                className="rounded-2xl border border-[#9FD6B6] bg-[linear-gradient(145deg,#F2FBF5_0%,#DFF1E6_100%)] p-4 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-2xl font-bold text-[#1B5E2E]">#{parcel.tokenNumber}</span>
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#1B5E2E]">
+                    <span className={`h-1.5 w-1.5 rounded-full ${parcel.status === "bill_generated" ? "bg-[#C47A20]" : "bg-[#2A6B3A]"}`} />
+                    {parcel.status === "bill_generated" ? "Billed" : "Building"}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {parcel.customerName && (
+                    <div className="flex items-center gap-1 text-xs text-[#3F6B4C]">
+                      <Users className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{parcel.customerName}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 text-xs text-[#3F6B4C]">
+                    <ChefHat className="h-3 w-3 shrink-0" />
+                    {parcel.roundCount} round{parcel.roundCount !== 1 ? "s" : ""}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-[#3F6B4C]">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    {elapsed(parcel.openedAt)}
+                  </div>
+                  <div className="mt-2 text-base font-bold text-[#14401F]">
+                    ₹{parcel.runningTotal.toLocaleString("en-IN")}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* ── Tables ──────────────────────────────────────────────────────── */}
       <section>
-        <h2 className="mb-4 text-lg font-bold text-[#2C1810]">Tables</h2>
+        <div className="mb-4 flex items-baseline gap-3">
+          <h2 className="text-lg font-bold text-[#2C1810]">Tables</h2>
+          {!tablesLoading && (
+            <span className="text-xs text-[#8E6D4E]">
+              {occupiedCount} of {tables.length} occupied
+            </span>
+          )}
+        </div>
 
         {tablesLoading ? (
           <div className="py-10 text-center text-[#8E6D4E]">Loading tables…</div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {cards.map(card => {
-              const s = STATUS[card.status]
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="table-grid">
+            {tables.map(table => {
+              const s = STATUS[table.status]
               return (
                 <button
-                  key={card.tableId}
-                  onClick={() => setSelectedId(card.tableId)}
-                  className={`rounded-2xl border p-4 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.98] ${s.card}`}
+                  key={table.tableId}
+                  onClick={() => setSelectedId(table.tableId)}
+                  data-testid={`table-card-${table.tableNumber}`}
+                  className={`relative rounded-2xl border p-4 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.98] ${s.card}`}
                 >
+                  {table.pendingCount > 0 && (
+                    <span
+                      data-testid={`pending-badge-${table.tableNumber}`}
+                      className="absolute -right-1.5 -top-1.5 flex h-6 min-w-6 animate-pulse items-center justify-center rounded-full bg-[#C0392B] px-1.5 text-xs font-bold text-white shadow"
+                    >
+                      {table.pendingCount}
+                    </span>
+                  )}
+
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-2xl font-bold text-[#2C1810]">{card.tableNumber}</span>
+                    <span className="text-2xl font-bold text-[#2C1810]">{table.tableNumber}</span>
                     <span className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide ${s.text}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
                       {s.label}
                     </span>
                   </div>
 
-                  {card.status === "open" ? (
+                  {table.status === "open" ? (
                     <p className="text-xs text-[#A89080]">Available</p>
-                  ) : card.status === "scanned" ? (
+                  ) : table.status === "scanned" ? (
                     <div className="space-y-1">
                       <p className="text-xs text-[#8B5A1B]">Menu open · no order yet</p>
-                      {card.openedAt && (
+                      {table.openedAt && (
                         <div className="flex items-center gap-1 text-xs text-[#A07740]">
                           <Clock className="h-3 w-3 shrink-0" />
-                          {elapsed(card.openedAt)}
+                          {elapsed(table.openedAt)}
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      {card.hostName && (
+                      {table.hostName && (
                         <div className="flex items-center gap-1 text-xs text-[#6B5744]">
                           <Users className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{card.hostName}</span>
+                          <span className="truncate">{table.hostName}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-1 text-xs text-[#6B5744]">
                         <ChefHat className="h-3 w-3 shrink-0" />
-                        {card.roundCount} round{card.roundCount !== 1 ? "s" : ""}
+                        {table.roundCount} round{table.roundCount !== 1 ? "s" : ""}
                       </div>
-                      {card.openedAt && (
+                      {table.openedAt && (
                         <div className="flex items-center gap-1 text-xs text-[#6B5744]">
                           <Clock className="h-3 w-3 shrink-0" />
-                          {elapsed(card.openedAt)}
+                          {elapsed(table.openedAt)}
                         </div>
                       )}
                       <div className="mt-2 text-base font-bold text-[#2C1810]">
-                        ₹{card.runningTotal.toLocaleString("en-IN")}
+                        ₹{table.runningTotal.toLocaleString("en-IN")}
                       </div>
-                      {card.status === "bill_generated" && (
+                      {table.status === "bill_generated" && (
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-[#C47A20]">
-                          <Receipt className="h-3 w-3" /> Bill requested
+                          <Receipt className="h-3 w-3" /> Bill printed
                         </div>
                       )}
                     </div>
@@ -450,139 +443,99 @@ export default function IncomingOrdersPage() {
         )}
       </section>
 
-      {/* ── Table Drawer ────────────────────────────────────────────────── */}
-      {selectedCard && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setSelectedId(null)} />
-          <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col overflow-hidden bg-[#FFF8EE] shadow-[-8px_0_30px_rgba(15,9,5,0.18)]">
+      {/* ── Table sheet ─────────────────────────────────────────────────── */}
+      {selectedTable && (
+        <TableSheet
+          table={selectedTable}
+          onClose={() => setSelectedId(null)}
+          onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
+          onRequestSettle={() => setSettleOpen(true)}
+          onRequestMove={() => setMoveOpen(true)}
+        />
+      )}
 
-            <div className="shrink-0 bg-[linear-gradient(130deg,#2A180F,#1A100A)] px-6 py-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#C89F72]">
-                    Table {selectedCard.tableNumber}
-                  </p>
-                  <h2 className="mt-0.5 text-xl font-bold text-[#F4DEC0]">
-                    {selectedCard.hostName ?? "No host"}
-                  </h2>
-                </div>
-                <button onClick={() => setSelectedId(null)} className="mt-0.5 text-[#A08060] hover:text-[#F4DEC0]">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+      {/* ── Settle popup ────────────────────────────────────────────────── */}
+      {selectedTable && isServing(selectedTable.status) && settleOpen && selectedTable.sessionId && (
+        <SettleModal
+          sessionId={selectedTable.sessionId}
+          label={`Table ${selectedTable.tableNumber}`}
+          runningTotal={selectedTable.runningTotal}
+          onClose={() => setSettleOpen(false)}
+          onSettled={() => {
+            setSettleOpen(false)
+            setSelectedId(null)
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
 
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#C4A078]">
-                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS[selectedCard.status].text} bg-white/10`}>
-                  {STATUS[selectedCard.status].label}
-                </span>
-                {selectedCard.openedAt && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> {elapsed(selectedCard.openedAt)}
-                  </span>
-                )}
-                <span className="flex items-center gap-1">
-                  <ChefHat className="h-3 w-3" /> {selectedCard.roundCount} round{selectedCard.roundCount !== 1 ? "s" : ""}
-                </span>
-              </div>
-            </div>
+      {/* ── Move table modal ────────────────────────────────────────────── */}
+      {selectedTable && isServing(selectedTable.status) && moveOpen && (
+        <MoveTableModal
+          table={selectedTable}
+          allTables={tables}
+          onClose={() => setMoveOpen(false)}
+          onMoved={(targetTableNumber) => {
+            setMoveOpen(false)
+            const target = tables.find(t => t.tableNumber === targetTableNumber)
+            setSelectedId(target?.tableId ?? null)
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-              {selectedCard.rounds.length === 0 ? (
-                <p className="py-8 text-center text-sm text-[#A89080]">No approved orders yet.</p>
-              ) : (
-                selectedCard.rounds.map(round => (
-                  <div key={round.roundNumber} className="rounded-xl border border-[#E8D5BC] bg-white p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wide text-[#A46833]">
-                          Round {round.roundNumber}
-                        </span>
-                        {round.customerName && (
-                          <span className="flex items-center gap-1 text-[11px] text-[#8E6D4E]">
-                            <Users className="h-3 w-3" /> {round.customerName}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-xs text-[#8E6D4E]">{timeIST(round.placedAt)}</span>
-                    </div>
-                    <ul className="mb-2 divide-y divide-[#F0E4D0]">
-                      {round.items.map((item, idx) => (
-                        <li key={idx} className="flex justify-between py-1.5 text-sm">
-                          <span className="text-[#2C1810]">{item.name}</span>
-                          <span className="text-[#8E6D4E] shrink-0 ml-2">
-                            {item.quantity}× ₹{item.price} = ₹{(item.price * item.quantity).toLocaleString("en-IN")}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="text-right text-sm font-semibold text-[#3B2416]">
-                      Round total: ₹{round.roundTotal.toLocaleString("en-IN")}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+      {/* ── Parcel sheet + popups ───────────────────────────────────────── */}
+      {selectedParcel && (
+        <ParcelSheet
+          parcel={selectedParcel}
+          onClose={() => setSelectedParcelId(null)}
+          onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
+          onRequestSettle={() => setParcelSettleOpen(true)}
+        />
+      )}
 
-            <div className="shrink-0 border-t border-[#E8D5BC] bg-[#FFF8EE] px-6 py-5 space-y-3">
-              {/* Scanned and engaged tables have no approved rounds, so a
-                  running total there would always read ₹0 — misleading next to
-                  an order that is still sitting in the approval queue. */}
-              {(selectedCard.status === "active" || selectedCard.status === "bill_generated") && (
-                <div className="flex items-center justify-between rounded-xl bg-[#F7E6D2] px-4 py-3">
-                  <span className="text-sm font-semibold text-[#6B5744]">Running Total</span>
-                  <span className="text-lg font-bold text-[#2C1810]">
-                    ₹{selectedCard.runningTotal.toLocaleString("en-IN")}
-                  </span>
-                </div>
-              )}
+      {selectedParcel && parcelSettleOpen && (
+        <SettleModal
+          sessionId={selectedParcel.sessionId}
+          label={`Parcel #${selectedParcel.tokenNumber}`}
+          runningTotal={selectedParcel.runningTotal}
+          subtitle="Collect payment and close this parcel."
+          onClose={() => setParcelSettleOpen(false)}
+          onSettled={() => {
+            setParcelSettleOpen(false)
+            setSelectedParcelId(null)
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
 
-              {selectedCard.status === "bill_generated" && (
-                <div className="flex items-center gap-2 rounded-xl border border-[#F0C896] bg-[#FEF0D8] px-4 py-2.5 text-sm text-[#8B4513]">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  Bill has been requested — waiting for payment
-                </div>
-              )}
+      {newParcelOpen && restIdRef.current && (
+        <NewParcelModal
+          restaurantId={restIdRef.current}
+          onClose={() => setNewParcelOpen(false)}
+          onCreated={(sessionId, tokenNumber) => {
+            setNewParcelOpen(false)
+            setPendingParcelAdd({ sessionId, token: tokenNumber })
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
 
-              {selectedCard.status === "active" && (
-                <button
-                  onClick={handleGenerateBill}
-                  disabled={actionLoading || selectedCard.roundCount === 0}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#235930] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Receipt className="h-4 w-4" />
-                  {actionLoading ? "Generating…" : "Generate Bill & Print"}
-                </button>
-              )}
-
-              {selectedCard.status === "bill_generated" && (
-                <button
-                  onClick={handleCloseTable}
-                  disabled={actionLoading}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#8B5A2B] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                  {actionLoading ? "Closing…" : "Mark Paid & Free Table"}
-                </button>
-              )}
-
-              <button
-                onClick={handleForceReset}
-                disabled={actionLoading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Force Reset (no bill)
-              </button>
-
-              {selectedCard.roundCount === 0 && selectedCard.status === "active" && (
-                <p className="flex items-center gap-1.5 text-xs text-[#A89080]">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  No approved orders yet — bill can&apos;t be generated until an order is approved.
-                </p>
-              )}
-            </div>
-          </div>
-        </>
+      {/* Straight from "New Parcel" into the dish picker — no extra click. */}
+      {pendingParcelAdd && (
+        <AddItemModal
+          sessionId={pendingParcelAdd.sessionId}
+          label={`Parcel #${pendingParcelAdd.token}`}
+          onClose={() => {
+            setSelectedParcelId(pendingParcelAdd.sessionId)
+            setPendingParcelAdd(null)
+          }}
+          onAdded={() => {
+            setSelectedParcelId(pendingParcelAdd.sessionId)
+            setPendingParcelAdd(null)
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
       )}
     </AdminLayout>
   )
