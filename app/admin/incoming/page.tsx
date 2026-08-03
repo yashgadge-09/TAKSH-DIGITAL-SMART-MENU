@@ -10,7 +10,8 @@ import {
 import { toast } from "sonner"
 import {
   CheckCircle, XCircle, Clock, Users, Inbox,
-  Receipt, ChefHat, ShoppingBag, Plus,
+  Receipt, ChefHat, ShoppingBag, Plus, Bell, LayoutGrid, Wallet,
+  type LucideIcon,
 } from "lucide-react"
 // The captain panel owns the table/parcel model and every service action on it.
 // The admin reuses both so the two screens can never drift apart — when a
@@ -71,6 +72,80 @@ const SHEET_DESKTOP_CSS = `
 }
 `
 
+// ── Shared section furniture ────────────────────────────────────────────────
+// One heading and one empty state for all three sections. Previously each rolled
+// its own, which is what made the page read as three unrelated blocks.
+
+const CARD = "rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] shadow-[0_8px_20px_rgba(90,53,25,0.1)]"
+
+function SectionHeading({
+  icon: Icon, title, count, accent = "#A46833", children,
+}: {
+  icon: LucideIcon
+  title: string
+  count?: number
+  accent?: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2.5">
+        <span
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E0CBAA] bg-[#FFF8EE]"
+          style={{ color: accent }}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <h2 className="text-base font-bold text-[#2C1810]">{title}</h2>
+        {count !== undefined && count > 0 && (
+          <span className="rounded-full bg-[#F0DCC0] px-2 py-0.5 text-xs font-bold text-[#7A5A3A]">
+            {count}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function EmptyStrip({ icon: Icon, title, hint }: { icon: LucideIcon; title: string; hint?: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-dashed border-[#D9C3A5] bg-[#FFFBF4]/70 px-5 py-6">
+      <Icon className="h-5 w-5 shrink-0 text-[#C3A987]" />
+      <div>
+        <p className="text-sm font-semibold text-[#8E7F71]">{title}</p>
+        {hint && <p className="text-xs text-[#A89080]">{hint}</p>}
+      </div>
+    </div>
+  )
+}
+
+function StatTile({
+  icon: Icon, label, value, hint, accent,
+}: {
+  icon: LucideIcon
+  label: string
+  value: string | number
+  hint?: string
+  accent: string
+}) {
+  return (
+    <div className={`${CARD} flex items-center gap-4 p-4`}>
+      <span
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#E0CBAA] bg-[#FFFDF8]"
+        style={{ color: accent }}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#9A8570]">{label}</p>
+        <p className="text-2xl font-bold leading-tight text-[#2C1810]">{value}</p>
+        {hint && <p className="truncate text-[11px] text-[#A89080]">{hint}</p>}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function IncomingOrdersPage() {
@@ -92,6 +167,8 @@ export default function IncomingOrdersPage() {
   // Set right after "New Parcel" so the dish picker opens on the fresh session
   // without the admin having to hunt for the new card.
   const [pendingParcelAdd, setPendingParcelAdd] = useState<{ sessionId: string; token: number } | null>(null)
+
+  const [lastSynced, setLastSynced] = useState<Date | null>(null)
 
   const restIdRef = useRef<string | null>(null)
   const tablesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -131,6 +208,8 @@ export default function IncomingOrdersPage() {
     } else {
       toast.error(parcelResult.reason?.message ?? "Failed to load parcels")
     }
+
+    setLastSynced(new Date())
   }
 
   // ── Effects ──────────────────────────────────────────────────────────────
@@ -212,6 +291,12 @@ export default function IncomingOrdersPage() {
   const occupiedCount = tables.filter(
     t => t.status === "engaged" || t.status === "active" || t.status === "bill_generated"
   ).length
+  const freeCount = tables.filter(t => t.status === "open").length
+  // Everything ordered but not yet settled. Deliberately not called revenue —
+  // that word belongs to /admin/analytics, which counts settled bills only.
+  const floorTotal =
+    tables.reduce((s, t) => s + t.runningTotal, 0) +
+    parcels.reduce((s, p) => s + p.runningTotal, 0)
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -219,72 +304,122 @@ export default function IncomingOrdersPage() {
     <AdminLayout>
       <style>{SHEET_DESKTOP_CSS}</style>
 
+      {/* ── Page header ─────────────────────────────────────────────────── */}
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[#2C1810]">Tables &amp; Orders</h1>
+          <p className="text-sm text-[#8E7F71]">
+            Approve an order to fire its KOT, then edit, bill and settle any table or parcel.
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#CFAF8C] bg-[#FFF8EE] px-3 py-1.5 text-xs font-semibold text-[#7A5A3A]">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-[#2F9E44] opacity-70" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2F9E44]" />
+          </span>
+          LIVE
+          {lastSynced && (
+            <span className="font-normal text-[#A98B69]">
+              · {lastSynced.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* ── Floor summary ───────────────────────────────────────────────── */}
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          icon={Bell}
+          label="Waiting approval"
+          value={orders.length}
+          hint={orders.length ? "Kitchen is not printing yet" : "Queue is clear"}
+          accent="#C0392B"
+        />
+        <StatTile
+          icon={LayoutGrid}
+          label="Tables occupied"
+          value={tablesLoading ? "—" : `${occupiedCount} / ${tables.length}`}
+          hint={tablesLoading ? undefined : `${freeCount} open`}
+          accent="#2A6B3A"
+        />
+        <StatTile
+          icon={ShoppingBag}
+          label="Parcels open"
+          value={parcels.length}
+          hint={parcels.length ? "Takeaway in progress" : "None at the counter"}
+          accent="#1B5E2E"
+        />
+        <StatTile
+          icon={Wallet}
+          label="On the floor"
+          value={`₹${floorTotal.toLocaleString("en-IN")}`}
+          hint="Ordered, not yet settled"
+          accent="#A46833"
+        />
+      </div>
+
       {/* ── Waiting approval ────────────────────────────────────────────── */}
-      <section className="mb-10">
-        <h2 className="mb-4 text-lg font-bold text-[#2C1810]">
-          Waiting Approval{orders.length > 0 && ` · ${orders.length}`}
-        </h2>
+      <section className="mb-8">
+        <SectionHeading icon={Bell} title="Waiting Approval" count={orders.length} accent="#C0392B" />
 
         {ordersLoading ? (
-          <div className="py-10 text-center text-[#8E6D4E]">Loading orders…</div>
+          <EmptyStrip icon={Inbox} title="Loading orders…" />
         ) : orders.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-12 text-[#A68660]">
-            <Inbox className="w-10 h-10 opacity-40" />
-            <p className="text-base font-medium">No pending orders</p>
-            <p className="text-sm">New orders will appear here instantly.</p>
-          </div>
+          <EmptyStrip
+            icon={Inbox}
+            title="No orders waiting"
+            hint="New orders appear here the moment a guest places them."
+          />
         ) : (
-          <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {orders.map((order) => {
               const tableNumber = order.table_sessions?.restaurant_tables?.table_number ?? "?"
               const customerName = order.customers?.name ?? "Guest"
               const isProcessing = processingId === order.id
 
               return (
-                <div
-                  key={order.id}
-                  className="rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-6 shadow-[0_14px_32px_rgba(90,53,25,0.14)]"
-                >
-                  <div className="mb-4">
-                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#A46833]">
+                // flex + mt-auto on the actions: item lists differ in length, and
+                // without it the Approve buttons sit at ragged heights across the row.
+                <div key={order.id} className={`${CARD} flex flex-col p-5`}>
+                  <div className="mb-3 flex items-start justify-between gap-2">
+                    <span className="rounded-lg bg-[#F0DCC0] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#7A5A3A]">
                       Table {tableNumber} · Round {order.round_number}
                     </span>
-                    <div className="mt-1 flex items-center gap-4">
-                      <span className="flex items-center gap-1.5 text-sm text-[#8E6D4E]">
-                        <Users className="w-3.5 h-3.5" />
-                        {customerName}
-                      </span>
-                      <span className="flex items-center gap-1.5 text-sm text-[#8E6D4E]">
-                        <Clock className="w-3.5 h-3.5" />
-                        {formatTime(order.placed_at)}
-                      </span>
-                    </div>
+                    <span className="flex shrink-0 items-center gap-1 text-xs text-[#8E6D4E]">
+                      <Clock className="h-3 w-3" />
+                      {formatTime(order.placed_at)}
+                    </span>
                   </div>
 
-                  <ul className="mb-5 divide-y divide-[#E8D5BC]">
+                  <p className="mb-3 flex items-center gap-1.5 text-sm font-medium text-[#6B5744]">
+                    <Users className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{customerName}</span>
+                  </p>
+
+                  <ul className="mb-4 divide-y divide-[#EADCC4] border-y border-[#EADCC4]">
                     {order.order_items.map((item, i) => (
-                      <li key={i} className="flex justify-between py-1.5 text-sm">
-                        <span className="text-[#2C1810] font-medium">{item.name}</span>
-                        <span className="text-[#8E6D4E]">× {item.quantity}</span>
+                      <li key={i} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+                        <span className="min-w-0 flex-1 truncate font-medium text-[#2C1810]">{item.name}</span>
+                        <span className="shrink-0 text-[#8E6D4E]">× {item.quantity}</span>
                       </li>
                     ))}
                   </ul>
 
-                  <div className="flex gap-3">
+                  <div className="mt-auto flex gap-2">
                     <button
                       onClick={() => handleApprove(order.id)}
                       disabled={isProcessing}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#235930] disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#235930] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle className="h-4 w-4" />
                       Approve
                     </button>
                     <button
                       onClick={() => handleReject(order.id)}
                       disabled={isProcessing}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#C0392B] bg-transparent px-4 py-2.5 text-sm font-semibold text-[#C0392B] transition-colors hover:bg-[#FFF0EE] disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#C0392B] bg-transparent px-3 py-2.5 text-sm font-semibold text-[#C0392B] transition-colors hover:bg-[#FFF0EE] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <XCircle className="w-4 h-4" />
+                      <XCircle className="h-4 w-4" />
                       Reject
                     </button>
                   </div>
@@ -296,32 +431,31 @@ export default function IncomingOrdersPage() {
       </section>
 
       {/* ── Parcel / takeaway ───────────────────────────────────────────── */}
-      <section className="mb-10">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-lg font-bold text-[#2C1810]">
-            <ShoppingBag className="h-4 w-4 text-[#2A6B3A]" /> Parcel · Takeaway
-          </h2>
+      <section className="mb-8">
+        <SectionHeading icon={ShoppingBag} title="Parcel · Takeaway" count={parcels.length} accent="#2A6B3A">
           <button
             onClick={() => setNewParcelOpen(true)}
             data-testid="new-parcel-open"
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#2A6B3A] px-3 text-xs font-bold text-white transition-colors hover:bg-[#235930]"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#2A6B3A] px-3.5 text-xs font-bold text-white transition-colors hover:bg-[#235930]"
           >
             <Plus className="h-3.5 w-3.5" /> New Parcel
           </button>
-        </div>
+        </SectionHeading>
 
         {parcels.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[#D4C4B4] px-4 py-3 text-sm text-[#A89080]">
-            No takeaway orders right now.
-          </p>
+          <EmptyStrip
+            icon={ShoppingBag}
+            title="No takeaway orders right now"
+            hint="Open one with New Parcel — a token is assigned automatically."
+          />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
             {parcels.map(parcel => (
               <button
                 key={parcel.sessionId}
                 onClick={() => setSelectedParcelId(parcel.sessionId)}
                 data-testid={`parcel-card-${parcel.tokenNumber}`}
-                className="rounded-2xl border border-[#9FD6B6] bg-[linear-gradient(145deg,#F2FBF5_0%,#DFF1E6_100%)] p-4 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+                className="flex min-h-[150px] flex-col rounded-2xl border border-[#9FD6B6] bg-[linear-gradient(145deg,#F2FBF5_0%,#DFF1E6_100%)] p-4 text-left shadow-[0_8px_20px_rgba(27,94,46,0.08)] transition-all hover:shadow-[0_12px_26px_rgba(27,94,46,0.16)] active:scale-[0.98]"
               >
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-2xl font-bold text-[#1B5E2E]">#{parcel.tokenNumber}</span>
@@ -345,9 +479,10 @@ export default function IncomingOrdersPage() {
                     <Clock className="h-3 w-3 shrink-0" />
                     {elapsed(parcel.openedAt)}
                   </div>
-                  <div className="mt-2 text-base font-bold text-[#14401F]">
-                    ₹{parcel.runningTotal.toLocaleString("en-IN")}
-                  </div>
+                </div>
+                {/* Totals pinned to the bottom edge so they line up across the row */}
+                <div className="mt-auto pt-2 text-base font-bold text-[#14401F]">
+                  ₹{parcel.runningTotal.toLocaleString("en-IN")}
                 </div>
               </button>
             ))}
@@ -357,19 +492,23 @@ export default function IncomingOrdersPage() {
 
       {/* ── Tables ──────────────────────────────────────────────────────── */}
       <section>
-        <div className="mb-4 flex items-baseline gap-3">
-          <h2 className="text-lg font-bold text-[#2C1810]">Tables</h2>
+        <SectionHeading icon={LayoutGrid} title="Tables" accent="#A46833">
           {!tablesLoading && (
-            <span className="text-xs text-[#8E6D4E]">
-              {occupiedCount} of {tables.length} occupied
-            </span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#8E6D4E]">
+              {(["active", "bill_generated", "engaged", "scanned", "open"] as const).map(key => (
+                <span key={key} className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${STATUS[key].dot}`} />
+                  {STATUS[key].label}
+                </span>
+              ))}
+            </div>
           )}
-        </div>
+        </SectionHeading>
 
         {tablesLoading ? (
-          <div className="py-10 text-center text-[#8E6D4E]">Loading tables…</div>
+          <EmptyStrip icon={LayoutGrid} title="Loading tables…" />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="table-grid">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4" data-testid="table-grid">
             {tables.map(table => {
               const s = STATUS[table.status]
               return (
@@ -377,7 +516,7 @@ export default function IncomingOrdersPage() {
                   key={table.tableId}
                   onClick={() => setSelectedId(table.tableId)}
                   data-testid={`table-card-${table.tableNumber}`}
-                  className={`relative rounded-2xl border p-4 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.98] ${s.card}`}
+                  className={`relative flex min-h-[150px] flex-col rounded-2xl border p-4 text-left shadow-[0_8px_20px_rgba(90,53,25,0.07)] transition-all hover:shadow-[0_12px_26px_rgba(90,53,25,0.15)] active:scale-[0.98] ${s.card}`}
                 >
                   {table.pendingCount > 0 && (
                     <span
@@ -409,32 +548,37 @@ export default function IncomingOrdersPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-1">
-                      {table.hostName && (
+                    <>
+                      <div className="space-y-1">
+                        {table.hostName && (
+                          <div className="flex items-center gap-1 text-xs text-[#6B5744]">
+                            <Users className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{table.hostName}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1 text-xs text-[#6B5744]">
-                          <Users className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{table.hostName}</span>
+                          <ChefHat className="h-3 w-3 shrink-0" />
+                          {table.roundCount} round{table.roundCount !== 1 ? "s" : ""}
                         </div>
-                      )}
-                      <div className="flex items-center gap-1 text-xs text-[#6B5744]">
-                        <ChefHat className="h-3 w-3 shrink-0" />
-                        {table.roundCount} round{table.roundCount !== 1 ? "s" : ""}
+                        {table.openedAt && (
+                          <div className="flex items-center gap-1 text-xs text-[#6B5744]">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {elapsed(table.openedAt)}
+                          </div>
+                        )}
                       </div>
-                      {table.openedAt && (
-                        <div className="flex items-center gap-1 text-xs text-[#6B5744]">
-                          <Clock className="h-3 w-3 shrink-0" />
-                          {elapsed(table.openedAt)}
+                      {/* Pinned to the bottom edge so totals line up across the row */}
+                      <div className="mt-auto pt-2">
+                        <div className="text-base font-bold text-[#2C1810]">
+                          ₹{table.runningTotal.toLocaleString("en-IN")}
                         </div>
-                      )}
-                      <div className="mt-2 text-base font-bold text-[#2C1810]">
-                        ₹{table.runningTotal.toLocaleString("en-IN")}
+                        {table.status === "bill_generated" && (
+                          <div className="flex items-center gap-1 text-[10px] font-semibold text-[#C47A20]">
+                            <Receipt className="h-3 w-3" /> Bill printed
+                          </div>
+                        )}
                       </div>
-                      {table.status === "bill_generated" && (
-                        <div className="flex items-center gap-1 text-[10px] font-semibold text-[#C47A20]">
-                          <Receipt className="h-3 w-3" /> Bill printed
-                        </div>
-                      )}
-                    </div>
+                    </>
                   )}
                 </button>
               )
