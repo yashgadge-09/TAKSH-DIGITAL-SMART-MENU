@@ -94,6 +94,9 @@ HEIC files are converted server-side via `heic-convert` in the upload route.
 ### `NotificationPrompt.tsx`
 Shown to guests after ordering. Requests OneSignal push permission. On grant, POSTs `player_id` to `/api/save-token`.
 
+### `captain/HistorySheet.tsx` (H01)
+Read-only bottom sheet for one past order, opened from `/captain/history`. Props: `{ entry: OrderHistoryEntry, onClose }`. Loads its rounds itself via `getOrderHistoryDetail(entry.sessionId)` on mount, renders each KOT round with items, then the bill split (subtotal / GST / total) and the settlement line. Intentionally has **no actions** — the bill is already printed and usually paid; anything still editable belongs on `TableSheet`, not here.
+
 ### `AdminSidebar.tsx`
 Exports two things: the `<AdminSidebar>` nav component (used by `app/admin/layout.tsx`) and `<AdminLayout>` (a wrapper every admin page must use — renders sidebar + repeats session guard). Contains the restaurant brand logo.
 

@@ -1983,6 +1983,192 @@ export async function getRevenueAnalytics({
   }
 }
 
+// ── Order history (billed sessions) ─────────────────────────────────────────
+// A session enters history the moment its bill exists: `generateBill` inserts
+// the row and `settleBill` stamps payment onto it later. Both states are
+// listed — a bill that was printed but never settled is still an order that
+// happened, it just has no money against it yet — so the range filter keys off
+// `generated_at`, not `settled_at`. That also keeps a late bill settled after
+// midnight on the service day it was actually served.
+
+export type OrderHistoryStatus = 'settled' | 'unsettled'
+
+export type OrderHistoryEntry = {
+  billId: string
+  sessionId: string | null
+  /** "Table 6" / "Parcel #7" */
+  label: string
+  orderType: 'dine_in' | 'parcel'
+  customerName: string | null
+  subtotal: number
+  gstAmount: number
+  total: number
+  paymentMethod: PaymentMethod | null
+  generatedAt: string
+  settledAt: string | null
+  status: OrderHistoryStatus
+}
+
+export type OrderHistoryResult = {
+  from: string
+  to: string
+  entries: OrderHistoryEntry[]
+  settledTotal: number
+  settledCount: number
+  unsettledTotal: number
+  unsettledCount: number
+  /** True when the range held more bills than the row cap. */
+  truncated: boolean
+}
+
+// A month of a busy service stays well under this; the cap only exists so a
+// wide custom range can never pull an unbounded result set into the browser.
+const HISTORY_ROW_LIMIT = 500
+
+const HISTORY_BILL_SELECT = `
+  id, session_id, subtotal, gst_amount, total, payment_method, generated_at, settled_at,
+  table_sessions!inner(
+    restaurant_id, session_type, token_number, host_name,
+    restaurant_tables(table_number)
+  )
+`
+
+type HistoryBillQueryRow = {
+  id: string
+  session_id: string | null
+  subtotal: number | string
+  gst_amount: number | string
+  total: number | string
+  payment_method: string | null
+  generated_at: string
+  settled_at: string | null
+  table_sessions: SettledBillQueryRow['table_sessions']
+}
+
+/**
+ * Billed orders in an IST day range, newest first — the data behind the
+ * History tab on both the admin and the captain panel.
+ *
+ * Guarded by `requireStaff()`, not `requireAdmin()`: the captain is the one who
+ * prints and settles these bills at the counter, so the per-bill totals are
+ * already in their hands. Aggregate revenue *analytics* stay admin-only.
+ */
+export async function getOrderHistory({
+  restaurantId,
+  from,
+  to,
+}: {
+  restaurantId: string
+  from?: string
+  to?: string
+}): Promise<OrderHistoryResult> {
+  await requireStaff()
+  if (!restaurantId) throw new Error('restaurantId is required')
+
+  const isDayKey = (value?: string) => /^\d{4}-\d{2}-\d{2}$/.test(value ?? '')
+  const rawTo = isDayKey(to) ? (to as string) : istDayKey(new Date())
+  const rawFrom = isDayKey(from) ? (from as string) : rawTo
+  const fromKey = rawFrom <= rawTo ? rawFrom : rawTo
+  const toKey = rawFrom <= rawTo ? rawTo : rawFrom
+
+  const rangeStart = istDayStart(fromKey)
+  const rangeEnd = new Date(istDayStart(toKey).getTime() + DAY_MS)
+
+  const { data, error } = await adminSupabase
+    .from('bills')
+    .select(HISTORY_BILL_SELECT)
+    .eq('table_sessions.restaurant_id', restaurantId)
+    .gte('generated_at', rangeStart.toISOString())
+    .lt('generated_at', rangeEnd.toISOString())
+    .order('generated_at', { ascending: false })
+    .limit(HISTORY_ROW_LIMIT + 1)
+  if (error) throw new Error(error.message)
+
+  const rows = (data ?? []) as unknown as HistoryBillQueryRow[]
+  const truncated = rows.length > HISTORY_ROW_LIMIT
+
+  const entries: OrderHistoryEntry[] = rows.slice(0, HISTORY_ROW_LIMIT).map((row) => ({
+    billId: row.id,
+    sessionId: row.session_id,
+    label: billLabel(row.table_sessions),
+    orderType: row.table_sessions?.session_type === 'parcel' ? 'parcel' : 'dine_in',
+    customerName: row.table_sessions?.host_name ?? null,
+    subtotal: Number(row.subtotal) || 0,
+    gstAmount: Number(row.gst_amount) || 0,
+    total: Number(row.total) || 0,
+    paymentMethod: (row.payment_method as PaymentMethod) ?? null,
+    generatedAt: row.generated_at,
+    settledAt: row.settled_at,
+    status: row.settled_at ? 'settled' : 'unsettled',
+  }))
+
+  let settledTotal = 0
+  let settledCount = 0
+  let unsettledTotal = 0
+  let unsettledCount = 0
+  for (const entry of entries) {
+    if (entry.status === 'settled') {
+      settledTotal += entry.total
+      settledCount += 1
+    } else {
+      unsettledTotal += entry.total
+      unsettledCount += 1
+    }
+  }
+
+  return {
+    from: fromKey,
+    to: toKey,
+    entries,
+    settledTotal,
+    settledCount,
+    unsettledTotal,
+    unsettledCount,
+    truncated,
+  }
+}
+
+export type OrderHistoryRound = {
+  orderId: string
+  roundNumber: number
+  placedAt: string
+  status: string
+  customerName: string | null
+  items: { id: string; name: string; quantity: number; price: number }[]
+  roundTotal: number
+}
+
+/**
+ * Every non-rejected round of one billed session — the KOT breakdown behind a
+ * single history row. Fetched on demand when a row is opened rather than
+ * joined into `getOrderHistory`, so a month-wide list stays a single light query.
+ */
+export async function getOrderHistoryDetail(sessionId: string): Promise<OrderHistoryRound[]> {
+  await requireStaff()
+  if (!sessionId) return []
+
+  const { data, error } = await adminSupabase
+    .from('orders')
+    .select('id, round_number, placed_at, status, customers(name), order_items(id, name, quantity, price)')
+    .eq('session_id', sessionId)
+    .neq('status', 'rejected')
+    .order('round_number', { ascending: true })
+  if (error) throw new Error(error.message)
+
+  return (data ?? []).map((row: any) => {
+    const items = (row.order_items ?? []) as OrderHistoryRound['items']
+    return {
+      orderId: row.id,
+      roundNumber: row.round_number,
+      placedAt: row.placed_at,
+      status: row.status,
+      customerName: row.customers?.name ?? null,
+      items,
+      roundTotal: items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0),
+    }
+  })
+}
+
 export async function closeTable(sessionId: string): Promise<void> {
   await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')

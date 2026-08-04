@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import {
@@ -11,7 +12,7 @@ import {
 import { toast } from "sonner"
 import {
   CheckCircle, XCircle, Clock, Users, ChefHat, Receipt, LogOut, Bell,
-  ShoppingBag, Plus,
+  ShoppingBag, Plus, History,
 } from "lucide-react"
 import { TakshBrand } from "@/components/TakshBrand"
 import { TableSheet } from "@/components/captain/TableSheet"
@@ -348,13 +349,22 @@ export default function CaptainTablesPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            data-testid="captain-logout"
-            className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] active:bg-[#33210F]"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Logout
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/captain/history"
+              data-testid="captain-history"
+              className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] active:bg-[#33210F]"
+            >
+              <History className="h-3.5 w-3.5" /> History
+            </Link>
+            <button
+              onClick={handleLogout}
+              data-testid="captain-logout"
+              className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] active:bg-[#33210F]"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Logout
+            </button>
+          </div>
         </div>
       </header>
 
