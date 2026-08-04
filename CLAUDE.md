@@ -62,6 +62,8 @@ npm run lint      # ESLint
                            settled (`bills.settled_at`); generated-but-unpaid bills show separately as
                            "Awaiting settlement". Live via Realtime on `bills`. Also the daily report
                            (`/admin/reports` redirects here)
+/admin/history           → order history (H01) — every billed order in a day/week/month/custom IST
+                           range, newest first; expand a row for its KOT rounds + items + bill split
 /admin/reviews           → review moderation
 /admin/todays-special    → toggle daily specials
 /admin/customers         → customer directory (T13); name/phone/WhatsApp opt-in
@@ -75,6 +77,9 @@ npm run lint      # ESLint
                            billing, Move Table, Settle & Save).
                            Parcel strip (P01): "New Parcel" → optional name → dish picker → KOT prints
                            as PARCEL #token → Print Bill & Take Payment → settle. No table involved.
+/captain/history         → captain order history (H01) — same data as /admin/history, mobile-first;
+                           preset chips + date pickers, tap a card → read-only `HistorySheet`
+
 ```
 
 **Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, or revenue. Users without a role are admins and may also open `/captain/tables`. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `NewParcelModal`). `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them.

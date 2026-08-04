@@ -38,6 +38,7 @@ All admin pages are `"use client"` components wrapped in `<AdminLayout>`. Gold/d
 | `/admin/menu` | `app/admin/menu/page.tsx` | Dish CRUD — add/edit/delete/toggle availability |
 | `/admin/categories` | `app/admin/categories/page.tsx` | Category ordering and images |
 | `/admin/analytics` | `app/admin/analytics/page.tsx` | Revenue + engagement dashboard. Settled-revenue tiles (day / month-to-date), revenue trend bar chart (7/30/90d), payment mix, top earning dishes, settled-bills table — all from `getRevenueAnalytics` (adminSupabase). A bill is revenue **only** once `bills.settled_at` is stamped by `settleBill`; generated-but-unpaid bills show as "Awaiting settlement" and are excluded. Realtime subscription on `bills` refetches on every insert/settle (toast on settle). Engagement charts below come from `getAnalyticsData` |
+| `/admin/history` | `app/admin/history/page.tsx` | Order history (H01) — Day/Week/Month/Custom IST range over every billed order (dine-in + parcel). Summary tiles (billed count, settled, awaiting payment), sortable-by-time table, click a row to expand its KOT rounds + items + subtotal/GST/total. Data via `getOrderHistory`; row detail lazy-loads through `getOrderHistoryDetail` |
 | `/admin/reviews` | `app/admin/reviews/page.tsx` | Review moderation — toggle `is_public` |
 | `/admin/todays-special` | `app/admin/todays-special/page.tsx` | Toggle `is_todays_special` per dish |
 | `/admin/customers` | `app/admin/customers/page.tsx` | Customer directory (T13) — name/phone/WhatsApp opted-in, most-recent first |
