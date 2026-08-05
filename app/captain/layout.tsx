@@ -53,7 +53,7 @@ export default function CaptainLayout({ children }: { children: ReactNode }) {
 
   if (!isSessionReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#2A190F_0%,#140C08_100%)] text-[#F1D2A2]">
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#2A190F_0%,#140C08_100%)] px-4 text-center text-sm text-[#F1D2A2]">
         Checking captain session...
       </div>
     )

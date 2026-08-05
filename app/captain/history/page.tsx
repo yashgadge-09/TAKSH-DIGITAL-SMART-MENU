@@ -89,25 +89,25 @@ export default function CaptainHistoryPage() {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#241610_0%,#1A100A_60%,#140C08_100%)] pb-24">
       {/* ── Top bar ───────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-[#4A3623] bg-[#20130C]/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 border-b border-[#4A3623] bg-[#20130C]/95 px-4 py-3 backdrop-blur md:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Link
               href="/captain/tables"
               data-testid="history-back"
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#5A4128] text-[#C9A87B] active:bg-[#33210F]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#5A4128] text-[#C9A87B] transition-colors hover:bg-[#33210F] active:bg-[#33210F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#F2C786]">History</p>
-              <p className="text-[11px] text-[#A98D6B]">{rangeLabel(range)}</p>
+              <p className="truncate text-[11px] text-[#A98D6B]">{rangeLabel(range)}</p>
             </div>
           </div>
           <button
             onClick={() => load()}
             data-testid="history-refresh"
-            className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] active:bg-[#33210F]"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] transition-colors hover:bg-[#33210F] active:bg-[#33210F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -115,18 +115,21 @@ export default function CaptainHistoryPage() {
         </div>
       </header>
 
-      {/* ── Filters ───────────────────────────────────────────────────────── */}
-      <section className="space-y-3 px-4 pt-4">
-        <div className="flex gap-2 overflow-x-auto pb-1" data-testid="history-presets">
+      {/* ── Content container ─────────────────────────────────────────────── */}
+      <div className="mx-auto w-full max-w-[1600px]">
+
+      {/* ── Filters — chips and date pickers share one row from md up ─────── */}
+      <section className="space-y-3 px-4 pt-4 md:flex md:items-center md:gap-4 md:space-y-0 md:px-6 lg:px-8">
+        <div className="flex gap-2 overflow-x-auto pb-1 md:min-w-0 md:flex-1 md:pb-0" data-testid="history-presets">
           {HISTORY_PRESETS.map(item => (
             <button
               key={item.key}
               onClick={() => setPreset(item.key)}
               data-testid={`history-preset-${item.key}`}
-              className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
+              className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D] ${
                 preset === item.key
                   ? "bg-[#F0A33D] text-[#2C1810]"
-                  : "border border-[#5A4128] text-[#C9A87B] active:bg-[#33210F]"
+                  : "border border-[#5A4128] text-[#C9A87B] hover:bg-[#33210F] active:bg-[#33210F]"
               }`}
             >
               {item.label}
@@ -135,14 +138,14 @@ export default function CaptainHistoryPage() {
         </div>
 
         {preset === "custom" ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 md:shrink-0">
             <input
               type="date"
               aria-label="From date"
               value={customFrom}
               max={todayIST()}
               onChange={e => setCustomFrom(e.target.value)}
-              className="min-w-0 flex-1 rounded-xl border border-[#5A4128] bg-[#2A1B10] px-3 py-2 text-sm text-[#F2C786] focus:outline-none focus:ring-2 focus:ring-[#F0A33D]"
+              className="min-w-0 flex-1 rounded-xl border border-[#5A4128] bg-[#2A1B10] px-3 py-2 text-sm text-[#F2C786] focus:outline-none focus:ring-2 focus:ring-[#F0A33D] md:w-40 md:flex-none"
             />
             <span className="text-sm text-[#A98D6B]">→</span>
             <input
@@ -151,11 +154,11 @@ export default function CaptainHistoryPage() {
               value={customTo}
               max={todayIST()}
               onChange={e => setCustomTo(e.target.value)}
-              className="min-w-0 flex-1 rounded-xl border border-[#5A4128] bg-[#2A1B10] px-3 py-2 text-sm text-[#F2C786] focus:outline-none focus:ring-2 focus:ring-[#F0A33D]"
+              className="min-w-0 flex-1 rounded-xl border border-[#5A4128] bg-[#2A1B10] px-3 py-2 text-sm text-[#F2C786] focus:outline-none focus:ring-2 focus:ring-[#F0A33D] md:w-40 md:flex-none"
             />
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 md:shrink-0">
             <label htmlFor="captain-history-day" className="text-xs font-semibold text-[#A98D6B]">
               {preset === "day" ? "Date" : "Ending"}
             </label>
@@ -165,14 +168,14 @@ export default function CaptainHistoryPage() {
               value={day}
               max={todayIST()}
               onChange={e => setDay(e.target.value)}
-              className="min-w-0 flex-1 rounded-xl border border-[#5A4128] bg-[#2A1B10] px-3 py-2 text-sm text-[#F2C786] focus:outline-none focus:ring-2 focus:ring-[#F0A33D]"
+              className="min-w-0 flex-1 rounded-xl border border-[#5A4128] bg-[#2A1B10] px-3 py-2 text-sm text-[#F2C786] focus:outline-none focus:ring-2 focus:ring-[#F0A33D] md:w-44 md:flex-none"
             />
           </div>
         )}
       </section>
 
-      {/* ── Summary ───────────────────────────────────────────────────────── */}
-      <section className="grid grid-cols-3 gap-2 px-4 pt-4" data-testid="history-summary">
+      {/* ── Summary — capped so three tiles don't stretch across a monitor ── */}
+      <section className="grid grid-cols-3 gap-2 px-4 pt-4 md:max-w-2xl md:gap-3 md:px-6 lg:px-8" data-testid="history-summary">
         <div className="rounded-xl border border-[#4A3623] bg-[#241710] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A98D6B]">Orders</p>
           <p className="mt-1 text-xl font-bold text-[#F2C786]">
@@ -190,19 +193,19 @@ export default function CaptainHistoryPage() {
       </section>
 
       {error ? (
-        <p className="mx-4 mt-4 rounded-xl border border-[#A63B21] bg-[#2C1510] px-4 py-3 text-sm text-[#FFB3A0]">
+        <p className="mx-4 mt-4 rounded-xl border border-[#A63B21] bg-[#2C1510] px-4 py-3 text-sm text-[#FFB3A0] md:mx-6 lg:mx-8">
           {error}
         </p>
       ) : null}
 
       {result?.truncated ? (
-        <p className="mx-4 mt-4 rounded-xl border border-[#7A4F2F] bg-[#2A1B10] px-4 py-3 text-xs text-[#D8A76A]">
+        <p className="mx-4 mt-4 rounded-xl border border-[#7A4F2F] bg-[#2A1B10] px-4 py-3 text-xs text-[#D8A76A] md:mx-6 lg:mx-8">
           Showing the 500 most recent bills — narrow the dates to see the rest.
         </p>
       ) : null}
 
       {/* ── Order list ────────────────────────────────────────────────────── */}
-      <section className="px-4 pt-5">
+      <section className="px-4 pt-5 md:px-6 lg:px-8">
         {loading && !result ? (
           <div className="py-16 text-center text-[#A98D6B]">Loading history…</div>
         ) : entries.length === 0 ? (
@@ -210,13 +213,13 @@ export default function CaptainHistoryPage() {
             No orders were billed in this range.
           </p>
         ) : (
-          <div className="space-y-3" data-testid="history-list">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="history-list">
             {entries.map(entry => (
               <button
                 key={entry.billId}
                 onClick={() => setSelectedId(entry.billId)}
                 data-testid={`history-card-${entry.billId}`}
-                className="w-full rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 text-left shadow-sm transition-transform active:scale-[0.98]"
+                className="w-full rounded-2xl border border-[#CFAF8C] bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 text-left shadow-sm transition-[transform,box-shadow] hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
               >
                 <div className="mb-1.5 flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-[#2C1810]">
@@ -254,6 +257,8 @@ export default function CaptainHistoryPage() {
           </div>
         )}
       </section>
+
+      </div>{/* /content container */}
 
       {selected && <HistorySheet entry={selected} onClose={() => setSelectedId(null)} />}
     </div>

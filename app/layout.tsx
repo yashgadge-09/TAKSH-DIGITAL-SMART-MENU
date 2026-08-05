@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { CartProvider } from '@/context/CartContext'
@@ -18,6 +18,15 @@ const playfair = Playfair_Display({
   variable: '--font-playfair',
   display: 'swap',
 })
+
+// viewport-fit=cover is what makes env(safe-area-inset-*) resolve to real
+// values on notched phones — without it the captain sheets' safe-area padding
+// silently computes to 0. No maximumScale / userScalable: pinch-zoom stays on.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
 
 export const metadata: Metadata = {
   title: 'TAKSH — Pure Veg Restaurant',
