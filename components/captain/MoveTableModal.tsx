@@ -4,6 +4,7 @@ import { useState } from "react"
 import { moveTableSession } from "@/lib/database"
 import { toast } from "sonner"
 import { X, ArrowLeftRight } from "lucide-react"
+import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import type { CaptainTable } from "@/app/captain/tables/page"
 
 export function MoveTableModal({
@@ -42,23 +43,24 @@ export function MoveTableModal({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-[60] bg-black/60" onClick={onClose} />
-      <div
-        data-testid="move-modal"
-        className="fixed inset-x-4 top-1/2 z-[70] max-h-[80vh] -translate-y-1/2 overflow-y-auto rounded-2xl bg-[#FFF8EE] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
-      >
-        <div className="mb-4 flex items-start justify-between">
-          <div>
+    <ResponsiveSheet variant="dialog" tier="raised" width="md" testId="move-modal" onClose={onClose}>
+      <div className="mb-4 flex items-start justify-between">
+        <div className="min-w-0">
+          <SheetTitle asChild>
             <h2 className="text-lg font-bold text-[#2C1810]">Move Table {table.tableNumber}</h2>
-            <p className="text-xs text-[#8E6D4E]">
-              Guests, orders and the QR session move with it.
-            </p>
-          </div>
-          <button onClick={onClose} data-testid="move-close" className="p-1 text-[#A08060]">
-            <X className="h-5 w-5" />
-          </button>
+          </SheetTitle>
+          <p className="text-xs text-[#8E6D4E]">
+            Guests, orders and the QR session move with it.
+          </p>
         </div>
+        <button
+          onClick={onClose}
+          data-testid="move-close"
+          className="-mr-2 -mt-2 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
         {emptyTables.length === 0 ? (
           <p className="py-6 text-center text-sm text-[#A89080]">No empty tables available.</p>
@@ -69,10 +71,10 @@ export function MoveTableModal({
                 key={t.tableId}
                 onClick={() => setTargetId(t.tableId)}
                 data-testid={`move-target-${t.tableNumber}`}
-                className={`flex h-14 items-center justify-center rounded-xl border text-lg font-bold transition-colors ${
+                className={`flex h-14 items-center justify-center rounded-xl border text-lg font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-1 ${
                   targetId === t.tableId
                     ? "border-[#2A6B3A] bg-[#2A6B3A] text-white"
-                    : "border-[#D4C4B4] bg-white text-[#2C1810] active:bg-[#F7E6D2]"
+                    : "border-[#D4C4B4] bg-white text-[#2C1810] hover:bg-[#F7E6D2] active:bg-[#F7E6D2]"
                 }`}
               >
                 {t.tableNumber}
@@ -85,12 +87,11 @@ export function MoveTableModal({
           onClick={handleMove}
           disabled={!target || moving}
           data-testid="move-confirm"
-          className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white active:bg-[#8B5A2B] disabled:opacity-40"
+          className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white transition-colors hover:bg-[#8B5A2B] active:bg-[#8B5A2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] focus-visible:ring-offset-2 disabled:opacity-40"
         >
           <ArrowLeftRight className="h-4 w-4" />
           {moving ? "Moving…" : target ? `Move to Table ${target.tableNumber}` : "Select a table"}
         </button>
-      </div>
-    </>
+    </ResponsiveSheet>
   )
 }

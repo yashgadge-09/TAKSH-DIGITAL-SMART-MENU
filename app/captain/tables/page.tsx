@@ -224,9 +224,20 @@ export default function CaptainTablesPage() {
 
   const restIdRef = useRef<string | null>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const selectedTable = tables.find(t => t.tableId === selectedId) ?? null
   const selectedParcel = parcels.find(p => p.sessionId === selectedParcelId) ?? null
+
+  // elapsed() is computed during render, so a card's "12m" would otherwise
+  // freeze until something unrelated re-renders — very visible on a desktop
+  // where the panel sits idle. The sheets re-render with the page, so one
+  // ticker here covers them too.
+  const [, setClock] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setClock(c => c + 1), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Settled, not all: the table grid is the captain's core screen and must
   // survive a parcel query failure. A shared catch would blank every table
@@ -260,21 +271,32 @@ export default function CaptainTablesPage() {
       if (!mounted) return
       setLoading(false)
 
+      // Realtime events arrive in bursts during service — one placed order
+      // touches both `orders` and `table_sessions`, and a full house fans that
+      // out further. Coalesce behind a short trailing timer so a burst costs
+      // one refetch, not five. The captain's own actions (approve / reject /
+      // sheet onChanged) still call fetchTables directly, so their feedback
+      // stays immediate; a remote change lands within ~½s of its last event.
+      const scheduleRefetch = () => {
+        if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current)
+        refetchTimerRef.current = setTimeout(() => {
+          refetchTimerRef.current = null
+          if (restIdRef.current) fetchTables(restIdRef.current)
+        }, 400)
+      }
+
       if (channelRef.current) return
       const ch = supabase
         .channel("captain-tables")
-        .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, () => {
-          if (restIdRef.current) fetchTables(restIdRef.current)
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
-          if (restIdRef.current) fetchTables(restIdRef.current)
-        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "table_sessions" }, scheduleRefetch)
+        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleRefetch)
         .subscribe()
       channelRef.current = ch
     })()
 
     return () => {
       mounted = false
+      if (refetchTimerRef.current) { clearTimeout(refetchTimerRef.current); refetchTimerRef.current = null }
       if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -337,30 +359,30 @@ export default function CaptainTablesPage() {
     <div className="min-h-screen bg-[linear-gradient(180deg,#241610_0%,#1A100A_60%,#140C08_100%)] pb-24">
 
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-[#4A3623] bg-[#20130C]/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 border-b border-[#4A3623] bg-[#20130C]/95 px-4 py-3 backdrop-blur md:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <TakshBrand compact />
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#F2C786]">Captain</p>
-              <p className="text-[11px] text-[#A98D6B]">
+              <p className="truncate text-[11px] text-[#A98D6B]">
                 {occupiedCount} of {tables.length || "…"} tables occupied
                 {parcels.length > 0 && ` · ${parcels.length} parcel${parcels.length !== 1 ? "s" : ""}`}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Link
               href="/captain/history"
               data-testid="captain-history"
-              className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] active:bg-[#33210F]"
+              className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] transition-colors hover:bg-[#33210F] active:bg-[#33210F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
             >
               <History className="h-3.5 w-3.5" /> History
             </Link>
             <button
               onClick={handleLogout}
               data-testid="captain-logout"
-              className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] active:bg-[#33210F]"
+              className="flex items-center gap-1.5 rounded-lg border border-[#5A4128] px-3 py-2 text-xs font-semibold text-[#C9A87B] transition-colors hover:bg-[#33210F] active:bg-[#33210F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
             >
               <LogOut className="h-3.5 w-3.5" /> Logout
             </button>
@@ -368,23 +390,28 @@ export default function CaptainTablesPage() {
         </div>
       </header>
 
+      {/* ── Content container — the grids must not sprawl edge-to-edge on a
+             wide monitor, and every strip shares the same gutter scale. ──── */}
+      <div className="mx-auto w-full max-w-[1600px]">
+
       {/* ── Pending approvals strip ─────────────────────────────────────── */}
       {pendingCards.length > 0 && (
-        <section className="px-4 pt-4" data-testid="pending-strip">
+        <section className="px-4 pt-4 md:px-6 lg:px-8" data-testid="pending-strip">
           <div className="mb-2 flex items-center gap-2">
             <Bell className="h-4 w-4 text-[#F0A33D]" />
             <h2 className="text-sm font-bold uppercase tracking-[0.1em] text-[#F2C786]">
               Waiting approval · {pendingCards.length}
             </h2>
           </div>
-          <div className="space-y-3">
+          {/* Row-major grid keeps the oldest order first at every width. */}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {pendingCards.map(card => {
               const isProcessing = processingId === card.orderId
               return (
                 <div
                   key={card.orderId}
                   data-testid={`pending-order-${card.tableNumber}`}
-                  className="rounded-2xl border border-[#F0A33D]/60 bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 shadow-[0_10px_26px_rgba(0,0,0,0.35)]"
+                  className="flex flex-col rounded-2xl border border-[#F0A33D]/60 bg-[linear-gradient(145deg,#FFF8EE_0%,#F7E6D2_100%)] p-4 shadow-[0_10px_26px_rgba(0,0,0,0.35)]"
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-bold text-[#2C1810]">
@@ -407,18 +434,20 @@ export default function CaptainTablesPage() {
                       </li>
                     ))}
                   </ul>
-                  <div className="flex gap-2">
+                  {/* mt-auto pins the actions to the card foot so a short
+                      order in a grid row lines up with its taller neighbours. */}
+                  <div className="mt-auto flex gap-2">
                     <button
                       onClick={() => handleApprove(card.orderId)}
                       disabled={isProcessing}
-                      className="flex h-11 flex-[2] items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white active:bg-[#235930] disabled:opacity-50"
+                      className="flex h-11 flex-[2] items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D] disabled:opacity-50"
                     >
                       <CheckCircle className="h-4 w-4" /> Approve
                     </button>
                     <button
                       onClick={() => handleReject(card.orderId)}
                       disabled={isProcessing}
-                      className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#C0392B] text-sm font-semibold text-[#C0392B] active:bg-[#FFF0EE] disabled:opacity-50"
+                      className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#C0392B] text-sm font-semibold text-[#C0392B] transition-colors hover:bg-[#FFF0EE] active:bg-[#FFF0EE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C0392B] disabled:opacity-50"
                     >
                       <XCircle className="h-4 w-4" /> Reject
                     </button>
@@ -431,7 +460,7 @@ export default function CaptainTablesPage() {
       )}
 
       {/* ── Parcel / takeaway ───────────────────────────────────────────── */}
-      <section className="px-4 pt-5" data-testid="parcel-strip">
+      <section className="px-4 pt-5 md:px-6 lg:px-8" data-testid="parcel-strip">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.1em] text-[#F2C786]">
             <ShoppingBag className="h-4 w-4 text-[#7FC9A0]" /> Parcel · Takeaway
@@ -439,7 +468,7 @@ export default function CaptainTablesPage() {
           <button
             onClick={() => setNewParcelOpen(true)}
             data-testid="new-parcel-open"
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#2A6B3A] px-3 text-xs font-bold text-white active:bg-[#235930]"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#2A6B3A] px-3 text-xs font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
           >
             <Plus className="h-3.5 w-3.5" /> New Parcel
           </button>
@@ -450,16 +479,16 @@ export default function CaptainTablesPage() {
             No takeaway orders right now.
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5 2xl:grid-cols-6">
             {parcels.map(parcel => (
               <button
                 key={parcel.sessionId}
                 onClick={() => setSelectedParcelId(parcel.sessionId)}
                 data-testid={`parcel-card-${parcel.tokenNumber}`}
-                className="rounded-2xl border border-[#7FC9A0]/50 bg-[linear-gradient(145deg,#F2FBF5_0%,#DFF1E6_100%)] p-4 text-left shadow-sm transition-transform active:scale-[0.97]"
+                className="rounded-2xl border border-[#7FC9A0]/50 bg-[linear-gradient(145deg,#F2FBF5_0%,#DFF1E6_100%)] p-4 text-left shadow-sm transition-[transform,box-shadow] hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
               >
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-2xl font-bold text-[#1B5E2E]">#{parcel.tokenNumber}</span>
+                  <span className="text-2xl font-bold text-[#1B5E2E] lg:text-3xl">#{parcel.tokenNumber}</span>
                   <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#1B5E2E]">
                     <span className={`h-1.5 w-1.5 rounded-full ${parcel.status === "bill_generated" ? "bg-[#E8A33C]" : "bg-[#4CAF6E]"}`} />
                     {parcel.status === "bill_generated" ? "Billed" : "Building"}
@@ -480,7 +509,7 @@ export default function CaptainTablesPage() {
                     <Clock className="h-3 w-3 shrink-0" />
                     {elapsed(parcel.openedAt)}
                   </div>
-                  <div className="mt-1.5 text-base font-bold text-[#14401F]">
+                  <div className="mt-1.5 text-base font-bold text-[#14401F] lg:text-lg">
                     ₹{parcel.runningTotal.toLocaleString("en-IN")}
                   </div>
                 </div>
@@ -491,13 +520,13 @@ export default function CaptainTablesPage() {
       </section>
 
       {/* ── Table grid ──────────────────────────────────────────────────── */}
-      <section className="px-4 pt-5">
+      <section className="px-4 pt-5 md:px-6 lg:px-8">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.1em] text-[#F2C786]">Tables</h2>
 
         {loading ? (
           <div className="py-16 text-center text-[#A98D6B]">Loading tables…</div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="table-grid">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5 2xl:grid-cols-6" data-testid="table-grid">
             {tables.map(table => {
               const s = STATUS[table.status]
               return (
@@ -505,7 +534,7 @@ export default function CaptainTablesPage() {
                   key={table.tableId}
                   onClick={() => setSelectedId(table.tableId)}
                   data-testid={`table-card-${table.tableNumber}`}
-                  className={`relative rounded-2xl border p-4 text-left shadow-sm transition-transform active:scale-[0.97] ${s.card}`}
+                  className={`relative rounded-2xl border p-4 text-left shadow-sm transition-[transform,box-shadow] hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D] ${s.card}`}
                 >
                   {table.pendingCount > 0 && (
                     <span
@@ -518,7 +547,7 @@ export default function CaptainTablesPage() {
 
                   <div className="mb-2 flex items-center justify-between">
                     <span
-                      className={`text-2xl font-bold ${
+                      className={`text-2xl font-bold lg:text-3xl ${
                         table.status === "open" ? "text-[#8A7A66]"
                           : table.status === "scanned" ? "text-[#D8A76A]"
                           : "text-[#2C1810]"
@@ -562,7 +591,7 @@ export default function CaptainTablesPage() {
                           {elapsed(table.openedAt)}
                         </div>
                       )}
-                      <div className="mt-1.5 text-base font-bold text-[#2C1810]">
+                      <div className="mt-1.5 text-base font-bold text-[#2C1810] lg:text-lg">
                         ₹{table.runningTotal.toLocaleString("en-IN")}
                       </div>
                       {table.status === "bill_generated" && (
@@ -578,6 +607,8 @@ export default function CaptainTablesPage() {
           </div>
         )}
       </section>
+
+      </div>{/* /content container */}
 
       {/* ── Table bottom sheet ──────────────────────────────────────────── */}
       {selectedTable && (

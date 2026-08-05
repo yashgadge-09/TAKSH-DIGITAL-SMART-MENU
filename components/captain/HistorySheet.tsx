@@ -5,6 +5,7 @@ import { getOrderHistoryDetail, type OrderHistoryEntry, type OrderHistoryRound }
 import { PAYMENT_LABELS, dateTimeIST, inrExact, timeIST } from "@/lib/order-history"
 import { toast } from "sonner"
 import { Clock, ShoppingBag, Users, X } from "lucide-react"
+import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 
 const ROUND_STATUS: Record<string, { label: string; cls: string }> = {
   pending_approval: { label: "Pending", cls: "border-[#F0C896] bg-[#FEF0D8] text-[#8B4513]" },
@@ -54,32 +55,30 @@ export function HistorySheet({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div
-        data-testid="history-sheet"
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-3xl bg-[#FFF8EE] shadow-[0_-12px_40px_rgba(0,0,0,0.45)]"
-      >
+      <ResponsiveSheet variant="sheet" tier="base" width="2xl" testId="history-sheet" onClose={onClose}>
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="shrink-0 bg-[linear-gradient(130deg,#2A180F,#1A100A)] px-5 pb-4 pt-3">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25" />
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25 md:hidden" />
           <div className="flex items-start justify-between">
-            <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#C89F72]">
-                {entry.orderType === "parcel" ? (
-                  <ShoppingBag className="h-3.5 w-3.5" />
-                ) : (
-                  <Users className="h-3.5 w-3.5" />
-                )}
-                {entry.label}
-              </p>
-              <h2 className="mt-0.5 text-lg font-bold text-[#F4DEC0]">
+            <div className="min-w-0">
+              <SheetTitle asChild>
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#C89F72]">
+                  {entry.orderType === "parcel" ? (
+                    <ShoppingBag className="h-3.5 w-3.5" />
+                  ) : (
+                    <Users className="h-3.5 w-3.5" />
+                  )}
+                  {entry.label}
+                </p>
+              </SheetTitle>
+              <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
                 {entry.customerName ?? "No name"}
               </h2>
             </div>
             <button
               onClick={onClose}
               data-testid="history-sheet-close"
-              className="mt-0.5 p-1 text-[#A08060] active:text-[#F4DEC0]"
+              className="-mr-3 -mt-1.5 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-white/10 hover:text-[#F4DEC0] active:text-[#F4DEC0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
             >
               <X className="h-5 w-5" />
             </button>
@@ -102,7 +101,7 @@ export function HistorySheet({
         </div>
 
         {/* ── Rounds ─────────────────────────────────────────────────────── */}
-        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4" data-testid="history-rounds">
+        <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4" data-testid="history-rounds">
           {loading ? (
             <p className="py-8 text-center text-sm text-[#A89080]">Loading items…</p>
           ) : rounds?.length ? (
@@ -148,7 +147,7 @@ export function HistorySheet({
         </div>
 
         {/* ── Bill totals ────────────────────────────────────────────────── */}
-        <div className="shrink-0 space-y-1.5 border-t border-[#E8D5BC] bg-[#FFF8EE] px-5 pb-6 pt-4 text-sm">
+        <div className="shrink-0 space-y-1.5 border-t border-[#E8D5BC] bg-[#FFF8EE] px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 text-sm md:pb-6">
           <div className="flex justify-between text-[#6B5744]">
             <span>Subtotal</span>
             <span>{inrExact(entry.subtotal)}</span>
@@ -171,7 +170,7 @@ export function HistorySheet({
             </p>
           )}
         </div>
-      </div>
+      </ResponsiveSheet>
     </>
   )
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { getSessionBill, settleBill, type PaymentMethod, type SessionBill } from "@/lib/database"
 import { toast } from "sonner"
 import { X, Banknote, QrCode, CreditCard, MoreHorizontal, CheckCircle2 } from "lucide-react"
+import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 
 const METHODS: { value: PaymentMethod; label: string; icon: typeof Banknote }[] = [
   { value: "cash", label: "Cash", icon: Banknote },
@@ -68,21 +69,22 @@ export function SettleModal({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-[60] bg-black/60" onClick={onClose} />
-      <div
-        data-testid="settle-modal"
-        className="fixed inset-x-4 top-1/2 z-[70] -translate-y-1/2 rounded-2xl bg-[#FFF8EE] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
-      >
-        <div className="mb-4 flex items-start justify-between">
-          <div>
+    <ResponsiveSheet variant="dialog" tier="raised" width="md" testId="settle-modal" onClose={onClose}>
+      <div className="mb-4 flex items-start justify-between">
+        <div className="min-w-0">
+          <SheetTitle asChild>
             <h2 className="text-lg font-bold text-[#2C1810]">Settle {label}</h2>
-            <p className="text-xs text-[#8E6D4E]">{subtitle}</p>
-          </div>
-          <button onClick={onClose} data-testid="settle-close" className="p-1 text-[#A08060]">
-            <X className="h-5 w-5" />
-          </button>
+          </SheetTitle>
+          <p className="text-xs text-[#8E6D4E]">{subtitle}</p>
         </div>
+        <button
+          onClick={onClose}
+          data-testid="settle-close"
+          className="-mr-2 -mt-2 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
         {/* Bill amount */}
         <div className="mb-5 rounded-xl bg-[#F7E6D2] px-4 py-3">
@@ -125,10 +127,10 @@ export function SettleModal({
               key={value}
               onClick={() => setMethod(value)}
               data-testid={`pay-${value}`}
-              className={`flex h-14 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition-colors ${
+              className={`flex h-14 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-1 ${
                 method === value
                   ? "border-[#2A6B3A] bg-[#2A6B3A] text-white"
-                  : "border-[#D4C4B4] bg-white text-[#2C1810] active:bg-[#F7E6D2]"
+                  : "border-[#D4C4B4] bg-white text-[#2C1810] hover:bg-[#F7E6D2] active:bg-[#F7E6D2]"
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -141,12 +143,11 @@ export function SettleModal({
           onClick={handleSettle}
           disabled={!method || !bill || settling || billStale}
           data-testid="settle-save"
-          className="flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] py-3.5 text-sm font-bold text-white active:bg-[#235930] disabled:opacity-40"
+          className="flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-40"
         >
           <CheckCircle2 className="h-4 w-4" />
           {settling ? "Saving…" : "Settle & Save"}
         </button>
-      </div>
-    </>
+    </ResponsiveSheet>
   )
 }

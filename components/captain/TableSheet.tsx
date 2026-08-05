@@ -8,6 +8,7 @@ import {
   Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import type { CaptainTable } from "@/app/captain/tables/page"
 
 function timeIST(iso: string) {
@@ -130,24 +131,26 @@ export function TableSheet({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div
-        data-testid="table-sheet"
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-3xl bg-[#FFF8EE] shadow-[0_-12px_40px_rgba(0,0,0,0.45)]"
-      >
+      <ResponsiveSheet variant="sheet" tier="base" width="2xl" testId="table-sheet" onClose={onClose}>
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="shrink-0 bg-[linear-gradient(130deg,#2A180F,#1A100A)] px-5 pb-4 pt-3">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25" />
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25 md:hidden" />
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#C89F72]">
-                Table {table.tableNumber}
-              </p>
-              <h2 className="mt-0.5 text-lg font-bold text-[#F4DEC0]">
+            <div className="min-w-0">
+              <SheetTitle asChild>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#C89F72]">
+                  Table {table.tableNumber}
+                </p>
+              </SheetTitle>
+              <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
                 {table.hostName ?? "No host"}
               </h2>
             </div>
-            <button onClick={onClose} data-testid="sheet-close" className="mt-0.5 p-1 text-[#A08060] active:text-[#F4DEC0]">
+            <button
+              onClick={onClose}
+              data-testid="sheet-close"
+              className="-mr-3 -mt-1.5 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-white/10 hover:text-[#F4DEC0] active:text-[#F4DEC0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
+            >
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -167,7 +170,7 @@ export function TableSheet({
         </div>
 
         {/* ── KOT rounds ─────────────────────────────────────────────────── */}
-        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4" data-testid="kot-list">
+        <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4" data-testid="kot-list">
           {table.rounds.length === 0 ? (
             <p className="py-8 text-center text-sm text-[#A89080]">No orders yet.</p>
           ) : (
@@ -207,7 +210,7 @@ export function TableSheet({
                                 disabled={editingItemId === item.id}
                                 data-testid={`item-minus-${item.id}`}
                                 aria-label={`Decrease ${item.name}`}
-                                className="flex h-8 w-8 items-center justify-center text-[#A46833] active:bg-[#F7E6D2] disabled:opacity-40"
+                                className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] disabled:opacity-40 md:h-8 md:w-8"
                               >
                                 <Minus className="h-3.5 w-3.5" />
                               </button>
@@ -219,7 +222,7 @@ export function TableSheet({
                                 disabled={editingItemId === item.id}
                                 data-testid={`item-plus-${item.id}`}
                                 aria-label={`Increase ${item.name}`}
-                                className="flex h-8 w-8 items-center justify-center text-[#A46833] active:bg-[#F7E6D2] disabled:opacity-40"
+                                className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] disabled:opacity-40 md:h-8 md:w-8"
                               >
                                 <Plus className="h-3.5 w-3.5" />
                               </button>
@@ -242,7 +245,7 @@ export function TableSheet({
                         onClick={() => handleReprintKot(round.orderId)}
                         disabled={reprintingId === round.orderId}
                         data-testid={`reprint-kot-${round.roundNumber}`}
-                        className="flex items-center gap-1.5 rounded-lg border border-[#CFAF8C] px-2.5 py-1.5 text-xs font-semibold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+                        className="flex h-10 items-center gap-1.5 rounded-lg border border-[#CFAF8C] px-2.5 text-xs font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50 md:h-8"
                       >
                         <Printer className="h-3 w-3" />
                         {reprintingId === round.orderId ? "Printing…" : "Reprint KOT"}
@@ -261,7 +264,7 @@ export function TableSheet({
             <button
               onClick={() => setAddItemOpen(true)}
               data-testid="add-item-open"
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#CFAF8C] bg-white/60 py-3 text-sm font-semibold text-[#A46833] active:bg-[#FFF3E0]"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#CFAF8C] bg-white/60 py-3 text-sm font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
             >
               <Plus className="h-4 w-4" /> Add Item
             </button>
@@ -269,7 +272,7 @@ export function TableSheet({
         </div>
 
         {/* ── Footer actions ─────────────────────────────────────────────── */}
-        <div className="shrink-0 space-y-2.5 border-t border-[#E8D5BC] bg-[#FFF8EE] px-5 pb-6 pt-4">
+        <div className="shrink-0 space-y-2.5 border-t border-[#E8D5BC] bg-[#FFF8EE] px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 md:pb-6">
           <div className="flex items-center justify-between rounded-xl bg-[#F7E6D2] px-4 py-2.5">
             <span className="text-sm font-semibold text-[#6B5744]">Total</span>
             <span className="text-lg font-bold text-[#2C1810]" data-testid="sheet-total">
@@ -289,7 +292,7 @@ export function TableSheet({
                 onClick={() => handlePrintBill(true)}
                 disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
                 data-testid="print-bill-and-pay"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white active:bg-[#235930] disabled:opacity-50"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <Wallet className="h-4 w-4" />
                 {actionLoading ? "Working…" : "Print Bill & Take Payment"}
@@ -299,7 +302,7 @@ export function TableSheet({
                   onClick={() => setEditingBill(true)}
                   disabled={actionLoading || table.rounds.length === 0}
                   data-testid="edit-bill"
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
                 >
                   <Pencil className="h-4 w-4" />
                   Edit Bill
@@ -309,7 +312,7 @@ export function TableSheet({
                 onClick={() => handlePrintBill(false)}
                 disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
                 data-testid="print-bill"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] active:bg-[#EAF5ED] disabled:opacity-50"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
               >
                 <Receipt className="h-4 w-4" />
                 Print Bill
@@ -328,7 +331,7 @@ export function TableSheet({
                 onClick={onRequestSettle}
                 disabled={actionLoading || billStale}
                 data-testid="settle-open"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white active:bg-[#8B5A2B] disabled:opacity-50"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white transition-colors hover:bg-[#8B5A2B] active:bg-[#8B5A2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Take Payment · Settle & Save
@@ -339,7 +342,7 @@ export function TableSheet({
                     onClick={() => setEditingBill(true)}
                     disabled={actionLoading}
                     data-testid="edit-bill"
-                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
                   >
                     <Pencil className="h-4 w-4" />
                     Edit Bill
@@ -349,7 +352,7 @@ export function TableSheet({
                   onClick={handleReprintBill}
                   disabled={actionLoading || table.pendingCount > 0}
                   data-testid="reprint-bill"
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] active:bg-[#EAF5ED] disabled:opacity-50"
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
                 >
                   <Printer className="h-4 w-4" />
                   {actionLoading ? "Printing…" : "Reprint Bill"}
@@ -364,7 +367,7 @@ export function TableSheet({
               onClick={onRequestMove}
               disabled={actionLoading}
               data-testid="move-table-open"
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#CFAF8C] text-sm font-semibold text-[#A46833] active:bg-[#FFF3E0] disabled:opacity-50"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#CFAF8C] text-sm font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
             >
               <ArrowLeftRight className="h-4 w-4" />
               Move Table
@@ -375,13 +378,13 @@ export function TableSheet({
             onClick={handleForceReset}
             disabled={actionLoading}
             data-testid="force-reset"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300/70 bg-white text-sm font-medium text-red-500 active:bg-red-50 disabled:opacity-50"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300/70 bg-white text-sm font-medium text-red-500 transition-colors hover:bg-red-50 active:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Force Reset (no bill)
           </button>
         </div>
-      </div>
+      </ResponsiveSheet>
 
       {addItemOpen && table.sessionId && (
         <AddItemModal
