@@ -94,6 +94,12 @@ HEIC files are converted server-side via `heic-convert` in the upload route.
 ### `NotificationPrompt.tsx`
 Shown to guests after ordering. Requests OneSignal push permission. On grant, POSTs `player_id` to `/api/save-token`.
 
+### `captain/NewTableOrderModal.tsx` (W01)
+Walk-in order entry — free-table picker grid (pre-selected when opened from a free tile tap), required name, optional 10-digit phone + WhatsApp opt-in. Calls `startCaptainOrder`; the page then opens `AddItemModal` immediately (same rhythm as `NewParcelModal`).
+
+### `captain/RemoveReasonDialog.tsx` (A01)
+One-tap reason picker shown whenever staff removes an order item (`REMOVAL_REASONS` from `lib/activity.ts`). Tapping a reason confirms immediately; the reason lands on the immutable `activity_log` row. Used by `TableSheet`, `ParcelSheet`, and the admin history edit mode.
+
 ### `captain/HistorySheet.tsx` (H01)
 Read-only bottom sheet for one past order, opened from `/captain/history`. Props: `{ entry: OrderHistoryEntry, onClose }`. Loads its rounds itself via `getOrderHistoryDetail(entry.sessionId)` on mount, renders each KOT round with items, then the bill split (subtotal / GST / total) and the settlement line. Intentionally has **no actions** — the bill is already printed and usually paid; anything still editable belongs on `TableSheet`, not here.
 

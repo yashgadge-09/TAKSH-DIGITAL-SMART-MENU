@@ -21,6 +21,7 @@ All schema changes are tracked in `supabase/migrations/` as timestamped SQL file
 2026062501_shared_cart.sql                     — shared cart: host_device_id/host_name on table_sessions; session_cart_items table with RLS + realtime
 2026070203_one_active_session_per_table.sql    — partial unique index (table_id WHERE status='active'): guarantees one host/PIN per table, closing the simultaneous-scan race
 2026073001_bills_realtime.sql                  — adds public.bills to the supabase_realtime publication so settling a bill live-updates /admin/analytics
+2026080601_activity_log.sql                    — activity_log audit table (A01): immutable, service-role only (RLS enabled, zero policies), deliberately NO foreign keys, UPDATE/DELETE revoked from app roles
 ```
 
 ## Invariant: one active session per table

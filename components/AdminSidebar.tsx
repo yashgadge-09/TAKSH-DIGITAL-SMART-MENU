@@ -12,6 +12,7 @@ import {
   Bell,
   Inbox,
   History,
+  ScrollText,
 } from "lucide-react"
 import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
@@ -21,6 +22,7 @@ import { TakshBrand } from "@/components/TakshBrand"
 const navItems = [
   { href: "/admin/incoming", label: "Tables", icon: Inbox },
   { href: "/admin/history", label: "History", icon: History },
+  { href: "/admin/activity", label: "Activity", icon: ScrollText },
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/todays-special", label: "Today's Special", icon: Sparkles },

@@ -197,3 +197,55 @@
 | 6 — Close table | | | | |
 | 7 — Availability toggle | | | | |
 | 8 — Customer + WhatsApp | | | | |
+
+---
+
+## Case 9 — Captain walk-in order (W01)
+
+**Steps:**
+1. Log in at `/captain` and open `/captain/tables`.
+2. Tap a **free** table (or the **New Table Order** button and pick one).
+3. Enter a name, optionally a 10-digit phone, confirm.
+4. Add 2 dishes in the picker and confirm.
+
+**Expected:**
+- [ ] KOT prints immediately (no stop at the approval queue).
+- [ ] The table shows **Active** with the running total; the sheet shows a **PIN** chip.
+- [ ] Scanning that table's QR on a phone asks for the PIN; entering the PIN from the sheet joins the session.
+- [ ] Closing the dish picker **without** adding anything frees the table again.
+- [ ] Print Bill / Move Table / Settle & Save all work exactly as on a scanned table.
+
+## Case 10 — Post-bill lockdown + removal reasons (A01)
+
+**Steps:**
+1. As **captain**, print the bill on a live table.
+2. Open Edit Bill and try to reduce/remove an item.
+3. Add a dessert instead; reprint the bill.
+4. As **admin**, open `/admin/history`, expand the unsettled row → **Edit bill** → remove an item (pick a reason) → **Reprint corrected bill**.
+5. Settle the bill, then reopen the history row.
+
+**Expected:**
+- [ ] Captain sees no minus button after billing; the server rejects a forced decrease ("only an admin…").
+- [ ] Captain CAN add items post-bill; KOT fires; reprint shows the higher total.
+- [ ] Removing any item (captain pre-bill or admin post-bill) demands a reason.
+- [ ] Admin's history edit updates the SAME bill row (no duplicate in reports).
+- [ ] After settling, the history row shows no Edit button — the bill is frozen.
+
+## Case 11 — Activity log (A01)
+
+**Steps:**
+1. Perform: a removal (with reason), an added round, a bill print, a settle, and a force reset.
+2. As **admin**, open `/admin/activity` for today.
+3. Log in as a captain and try to open `/admin/activity`.
+
+**Expected:**
+- [ ] Every action appears with IST time, actor email + role badge, table/parcel label, and signed ₹ impact.
+- [ ] The removal shows the reason; removals and force resets are highlighted red.
+- [ ] The "Items removed" tile counts the removal and its ₹ value.
+- [ ] The captain is redirected to `/captain/tables` — the page never renders.
+
+| Case | Tester | Date | Pass / Fail | Notes |
+|------|--------|------|-------------|-------|
+| 9 — Captain walk-in order | | | | |
+| 10 — Post-bill lockdown | | | | |
+| 11 — Activity log | | | | |

@@ -63,7 +63,15 @@ npm run lint      # ESLint
                            "Awaiting settlement". Live via Realtime on `bills`. Also the daily report
                            (`/admin/reports` redirects here)
 /admin/history           → order history (H01) — every billed order in a day/week/month/custom IST
-                           range, newest first; expand a row for its KOT rounds + items + bill split
+                           range, newest first; expand a row for its KOT rounds + items + bill split.
+                           On an UNSETTLED row the admin can "Edit bill": qty +/-, remove (reason
+                           required), Add dish (no KOT — food already served), then Reprint corrected
+                           bill (updates the same bills row). Settled bills are frozen forever
+/admin/activity          → activity log (A01, admin-only) — immutable audit trail of every staff
+                           action that moves money (item edits/removals with reason + ₹ impact,
+                           bill print/reprint/settle, table moves, force resets, parcel cancels,
+                           captain-started orders). Day/week/month/custom IST range, action filter
+                           chips, removals rollup tiles. Backed by getActivityLog (requireAdmin)
 /admin/reviews           → review moderation
 /admin/todays-special    → toggle daily specials
 /admin/customers         → customer directory (T13); name/phone/WhatsApp opt-in
@@ -72,9 +80,17 @@ npm run lint      # ESLint
 /admin/preview           → admin preview of guest-facing menu
 /captain                 → captain login (C02); shared account captain@taksh.com, app_metadata.role = "captain"
 /captain/tables          → captain panel (C03–C07): mobile-first table grid + pending-approval strip (Realtime);
-                           tap table → bottom sheet (KOT view, reprint KOT, edit item qty, Add Item,
-                           Print Bill, Print Bill & Take Payment, Edit Bill + Reprint Bill after
-                           billing, Move Table, Settle & Save).
+                           tap table → bottom sheet (KOT view, session PIN chip, reprint KOT, edit item
+                           qty, Add Item, Print Bill, Print Bill & Take Payment, Move Table, Settle &
+                           Save). POST-BILL LOCKDOWN: once the bill prints, captains can only ADD items
+                           (KOT fires, reprint picks it up) or reprint unchanged — reducing/removing is
+                           admin-only (server-enforced in updateOrderItemQuantity). Every removal
+                           requires a reason (RemoveReasonDialog) logged to activity_log.
+                           Walk-in flow (W01): "New Table Order" button or tap a FREE table → pick
+                           table + name + optional phone → dish picker opens → first round lands
+                           already approved, KOT prints. Session has a real PIN (shown in the sheet)
+                           so a guest who scans mid-meal joins normally. Abandoning the picker with
+                           no items frees the table (cancelEmptySession).
                            Parcel strip (P01): "New Parcel" → optional name → dish picker → KOT prints
                            as PARCEL #token → Print Bill & Take Payment → settle. No table involved.
 /captain/history         → captain order history (H01) — same data as /admin/history, mobile-first;
@@ -82,7 +98,7 @@ npm run lint      # ESLint
 
 ```
 
-**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, or revenue. Users without a role are admins and may also open `/captain/tables`. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `NewParcelModal`). `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them.
+**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, revenue, or the activity log. Users without a role are admins and may also open `/captain/tables` (the page passes `isAdmin` down so admins keep post-bill reduce/remove). The role check is by role, not email — create **one auth account per captain** so `activity_log` names the exact person. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `NewParcelModal`, `NewTableOrderModal`, `RemoveReasonDialog`). `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them; `AddItemModal` also takes `printKot` (false = admin bill correction, no cook ticket).
 
 API routes under `/api/`:
 - `cron/notify` — scheduled review notification trigger
@@ -147,7 +163,10 @@ Client-side only (`CartContext`). State lives in React memory — not persisted.
 **Key rules:**
 - `createOrJoinSession` **throws** on wrong PIN — callers must `try/catch`.
 - `placeOrder` creates the order as `pending_approval` with **no** print job.
-- `approveOrder` is the **only** function that creates a KOT print job.
+- `approveOrder` is the **only** function that creates a KOT print job. (`addItemsToSession` also queues a KOT — it's the staff path where the captain IS the approver; `printKot: false` skips it for admin bill corrections.)
+- **Post-bill lockdown:** on a `bill_generated` session, captains may only *increase* quantities or add items; any decrease/removal throws unless the caller is an admin. Enforced in `updateOrderItemQuantity`, not just the UI. Settled = session closed = frozen for everyone.
+- **Removals need a reason** (`customer_changed_mind | wrong_entry | out_of_stock`) — `updateOrderItemQuantity` throws without one when quantity is 0. Reason vocabulary lives in `lib/activity.ts` (plain module — `database.ts` is `"use server"` and cannot export consts).
+- **Captain walk-in sessions** get `host_device_id: 'captain:<uuid>'` — never NULL, or `joinTable`'s orphan cleanup would close them on the next QR scan.
 - `generateBill` takes `{ sessionId }` (object, not a bare string).
 - `useTableSession()` returns `null` on plain `/menu` — always null-check before calling ordering actions.
 - All admin table reads/writes **must** use `adminSupabase` server actions — the anon browser client fails on nested joins (PostgREST FK rule: `customers(name)` must be nested inside `orders`, not `table_sessions`) and is blocked by RLS on writes.
@@ -212,6 +231,7 @@ The three optional fields carry parcel orders (`orderType: 'parcel'`): the KOT p
 - `order_items` — snapshotted dish name + price at order time
 - `bills` — aggregated totals with GST; generated by `generateBill()`; `payment_method` (`cash|upi|card|other`) + `settled_at` stamped by `settleBill()` (captain panel, C01). **`settled_at IS NOT NULL` is the definition of revenue** — `/admin/analytics` counts nothing before it. In the `supabase_realtime` publication so settling pushes a live dashboard update
 - `print_jobs` — type: `kot | bill`; status: `pending | sent | failed`; KOT only created on `approveOrder()`
+- `activity_log` — immutable audit trail (A01): actor (id/email/role), action, label snapshot, dish + qty before/after, signed `amount_delta` (₹), removal `reason`, `details` jsonb. Service-role only (RLS enabled, zero policies), **no FKs by design** (a log row must survive cleanup of what it describes), no UPDATE/DELETE path anywhere. Written best-effort inside the server actions via `logActivity()` — a log failure never aborts the action
 
 ---
 
