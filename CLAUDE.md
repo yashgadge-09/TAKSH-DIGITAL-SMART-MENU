@@ -168,7 +168,7 @@ Payload field names (exact — set by `approveOrder` / `generateBill`):
 - KOT: `{ tableNumber, roundNumber, time, items: { name, qty }[], orderType?, tokenNumber?, customerName? }`
 - Bill: `{ restaurantName, address, gstin, upiId, tableNumber, orderType?, tokenNumber?, customerName, rounds: { number, time, items: { name, qty, price }[] }[], subtotal, gstRate, gstAmount, total }`
 
-The three optional fields carry parcel orders (`orderType: 'parcel'`): the KOT prints `P A R C E L` / `TOKEN #N` / `NAME:` in place of `TABLE N`, and the bill header reads `PARCEL #N`. They are absent on pre-parcel jobs, which still print exactly as before. **The bridge runs on the restaurant PC — it needs a `git pull` + restart there for parcel slips to format correctly.**
+The three optional fields carry parcel orders (`orderType: 'parcel'`): the KOT prints `PARCEL #N` / `NAME:` in place of `TABLE N`, and the bill header reads `PARCEL #N`. They are absent on pre-parcel jobs, which still print exactly as before. **The bridge runs on the restaurant PC — it needs a `git pull` + restart there for parcel slips to format correctly.**
 
 ### Push Notifications Flow
 

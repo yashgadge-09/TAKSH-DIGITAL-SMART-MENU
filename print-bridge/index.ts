@@ -61,12 +61,16 @@ type PrintJob = {
 // Slips are described as a list of segments; the same segments render to
 // plain text (mock mode) or to an ESC/POS byte stream (real mode).
 // WIDTH = 32 chars fits both 80mm and 58mm printers at Font A.
+// WIDTH_SM = 42 chars is Font B ("small") on the same paper — 32 Font A cols
+// and 42 Font B cols both span ~48mm, so mixed-size slips keep flush edges.
 
 const WIDTH = 32
+const WIDTH_SM = 42
 const LINE = "-".repeat(WIDTH)
+const LINE_SM = "-".repeat(WIDTH_SM)
 
 type Seg =
-  | { text: string; center?: boolean; bold?: boolean; size?: "tall" | "big" }
+  | { text: string; center?: boolean; bold?: boolean; size?: "tall" | "big" | "small" }
   | { qr: string }
 
 // ESC/POS output is single-byte, so strip anything non-ASCII (₹, ─, accents).
@@ -78,15 +82,15 @@ function money(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2)
 }
 
-// "left ....... right" padded to WIDTH
-function pair(left: string, right: string): string {
-  const gap = WIDTH - left.length - right.length
+// "left ....... right" padded to the given width
+function pair(left: string, right: string, width = WIDTH): string {
+  const gap = width - left.length - right.length
   return gap > 0 ? left + " ".repeat(gap) + right : `${left} ${right}`
 }
 
 // Right-align "Rs. X.XX" against a label
-function amountLine(label: string, n: number): string {
-  return pair(label, `Rs. ${n.toFixed(2)}`)
+function amountLine(label: string, n: number, width = WIDTH): string {
+  return pair(label, `Rs. ${n.toFixed(2)}`, width)
 }
 
 // Current date/time in IST (bills print at generation time, so "now" is correct)
@@ -101,7 +105,7 @@ function nowIST(): { date: string; time: string } {
   return { date: `${dd}/${mo}/${yy}`, time: `${hh}:${mi}` }
 }
 
-// ── KOT: big & bold for kitchen readability ─────────────────────────────────
+// ── KOT: table/token stays 4x for kitchen glance; the rest is compact ───────
 
 export function kotSegments(p: KotPayload): Seg[] {
   // A parcel has no table — the daily token is what the counter calls out, so
@@ -109,27 +113,21 @@ export function kotSegments(p: KotPayload): Seg[] {
   const isParcel = p.orderType === "parcel"
 
   const segs: Seg[] = [
-    { text: LINE },
-    { text: isParcel ? "P A R C E L" : "K O T", center: true, bold: true, size: "big" },
-    { text: LINE },
     isParcel
-      ? { text: `TOKEN #${p.tokenNumber ?? "-"}`, bold: true, size: "big" }
+      ? { text: `PARCEL #${p.tokenNumber ?? "-"}`, bold: true, size: "big" }
       : { text: `TABLE ${p.tableNumber ?? "-"}`, bold: true, size: "big" },
   ]
   if (isParcel && p.customerName) {
-    segs.push({ text: `NAME: ${toAscii(p.customerName).toUpperCase()}`, bold: true, size: "tall" })
+    segs.push({ text: `NAME: ${toAscii(p.customerName).toUpperCase()}`, bold: true })
   }
   segs.push(
-    { text: `Round ${p.roundNumber}   Time ${p.time}` },
-    { text: LINE },
-    { text: "QTY  ITEM", bold: true },
+    { text: `KOT  Round ${p.roundNumber}  Time ${p.time}`, size: "small" },
     { text: LINE },
   )
   for (const i of p.items) {
     segs.push({
       text: `${String(i.qty).padStart(2)} x ${toAscii(i.name).toUpperCase()}`,
       bold: true,
-      size: "tall",
     })
   }
   segs.push({ text: LINE })
@@ -152,19 +150,19 @@ function consolidateItems(rounds: BillPayload["rounds"]) {
   return Array.from(merged.values())
 }
 
-// Columns: ITEM(14) QTY(3) RATE(7) AMT(8) = 32; long names wrap below
+// Columns: ITEM(22) QTY(3) RATE(7) AMT(10) = 42 (Font B); long names wrap below
 function itemRows(item: { name: string; qty: number; price: number }): string[] {
   const name = toAscii(item.name)
   const rows = [
-    name.slice(0, 14).padEnd(14) +
+    name.slice(0, 22).padEnd(22) +
       String(item.qty).padStart(3) +
       money(item.price).padStart(7) +
-      money(item.qty * item.price).padStart(8),
+      money(item.qty * item.price).padStart(10),
   ]
-  let rest = name.slice(14)
+  let rest = name.slice(22)
   while (rest.length > 0) {
-    rows.push("  " + rest.slice(0, WIDTH - 2))
-    rest = rest.slice(WIDTH - 2)
+    rows.push("  " + rest.slice(0, WIDTH_SM - 2))
+    rest = rest.slice(WIDTH_SM - 2)
   }
   return rows
 }
@@ -179,38 +177,41 @@ export function billSegments(p: BillPayload): Seg[] {
   const segs: Seg[] = [
     { text: toAscii(p.restaurantName).toUpperCase(), center: true, bold: true, size: "tall" },
   ]
-  if (p.address) segs.push({ text: toAscii(p.address), center: true })
-  if (p.gstin) segs.push({ text: `GSTIN: ${p.gstin}`, center: true })
+  if (p.address) segs.push({ text: toAscii(p.address), center: true, size: "small" })
+  if (p.gstin) segs.push({ text: `GSTIN: ${p.gstin}`, center: true, size: "small" })
   const orderLabel =
     p.orderType === "parcel" ? `PARCEL #${p.tokenNumber ?? "-"}` : `Table: ${p.tableNumber ?? "-"}`
   segs.push(
-    { text: LINE },
-    { text: pair(orderLabel, `Bill To: ${toAscii(p.customerName)}`) },
-    { text: pair(`Date: ${date}`, `Time: ${time}`) },
-    { text: LINE },
-    { text: "ITEM".padEnd(14) + "QTY".padStart(3) + "RATE".padStart(7) + "AMT".padStart(8), bold: true },
-    { text: LINE },
+    { text: LINE_SM, size: "small" },
+    { text: pair(orderLabel, `Bill To: ${toAscii(p.customerName)}`, WIDTH_SM), size: "small" },
+    { text: pair(`Date: ${date}`, `Time: ${time}`, WIDTH_SM), size: "small" },
+    { text: LINE_SM, size: "small" },
+    {
+      text: "ITEM".padEnd(22) + "QTY".padStart(3) + "RATE".padStart(7) + "AMT".padStart(10),
+      bold: true,
+      size: "small",
+    },
+    { text: LINE_SM, size: "small" },
   )
   for (const item of consolidateItems(p.rounds)) {
-    for (const row of itemRows(item)) segs.push({ text: row })
+    for (const row of itemRows(item)) segs.push({ text: row, size: "small" })
   }
   segs.push(
-    { text: LINE },
-    { text: amountLine("Subtotal", p.subtotal) },
-    { text: amountLine(`GST @ ${p.gstRate}%`, p.gstAmount) },
-    { text: LINE },
+    { text: LINE_SM, size: "small" },
+    { text: amountLine("Subtotal", p.subtotal, WIDTH_SM), size: "small" },
+    { text: amountLine(`GST @ ${p.gstRate}%`, p.gstAmount, WIDTH_SM), size: "small" },
+    { text: LINE_SM, size: "small" },
     { text: amountLine("TOTAL", p.total), bold: true, size: "tall" },
-    { text: LINE },
+    { text: LINE_SM, size: "small" },
   )
   if (p.upiId) {
     segs.push(
       { qr: upiLink(p) },
-      { text: "Scan to pay via UPI", center: true },
-      { text: `UPI: ${p.upiId}`, center: true },
-      { text: "" },
+      { text: "Scan to pay via UPI", center: true, size: "small" },
+      { text: `UPI: ${p.upiId}`, center: true, size: "small" },
     )
   }
-  segs.push({ text: "Thank you! Visit again", center: true })
+  segs.push({ text: "Thank you! Visit again", center: true, size: "small" })
   return segs
 }
 
@@ -221,7 +222,8 @@ export function segsToText(segs: Seg[]): string {
     .map(s => {
       if ("qr" in s) return `[UPI QR] ${s.qr}`
       if (!s.center) return s.text
-      const pad = Math.max(0, Math.floor((WIDTH - s.text.length) / 2))
+      const width = s.size === "small" ? WIDTH_SM : WIDTH
+      const pad = Math.max(0, Math.floor((width - s.text.length) / 2))
       return " ".repeat(pad) + s.text
     })
     .join("\n")
@@ -260,12 +262,17 @@ function compile(segs: Seg[]): Buffer {
     }
     out.push(Buffer.from([0x1b, 0x61, s.center ? 0x01 : 0x00]))          // align
     out.push(Buffer.from([0x1b, 0x45, s.bold ? 0x01 : 0x00]))            // bold
+    // ESC M — Font B (smaller standard font, 42 cols) for "small", Font A otherwise
+    out.push(Buffer.from([0x1b, 0x4d, s.size === "small" ? 0x01 : 0x00]))
     // GS ! — 0x11 doubles width+height, 0x01 doubles height only (keeps 32 cols)
     out.push(Buffer.from([0x1d, 0x21, s.size === "big" ? 0x11 : s.size === "tall" ? 0x01 : 0x00]))
     out.push(Buffer.from(toPrinterSafe(s.text) + "\n", "ascii"))
   }
   out.push(Buffer.from([0x1d, 0x21, 0x00]))       // reset size
-  out.push(Buffer.from("\n\n\n", "ascii"))         // feed before cut
+  out.push(Buffer.from([0x1b, 0x4d, 0x00]))       // reset font
+  // GS V B feeds to the cutter on its own; one blank line is a safety margin
+  // so the last printed row clears the blade on clone printers.
+  out.push(Buffer.from("\n", "ascii"))
   out.push(Buffer.from([0x1d, 0x56, 0x42, 0x00])) // partial cut
   return Buffer.concat(out)
 }

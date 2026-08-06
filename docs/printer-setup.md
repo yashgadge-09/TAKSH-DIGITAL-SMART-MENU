@@ -92,13 +92,14 @@ one printer never mixes pages.
 ## Slip formats
 
 Formats are defined in `kotSegments()` / `billSegments()` in `print-bridge/index.ts` —
-changing them never touches the web app. Current design (32 chars wide, fits 80mm and 58mm):
+changing them never touches the web app. Current design is paper-saving: body text uses
+Font B (42 chars wide), headers use Font A (32 chars wide); both span the same print width.
 
-- **KOT** — `K O T` header and `TABLE N` in double-size bold, items in double-height bold
-  UPPERCASE so kitchen staff can read at a distance.
-- **Bill** — GST-invoice style: centered restaurant header (name/address/GSTIN),
-  `ITEM / QTY / RATE / AMT` columns, the same dish ordered across rounds merged into one
-  line, double-height bold TOTAL, then a **scannable UPI QR**
+- **KOT** — `TABLE N` (or `PARCEL #N`) in double-size bold, small `KOT Round/Time` line,
+  items in standard-size bold UPPERCASE. No blank feed before the cut.
+- **Bill** — GST-invoice style: centered restaurant name (double-height bold) with small
+  address/GSTIN, `ITEM / QTY / RATE / AMT` columns in the small font, the same dish ordered
+  across rounds merged into one line, double-height bold TOTAL, then a **scannable UPI QR**
   (`upi://pay?pa=<upiId>&am=<total>` — GPay/PhonePe pre-fills the amount) printed natively
   by the printer, followed by "Thank you! Visit again".
 - Output is pure ASCII (`Rs.` not `₹`) — safe on every ESC/POS code page.
