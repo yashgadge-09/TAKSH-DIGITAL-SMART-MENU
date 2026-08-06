@@ -8,7 +8,9 @@ import {
   CheckCircle2, Minus, Plus, Trash2, ShoppingBag,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
+import type { RemovalReason } from "@/lib/activity"
 import type { CaptainParcel } from "@/app/captain/tables/page"
 
 function timeIST(iso: string) {
@@ -24,17 +26,20 @@ function elapsed(openedAt: string) {
 
 /**
  * Takeaway counterpart to TableSheet. Two deliberate differences: items are
- * always editable (a parcel is being built at the counter, so there is no
+ * directly editable (a parcel is being built at the counter, so there is no
  * "Edit Bill" mode to enter first), and there is no Move Table — a parcel has
- * no table to move.
+ * no table to move. Same post-bill lockdown as tables: once the bill prints,
+ * captains can only add; reducing/removing needs an admin.
  */
 export function ParcelSheet({
   parcel,
+  isAdmin,
   onClose,
   onChanged,
   onRequestSettle,
 }: {
   parcel: CaptainParcel
+  isAdmin: boolean
   onClose: () => void
   onChanged: () => void
   onRequestSettle: () => void
@@ -44,16 +49,29 @@ export function ParcelSheet({
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [billStale, setBillStale] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState<{ itemId: string; name: string } | null>(null)
 
   const label = `Parcel #${parcel.tokenNumber}`
   const hasItems = parcel.rounds.length > 0
+  // Same post-bill lockdown as TableSheet: once the bill is printed, a captain
+  // can only add — reducing or removing needs an admin (server-enforced too).
+  const canReduce = parcel.status === "active" || isAdmin
 
-  async function handleQuantityChange(itemId: string, itemName: string, newQty: number) {
-    if (newQty === 0 && !confirm(`Remove "${itemName}" from this parcel?`)) return
+  async function handleQuantityChange(
+    itemId: string,
+    itemName: string,
+    newQty: number,
+    reason?: RemovalReason,
+  ) {
+    if (newQty === 0 && !reason) {
+      setPendingRemoval({ itemId, name: itemName })
+      return
+    }
     setEditingItemId(itemId)
     try {
-      await updateOrderItemQuantity({ orderItemId: itemId, quantity: newQty })
+      await updateOrderItemQuantity({ orderItemId: itemId, quantity: newQty, reason })
       toast.success(newQty === 0 ? `${itemName} removed` : `${itemName} × ${newQty}`)
+      setPendingRemoval(null)
       if (parcel.status === "bill_generated") setBillStale(true)
       onChanged()
     } catch (e: any) {
@@ -184,16 +202,18 @@ export function ParcelSheet({
                       <span className="min-w-0 flex-1 truncate text-[#2C1810]">{item.name}</span>
                       <span className="flex shrink-0 items-center gap-2">
                         <span className="flex items-center gap-1 rounded-lg border border-[#E0CBAA] bg-[#FFFBF4]">
-                          <button
-                            onClick={() => handleQuantityChange(item.id, item.name, item.quantity - 1)}
-                            disabled={editingItemId === item.id}
-                            data-testid={`parcel-item-minus-${item.id}`}
-                            aria-label={`Decrease ${item.name}`}
-                            className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] disabled:opacity-40 md:h-8 md:w-8"
-                          >
-                            <Minus className="h-3.5 w-3.5" />
-                          </button>
-                          <span className="min-w-5 text-center font-semibold text-[#2C1810]" data-testid={`parcel-item-qty-${item.id}`}>
+                          {canReduce && (
+                            <button
+                              onClick={() => handleQuantityChange(item.id, item.name, item.quantity - 1)}
+                              disabled={editingItemId === item.id}
+                              data-testid={`parcel-item-minus-${item.id}`}
+                              aria-label={`Decrease ${item.name}`}
+                              className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] disabled:opacity-40 md:h-8 md:w-8"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <span className="min-w-5 px-1 text-center font-semibold text-[#2C1810]" data-testid={`parcel-item-qty-${item.id}`}>
                             {item.quantity}
                           </span>
                           <button
@@ -322,6 +342,17 @@ export function ParcelSheet({
             if (parcel.status === "bill_generated") setBillStale(true)
             onChanged()
           }}
+        />
+      )}
+
+      {pendingRemoval && (
+        <RemoveReasonDialog
+          itemName={pendingRemoval.name}
+          busy={editingItemId === pendingRemoval.itemId}
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={reason =>
+            handleQuantityChange(pendingRemoval.itemId, pendingRemoval.name, 0, reason)
+          }
         />
       )}
     </>

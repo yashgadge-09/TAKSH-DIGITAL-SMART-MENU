@@ -5,10 +5,12 @@ import { generateBill, reprintBill, reprintKot, updateOrderItemQuantity, forceRe
 import { toast } from "sonner"
 import {
   X, Clock, Users, ChefHat, Receipt, Printer, ArrowLeftRight,
-  Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil,
+  Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil, KeyRound,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
+import type { RemovalReason } from "@/lib/activity"
 import type { CaptainTable } from "@/app/captain/tables/page"
 
 function timeIST(iso: string) {
@@ -30,12 +32,14 @@ const ROUND_STATUS: Record<string, { label: string; cls: string }> = {
 
 export function TableSheet({
   table,
+  isAdmin,
   onClose,
   onChanged,
   onRequestSettle,
   onRequestMove,
 }: {
   table: CaptainTable
+  isAdmin: boolean
   onClose: () => void
   onChanged: () => void
   onRequestSettle: () => void
@@ -47,6 +51,7 @@ export function TableSheet({
   const [editingBill, setEditingBill] = useState(false)
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [billStale, setBillStale] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState<{ itemId: string; name: string } | null>(null)
 
   const approvedRounds = table.rounds.filter(r => r.status !== "pending_approval").length
   // Mirrors isServing() in the captain page. Kept local rather than imported:
@@ -55,13 +60,26 @@ export function TableSheet({
   const serving = table.status === "active" || table.status === "bill_generated"
   // Qty edits + Add Item only in Edit Bill mode (active or billed tables)
   const canEditItems = editingBill && serving
+  // Post-bill lockdown: once printed, a captain can only ADD — reducing or
+  // removing needs an admin. The server enforces this too; hiding the minus
+  // button just keeps the UI honest.
+  const canReduce = table.status === "active" || isAdmin
 
-  async function handleQuantityChange(itemId: string, itemName: string, newQty: number) {
-    if (newQty === 0 && !confirm(`Remove "${itemName}" from the order?`)) return
+  async function handleQuantityChange(
+    itemId: string,
+    itemName: string,
+    newQty: number,
+    reason?: RemovalReason,
+  ) {
+    if (newQty === 0 && !reason) {
+      setPendingRemoval({ itemId, name: itemName })
+      return
+    }
     setEditingItemId(itemId)
     try {
-      await updateOrderItemQuantity({ orderItemId: itemId, quantity: newQty })
+      await updateOrderItemQuantity({ orderItemId: itemId, quantity: newQty, reason })
       toast.success(newQty === 0 ? `${itemName} removed` : `${itemName} × ${newQty}`)
+      setPendingRemoval(null)
       if (table.status === "bill_generated") setBillStale(true)
       onChanged()
     } catch (e: any) {
@@ -161,6 +179,16 @@ export function TableSheet({
             <span className="flex items-center gap-1">
               <ChefHat className="h-3 w-3" /> {table.roundCount} round{table.roundCount !== 1 ? "s" : ""}
             </span>
+            {/* Session PIN — lets the captain tell a guest who scans mid-meal
+                how to join and order from their own phone. */}
+            {table.pin && (
+              <span
+                className="flex items-center gap-1 rounded-full border border-[#5A4128] bg-[#33210F] px-2 py-0.5 font-bold tracking-[0.2em] text-[#F2C786]"
+                data-testid="session-pin"
+              >
+                <KeyRound className="h-3 w-3" /> PIN {table.pin}
+              </span>
+            )}
             {table.status === "bill_generated" && (
               <span className="flex items-center gap-1 font-semibold text-[#F0C896]">
                 <Receipt className="h-3 w-3" /> Bill printed
@@ -205,16 +233,18 @@ export function TableSheet({
                         {canEditItems ? (
                           <span className="flex shrink-0 items-center gap-2">
                             <span className="flex items-center gap-1 rounded-lg border border-[#E0CBAA] bg-[#FFFBF4]">
-                              <button
-                                onClick={() => handleQuantityChange(item.id, item.name, item.quantity - 1)}
-                                disabled={editingItemId === item.id}
-                                data-testid={`item-minus-${item.id}`}
-                                aria-label={`Decrease ${item.name}`}
-                                className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] disabled:opacity-40 md:h-8 md:w-8"
-                              >
-                                <Minus className="h-3.5 w-3.5" />
-                              </button>
-                              <span className="min-w-5 text-center font-semibold text-[#2C1810]" data-testid={`item-qty-${item.id}`}>
+                              {canReduce && (
+                                <button
+                                  onClick={() => handleQuantityChange(item.id, item.name, item.quantity - 1)}
+                                  disabled={editingItemId === item.id}
+                                  data-testid={`item-minus-${item.id}`}
+                                  aria-label={`Decrease ${item.name}`}
+                                  className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] disabled:opacity-40 md:h-8 md:w-8"
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <span className="min-w-5 px-1 text-center font-semibold text-[#2C1810]" data-testid={`item-qty-${item.id}`}>
                                 {item.quantity}
                               </span>
                               <button
@@ -258,6 +288,12 @@ export function TableSheet({
                 </div>
               )
             })
+          )}
+
+          {canEditItems && !canReduce && (
+            <p className="text-xs font-medium text-[#C47A20]" data-testid="post-bill-add-only-hint">
+              Bill printed — you can add items; removing or reducing needs an admin.
+            </p>
           )}
 
           {canEditItems && table.sessionId && (
@@ -396,6 +432,17 @@ export function TableSheet({
             if (table.status === "bill_generated") setBillStale(true)
             onChanged()
           }}
+        />
+      )}
+
+      {pendingRemoval && (
+        <RemoveReasonDialog
+          itemName={pendingRemoval.name}
+          busy={editingItemId === pendingRemoval.itemId}
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={reason =>
+            handleQuantityChange(pendingRemoval.itemId, pendingRemoval.name, 0, reason)
+          }
         />
       )}
     </>

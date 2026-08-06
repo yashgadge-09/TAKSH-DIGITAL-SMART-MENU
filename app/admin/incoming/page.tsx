@@ -591,6 +591,8 @@ export default function IncomingOrdersPage() {
       {selectedTable && (
         <TableSheet
           table={selectedTable}
+          // /admin/* redirects captains away, so this viewer is always admin.
+          isAdmin
           onClose={() => setSelectedId(null)}
           onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
           onRequestSettle={() => setSettleOpen(true)}
@@ -632,6 +634,7 @@ export default function IncomingOrdersPage() {
       {selectedParcel && (
         <ParcelSheet
           parcel={selectedParcel}
+          isAdmin
           onClose={() => setSelectedParcelId(null)}
           onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
           onRequestSettle={() => setParcelSettleOpen(true)}

@@ -17,12 +17,18 @@ const BATCH = 80
 export function AddItemModal({
   sessionId,
   label,
+  printKot = true,
   onClose,
   onAdded,
 }: {
   sessionId: string
   /** What this round is being added to, e.g. "Table 6" or "Parcel #7". */
   label: string
+  /**
+   * false = admin bill correction (/admin/history): the food was already
+   * served, so no cook ticket goes to the kitchen. Server-enforced admin-only.
+   */
+  printKot?: boolean
   onClose: () => void
   onAdded: () => void
 }) {
@@ -107,8 +113,13 @@ export function AddItemModal({
       const { roundNumber } = await addItemsToSession({
         sessionId,
         items: selected.map(([dishId, quantity]) => ({ dishId, quantity })),
+        printKot,
       })
-      toast.success(`Round ${roundNumber} added — KOT sent to kitchen`)
+      toast.success(
+        printKot
+          ? `Round ${roundNumber} added — KOT sent to kitchen`
+          : `Round ${roundNumber} added to bill — no KOT sent`
+      )
       onAdded()
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to add items")
@@ -134,7 +145,9 @@ export function AddItemModal({
             <SheetTitle asChild>
               <h2 className="text-lg font-bold text-[#2C1810]">Add Items</h2>
             </SheetTitle>
-            <p className="truncate text-xs text-[#8E6D4E]">{label} — new KOT round</p>
+            <p className="truncate text-xs text-[#8E6D4E]">
+              {label} — {printKot ? "new KOT round" : "bill correction (no KOT)"}
+            </p>
           </div>
           <button
             onClick={onClose}

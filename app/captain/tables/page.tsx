@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import {
-  approveOrder, rejectOrder,
+  approveOrder, rejectOrder, cancelEmptySession,
   getRestaurantId, getTablesWithSessions, getParcelSessions,
   type RawTableRow, type RawParcelRow,
 } from "@/lib/database"
@@ -20,6 +20,7 @@ import { MoveTableModal } from "@/components/captain/MoveTableModal"
 import { SettleModal } from "@/components/captain/SettleModal"
 import { ParcelSheet } from "@/components/captain/ParcelSheet"
 import { NewParcelModal } from "@/components/captain/NewParcelModal"
+import { NewTableOrderModal } from "@/components/captain/NewTableOrderModal"
 import { AddItemModal } from "@/components/captain/AddItemModal"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -47,6 +48,8 @@ export type CaptainTable = {
   sessionId?: string
   hostName?: string
   openedAt?: string
+  /** Session join PIN — shown in the sheet so mid-meal scanners can join. */
+  pin?: string
   runningTotal: number
   roundCount: number
   pendingCount: number
@@ -159,6 +162,7 @@ export function buildCaptainTable(t: RawTableRow): CaptainTable {
     sessionId: session.id,
     hostName: hostName ?? undefined,
     openedAt: session.opened_at,
+    pin: session.pin ?? undefined,
     runningTotal: preService ? 0 : runningTotal,
     roundCount: preService ? 0 : rounds.length,
     pendingCount,
@@ -221,6 +225,13 @@ export default function CaptainTablesPage() {
   // Set right after "New Parcel" so the dish picker opens immediately on the
   // fresh session — the captain never has to hunt for the new card.
   const [pendingParcelAdd, setPendingParcelAdd] = useState<{ sessionId: string; token: number } | null>(null)
+  // Walk-in flow (W01): modal + the same open-picker-immediately rhythm.
+  const [newTableOrderOpen, setNewTableOrderOpen] = useState(false)
+  const [newTableOrderPreselect, setNewTableOrderPreselect] = useState<string | null>(null)
+  const [pendingTableAdd, setPendingTableAdd] = useState<{ sessionId: string; tableId: string; tableNumber: number } | null>(null)
+  // Admins may open this panel too; captains lose post-bill reduce/remove.
+  // Server actions enforce the same rule — this only shapes the UI.
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const restIdRef = useRef<string | null>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -237,6 +248,15 @@ export default function CaptainTablesPage() {
   useEffect(() => {
     const id = setInterval(() => setClock(c => c + 1), 60_000)
     return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    supabase.auth.getUser().then(({ data }) => {
+      if (!mounted) return
+      setIsAdmin(!!data.user && data.user.app_metadata?.role !== "captain")
+    })
+    return () => { mounted = false }
   }, [])
 
   // Settled, not all: the table grid is the captain's core screen and must
@@ -521,7 +541,16 @@ export default function CaptainTablesPage() {
 
       {/* ── Table grid ──────────────────────────────────────────────────── */}
       <section className="px-4 pt-5 md:px-6 lg:px-8">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.1em] text-[#F2C786]">Tables</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-bold uppercase tracking-[0.1em] text-[#F2C786]">Tables</h2>
+          <button
+            onClick={() => { setNewTableOrderPreselect(null); setNewTableOrderOpen(true) }}
+            data-testid="new-table-order-open"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#2A6B3A] px-3 text-xs font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
+          >
+            <Plus className="h-3.5 w-3.5" /> New Table Order
+          </button>
+        </div>
 
         {loading ? (
           <div className="py-16 text-center text-[#A98D6B]">Loading tables…</div>
@@ -532,7 +561,16 @@ export default function CaptainTablesPage() {
               return (
                 <button
                   key={table.tableId}
-                  onClick={() => setSelectedId(table.tableId)}
+                  onClick={() => {
+                    // A free table's tap IS the walk-in entry point — the tile
+                    // even says "Tap when guests sit".
+                    if (table.status === "open") {
+                      setNewTableOrderPreselect(table.tableId)
+                      setNewTableOrderOpen(true)
+                    } else {
+                      setSelectedId(table.tableId)
+                    }
+                  }}
                   data-testid={`table-card-${table.tableNumber}`}
                   className={`relative rounded-2xl border p-4 text-left shadow-sm transition-[transform,box-shadow] hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D] ${s.card}`}
                 >
@@ -614,6 +652,7 @@ export default function CaptainTablesPage() {
       {selectedTable && (
         <TableSheet
           table={selectedTable}
+          isAdmin={isAdmin}
           onClose={() => setSelectedId(null)}
           onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
           onRequestSettle={() => setSettleOpen(true)}
@@ -640,6 +679,7 @@ export default function CaptainTablesPage() {
       {selectedParcel && (
         <ParcelSheet
           parcel={selectedParcel}
+          isAdmin={isAdmin}
           onClose={() => setSelectedParcelId(null)}
           onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
           onRequestSettle={() => setParcelSettleOpen(true)}
@@ -685,6 +725,47 @@ export default function CaptainTablesPage() {
           onAdded={() => {
             setSelectedParcelId(pendingParcelAdd.sessionId)
             setPendingParcelAdd(null)
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
+
+      {/* ── Walk-in order (W01) ─────────────────────────────────────────── */}
+      {newTableOrderOpen && restIdRef.current && (
+        <NewTableOrderModal
+          restaurantId={restIdRef.current}
+          freeTables={tables
+            .filter(t => t.status === "open")
+            .map(t => ({ tableId: t.tableId, tableNumber: t.tableNumber }))}
+          initialTableId={newTableOrderPreselect}
+          onClose={() => { setNewTableOrderOpen(false); setNewTableOrderPreselect(null) }}
+          onCreated={(sessionId, tableId, tableNumber) => {
+            setNewTableOrderOpen(false)
+            setNewTableOrderPreselect(null)
+            setPendingTableAdd({ sessionId, tableId, tableNumber })
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+        />
+      )}
+
+      {/* Straight from "New Table Order" into the dish picker. Closing the
+          picker without adding anything frees the table again — no stuck
+          empty session blocking the QR flow. */}
+      {pendingTableAdd && (
+        <AddItemModal
+          sessionId={pendingTableAdd.sessionId}
+          label={`Table ${pendingTableAdd.tableNumber}`}
+          onClose={async () => {
+            const abandoned = pendingTableAdd
+            setPendingTableAdd(null)
+            try {
+              await cancelEmptySession(abandoned.sessionId)
+            } catch { /* best-effort — force reset still covers a stuck table */ }
+            if (restIdRef.current) fetchTables(restIdRef.current)
+          }}
+          onAdded={() => {
+            setSelectedId(pendingTableAdd.tableId)
+            setPendingTableAdd(null)
             if (restIdRef.current) fetchTables(restIdRef.current)
           }}
         />
