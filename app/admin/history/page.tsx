@@ -166,31 +166,42 @@ export default function AdminHistoryPage() {
     setEditBusyItemId(itemId)
     try {
       await updateOrderItemQuantity({ orderItemId: itemId, quantity: newQty, reason })
-      toast.success(newQty === 0 ? `${itemName} removed` : `${itemName} × ${newQty}`)
-      setPendingRemoval(null)
-      setStaleBills(prev => ({ ...prev, [sessionId]: true }))
-      await refreshDetail(sessionId)
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to update item")
-    } finally {
       setEditBusyItemId(null)
+      return
     }
+    toast.success(newQty === 0 ? `${itemName} removed` : `${itemName} × ${newQty}`)
+    setPendingRemoval(null)
+    setStaleBills(prev => ({ ...prev, [sessionId]: true }))
+    try {
+      await refreshDetail(sessionId)
+    } catch {
+      /* row refresh only — the edit itself already succeeded */
+    }
+    setEditBusyItemId(null)
   }
 
   async function handleReprint(sessionId: string) {
     setReprintingId(sessionId)
     try {
       await reprintBill({ sessionId })
-      toast.success("Corrected bill sent to printer")
-      setStaleBills(prev => ({ ...prev, [sessionId]: false }))
-      setEditingSessionId(null)
-      await refreshDetail(sessionId)
-      await load() // bill totals in the list changed
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to reprint bill")
-    } finally {
       setReprintingId(null)
+      return
     }
+    toast.success("Corrected bill sent to printer")
+    setStaleBills(prev => ({ ...prev, [sessionId]: false }))
+    setEditingSessionId(null)
+    try {
+      // Refresh row detail + list totals — the reprint itself already succeeded.
+      await refreshDetail(sessionId)
+      await load()
+    } catch {
+      /* stale view only; the next manual refresh catches up */
+    }
+    setReprintingId(null)
   }
 
   const entries = result?.entries ?? []
@@ -438,6 +449,7 @@ export default function AdminHistoryPage() {
                                           <button
                                             type="button"
                                             onClick={() => setEditingSessionId(null)}
+                                            data-testid="history-edit-done"
                                             className="rounded-lg px-3 py-2 text-xs font-semibold text-[#8E6D4E] transition-colors hover:bg-[#F7E6D2]"
                                           >
                                             Done
@@ -504,18 +516,20 @@ export default function AdminHistoryPage() {
                                                     type="button"
                                                     onClick={() => handleQtyChange(entry.sessionId!, item.id, item.name, item.quantity - 1)}
                                                     disabled={editBusyItemId === item.id}
+                                                    data-testid={`history-item-minus-${item.id}`}
                                                     aria-label={`Decrease ${item.name}`}
                                                     className="flex h-8 w-8 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] disabled:opacity-40"
                                                   >
                                                     <Minus className="h-3.5 w-3.5" />
                                                   </button>
-                                                  <span className="min-w-5 px-1 text-center font-semibold text-[#2C1810]">
+                                                  <span className="min-w-5 px-1 text-center font-semibold text-[#2C1810]" data-testid={`history-item-qty-${item.id}`}>
                                                     {item.quantity}
                                                   </span>
                                                   <button
                                                     type="button"
                                                     onClick={() => handleQtyChange(entry.sessionId!, item.id, item.name, item.quantity + 1)}
                                                     disabled={editBusyItemId === item.id}
+                                                    data-testid={`history-item-plus-${item.id}`}
                                                     aria-label={`Increase ${item.name}`}
                                                     className="flex h-8 w-8 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] disabled:opacity-40"
                                                   >

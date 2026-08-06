@@ -45,6 +45,13 @@ export function AddItemModal({
   const listRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
+  // While the round is being saved, closing must be impossible: the walk-in
+  // flow treats onClose as "abandoned" and frees the table — racing that
+  // against a KOT already in flight could close a session mid-order.
+  function guardedClose() {
+    if (!saving) onClose()
+  }
+
   useEffect(() => {
     let mounted = true
     ;(async () => {
@@ -133,7 +140,7 @@ export function AddItemModal({
       tier="raised"
       width="2xl"
       testId="add-item-modal"
-      onClose={onClose}
+      onClose={guardedClose}
       // Fixed height (not max-h): the dish list loads async, and a
       // content-sized panel would jump from stub to full-screen when it lands.
       className="h-[85dvh] md:h-[min(80dvh,44rem)]"
@@ -150,7 +157,7 @@ export function AddItemModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={guardedClose}
             data-testid="add-item-close"
             className="-mr-2 -mt-2 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
           >

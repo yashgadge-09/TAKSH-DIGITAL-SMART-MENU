@@ -7,7 +7,7 @@ import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
 import { getOptionalUser, requireAdmin, requireStaff } from './auth-guard'
 import { requireServerEnv } from './env'
-import type { ActivityAction, RemovalReason } from './activity'
+import { REMOVAL_REASONS, type ActivityAction, type RemovalReason } from './activity'
 
 const adminSupabase = createClient(
   requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
@@ -20,14 +20,7 @@ function staffRole(user: Pick<User, 'app_metadata'>): 'admin' | 'captain' {
   return user.app_metadata?.role === 'captain' ? 'captain' : 'admin'
 }
 
-/**
- * Writes one audit row to `activity_log` (service-role only, no UPDATE/DELETE
- * path — immutable once written). Best-effort by design: a logging failure
- * must never abort the service action that calls it, so errors go to the
- * server log and are swallowed. Callers must AWAIT it — a floating promise
- * can be dropped when the serverless invocation ends.
- */
-async function logActivity(entry: {
+type ActivityLogInsert = {
   restaurantId: string | null
   /** null = guest-triggered (e.g. "Request Bill") */
   actor: User | null
@@ -42,24 +35,38 @@ async function logActivity(entry: {
   amountDelta?: number | null
   reason?: string | null
   details?: Record<string, unknown> | null
-}): Promise<void> {
+}
+
+/**
+ * Writes audit rows to `activity_log` (service-role only, no UPDATE/DELETE
+ * path — immutable once written). Accepts one entry or a batch (one insert
+ * round-trip either way). Best-effort by design: a logging failure must
+ * never abort the service action that calls it, so errors go to the server
+ * log and are swallowed. Callers must AWAIT it — a floating promise can be
+ * dropped when the serverless invocation ends.
+ */
+async function logActivity(entry: ActivityLogInsert | ActivityLogInsert[]): Promise<void> {
+  const entries = Array.isArray(entry) ? entry : [entry]
+  if (!entries.length) return
   try {
-    const { error } = await adminSupabase.from('activity_log').insert({
-      restaurant_id: entry.restaurantId,
-      actor_id: entry.actor?.id ?? null,
-      actor_email: entry.actor?.email ?? null,
-      actor_role: entry.actor ? staffRole(entry.actor) : 'guest',
-      action: entry.action,
-      session_id: entry.sessionId ?? null,
-      order_id: entry.orderId ?? null,
-      label: entry.label ?? null,
-      dish_name: entry.dishName ?? null,
-      qty_before: entry.qtyBefore ?? null,
-      qty_after: entry.qtyAfter ?? null,
-      amount_delta: entry.amountDelta ?? null,
-      reason: entry.reason ?? null,
-      details: entry.details ?? null,
-    })
+    const { error } = await adminSupabase.from('activity_log').insert(
+      entries.map((e) => ({
+        restaurant_id: e.restaurantId,
+        actor_id: e.actor?.id ?? null,
+        actor_email: e.actor?.email ?? null,
+        actor_role: e.actor ? staffRole(e.actor) : 'guest',
+        action: e.action,
+        session_id: e.sessionId ?? null,
+        order_id: e.orderId ?? null,
+        label: e.label ?? null,
+        dish_name: e.dishName ?? null,
+        qty_before: e.qtyBefore ?? null,
+        qty_after: e.qtyAfter ?? null,
+        amount_delta: e.amountDelta ?? null,
+        reason: e.reason ?? null,
+        details: e.details ?? null,
+      }))
+    )
     if (error) console.error('[activity_log] insert failed:', error.message)
   } catch (e) {
     console.error('[activity_log] insert failed:', e)
@@ -73,11 +80,12 @@ async function logActivity(entry: {
 async function getSessionLogContext(
   sessionId: string
 ): Promise<{ restaurantId: string | null; label: string | null }> {
-  const { data } = await adminSupabase
+  const { data, error } = await adminSupabase
     .from('table_sessions')
     .select('restaurant_id, session_type, token_number, host_name, restaurant_tables(table_number)')
     .eq('id', sessionId)
     .maybeSingle()
+  if (error) console.error('[activity_log] label lookup failed:', error.message)
   if (!data) return { restaurantId: null, label: null }
   return {
     restaurantId: data.restaurant_id,
@@ -88,13 +96,20 @@ async function getSessionLogContext(
 /**
  * Total ₹ of a session's non-rejected items — what gets discarded by a force
  * reset or parcel cancel, logged so the pattern is visible to the admin.
+ * Returns null when the query fails (never a silent ₹0 — that would hide
+ * exactly the money this rollup exists to surface); callers mark the log row
+ * with `amountUnknown` instead.
  */
-async function sessionDiscardedTotal(sessionId: string): Promise<number> {
-  const { data } = await adminSupabase
+async function sessionDiscardedTotal(sessionId: string): Promise<number | null> {
+  const { data, error } = await adminSupabase
     .from('orders')
     .select('status, order_items(price, quantity)')
     .eq('session_id', sessionId)
     .neq('status', 'rejected')
+  if (error) {
+    console.error('[activity_log] discarded-total query failed:', error.message)
+    return null
+  }
   return (data ?? []).reduce(
     (sum, order) =>
       sum +
@@ -2321,18 +2336,21 @@ export async function forceResetTableById(tableId: string): Promise<void> {
     .delete()
     .in('session_id', sessionIds)
 
+  const logEntries: ActivityLogInsert[] = []
   for (const session of sessions) {
     const table = session.restaurant_tables as unknown as { table_number: number } | null
     const discarded = await sessionDiscardedTotal(session.id)
-    await logActivity({
+    logEntries.push({
       restaurantId: session.restaurant_id,
       actor: user,
       action: 'force_reset',
       sessionId: session.id,
       label: table ? `Table ${table.table_number}` : null,
-      amountDelta: discarded > 0 ? -discarded : null,
+      amountDelta: discarded !== null && discarded > 0 ? -discarded : null,
+      details: discarded === null ? { amountUnknown: true } : null,
     })
   }
+  await logActivity(logEntries)
 }
 
 export async function forceResetTable(sessionId: string): Promise<void> {
@@ -2355,7 +2373,8 @@ export async function forceResetTable(sessionId: string): Promise<void> {
     action: 'force_reset',
     sessionId,
     label: ctx.label,
-    amountDelta: discarded > 0 ? -discarded : null,
+    amountDelta: discarded !== null && discarded > 0 ? -discarded : null,
+    details: discarded === null ? { amountUnknown: true } : null,
   })
 }
 
@@ -2753,7 +2772,8 @@ export async function moveTableSession({
 
   const { data: session, error: sessionError } = await adminSupabase
     .from('table_sessions')
-    .select('id, status, restaurant_id, table_id, session_type')
+    // restaurant_tables embed = the SOURCE table's number, for the log label
+    .select('id, status, restaurant_id, table_id, session_type, restaurant_tables(table_number)')
     .eq('id', sessionId)
     .single()
   if (sessionError || !session) throw new Error('Session not found')
@@ -2781,12 +2801,8 @@ export async function moveTableSession({
   if (occupiedError) throw new Error(occupiedError.message)
   if (occupied) throw new Error(`Table ${target.table_number} is already occupied`)
 
-  // Resolve the source label before the move overwrites table_id.
-  const { data: sourceTable } = await adminSupabase
-    .from('restaurant_tables')
-    .select('table_number')
-    .eq('id', session.table_id)
-    .maybeSingle()
+  // Source label resolved before the move overwrites table_id.
+  const sourceTable = session.restaurant_tables as unknown as { table_number: number } | null
 
   const { error: moveError } = await adminSupabase
     .from('table_sessions')
@@ -2856,7 +2872,9 @@ export async function reprintKot(orderId: string): Promise<void> {
  * captain must call reprintBill so the printed total matches. Blocked once
  * the session is closed.
  */
-const REMOVAL_REASON_VALUES = ['customer_changed_mind', 'wrong_entry', 'out_of_stock'] as const
+// Derived from the UI's reason list so the server can never reject a reason
+// the RemoveReasonDialog just offered.
+const REMOVAL_REASON_VALUES = Object.keys(REMOVAL_REASONS) as RemovalReason[]
 
 export async function updateOrderItemQuantity({
   orderItemId,
@@ -3072,11 +3090,11 @@ export async function addItemsToSession({
 
   const label =
     ctx.orderType === 'parcel' ? `Parcel #${ctx.tokenNumber ?? '?'}` : `Table ${ctx.tableNumber ?? '?'}`
-  for (const added of validatedItems) {
-    await logActivity({
+  await logActivity(
+    validatedItems.map((added) => ({
       restaurantId: ctx.restaurantId,
       actor: user,
-      action: 'item_added',
+      action: 'item_added' as const,
       sessionId,
       orderId: order.id,
       label,
@@ -3085,8 +3103,8 @@ export async function addItemsToSession({
       qtyAfter: added.quantity,
       amountDelta: (Number(added.price) || 0) * added.quantity,
       details: { roundNumber, kot: printKot },
-    })
-  }
+    }))
+  )
 
   return { orderId: order.id, roundNumber }
 }
@@ -3226,7 +3244,8 @@ export async function cancelParcelSession(sessionId: string): Promise<void> {
     action: 'parcel_cancelled',
     sessionId,
     label: `Parcel #${session.token_number ?? '?'}`,
-    amountDelta: discarded > 0 ? -discarded : null,
+    amountDelta: discarded !== null && discarded > 0 ? -discarded : null,
+    details: discarded === null ? { amountUnknown: true } : null,
   })
 }
 
@@ -3256,6 +3275,12 @@ export async function startCaptainOrder({
   if (!restaurantId || !tableId) throw new Error('restaurantId and tableId are required')
   const name = customerName?.trim().slice(0, 60)
   if (!name) throw new Error('Customer name is required')
+  // Client validates too, but phone is the customers dedup key — never let a
+  // bypassed client write garbage into it.
+  const phone = customerPhone?.trim() || undefined
+  if (phone && !/^\d{10}$/.test(phone)) {
+    throw new Error('Phone must be a 10-digit number')
+  }
 
   const { data: tableRow, error: tableError } = await adminSupabase
     .from('restaurant_tables')
@@ -3281,7 +3306,7 @@ export async function startCaptainOrder({
   const { customerId } = await findOrCreateCustomer({
     restaurantId,
     name,
-    phone: customerPhone,
+    phone,
     wantsWhatsapp,
   })
 
@@ -3330,22 +3355,46 @@ export async function startCaptainOrder({
  * Abandon guard for the walk-in flow: if the captain opened a table but closed
  * the dish picker without adding anything, free the table again. Strictly a
  * no-op once the session has any order — never a data-loss path.
+ *
+ * Race-safe close-then-verify: an addItemsToSession racing this call either
+ * sees the closed session and throws (no order created), or its order lands
+ * before the recount below — in which case the close is undone and the
+ * session stays live with the order intact.
  */
 export async function cancelEmptySession(sessionId: string): Promise<void> {
   await requireStaff()
   if (!sessionId) return
 
-  const { count } = await adminSupabase
+  const { count: before, error: beforeError } = await adminSupabase
     .from('orders')
     .select('id', { count: 'exact', head: true })
     .eq('session_id', sessionId)
-  if ((count ?? 0) > 0) return
+  // On a failed count, do nothing — closing a session we can't prove empty
+  // could discard a live order. Force reset remains the manual escape hatch.
+  if (beforeError) throw new Error(beforeError.message)
+  if ((before ?? 0) > 0) return
 
-  await adminSupabase
+  const { error: closeError } = await adminSupabase
     .from('table_sessions')
     .update({ status: 'closed', closed_at: new Date().toISOString() })
     .eq('id', sessionId)
     .eq('status', 'active')
+  if (closeError) throw new Error(closeError.message)
+
+  const { count: after, error: afterError } = await adminSupabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', sessionId)
+  if (afterError || (after ?? 0) > 0) {
+    // Either an add raced the cancel and won, or we can't prove it didn't —
+    // reopen; a live order must never sit on a closed session.
+    const { error: reopenError } = await adminSupabase
+      .from('table_sessions')
+      .update({ status: 'active', closed_at: null })
+      .eq('id', sessionId)
+      .eq('status', 'closed')
+    if (reopenError) console.error('[cancelEmptySession] reopen failed:', reopenError.message)
+  }
 }
 
 // ── Activity log reads (A01, admin-only) ────────────────────────────────────
