@@ -1,17 +1,110 @@
 "use server"
 
 import { supabase } from './supabase'
-import { createClient } from '@supabase/supabase-js'
-import { randomInt } from 'crypto'
+import { createClient, type User } from '@supabase/supabase-js'
+import { randomInt, randomUUID } from 'crypto'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { headers } from 'next/headers'
-import { requireAdmin, requireStaff } from './auth-guard'
+import { getOptionalUser, requireAdmin, requireStaff } from './auth-guard'
 import { requireServerEnv } from './env'
+import type { ActivityAction, RemovalReason } from './activity'
 
 const adminSupabase = createClient(
   requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
   requireServerEnv('SUPABASE_SERVICE_ROLE_KEY')
 )
+
+// ── Activity log (A01) — immutable audit trail of staff actions ─────────────
+
+function staffRole(user: Pick<User, 'app_metadata'>): 'admin' | 'captain' {
+  return user.app_metadata?.role === 'captain' ? 'captain' : 'admin'
+}
+
+/**
+ * Writes one audit row to `activity_log` (service-role only, no UPDATE/DELETE
+ * path — immutable once written). Best-effort by design: a logging failure
+ * must never abort the service action that calls it, so errors go to the
+ * server log and are swallowed. Callers must AWAIT it — a floating promise
+ * can be dropped when the serverless invocation ends.
+ */
+async function logActivity(entry: {
+  restaurantId: string | null
+  /** null = guest-triggered (e.g. "Request Bill") */
+  actor: User | null
+  action: ActivityAction
+  sessionId?: string | null
+  orderId?: string | null
+  label?: string | null
+  dishName?: string | null
+  qtyBefore?: number | null
+  qtyAfter?: number | null
+  /** Signed ₹ impact — negative when money leaves the order. */
+  amountDelta?: number | null
+  reason?: string | null
+  details?: Record<string, unknown> | null
+}): Promise<void> {
+  try {
+    const { error } = await adminSupabase.from('activity_log').insert({
+      restaurant_id: entry.restaurantId,
+      actor_id: entry.actor?.id ?? null,
+      actor_email: entry.actor?.email ?? null,
+      actor_role: entry.actor ? staffRole(entry.actor) : 'guest',
+      action: entry.action,
+      session_id: entry.sessionId ?? null,
+      order_id: entry.orderId ?? null,
+      label: entry.label ?? null,
+      dish_name: entry.dishName ?? null,
+      qty_before: entry.qtyBefore ?? null,
+      qty_after: entry.qtyAfter ?? null,
+      amount_delta: entry.amountDelta ?? null,
+      reason: entry.reason ?? null,
+      details: entry.details ?? null,
+    })
+    if (error) console.error('[activity_log] insert failed:', error.message)
+  } catch (e) {
+    console.error('[activity_log] insert failed:', e)
+  }
+}
+
+/**
+ * One-query label + restaurant resolver for log entries on actions that only
+ * hold a sessionId (settle, move, force reset, cancel).
+ */
+async function getSessionLogContext(
+  sessionId: string
+): Promise<{ restaurantId: string | null; label: string | null }> {
+  const { data } = await adminSupabase
+    .from('table_sessions')
+    .select('restaurant_id, session_type, token_number, host_name, restaurant_tables(table_number)')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (!data) return { restaurantId: null, label: null }
+  return {
+    restaurantId: data.restaurant_id,
+    label: billLabel(data as unknown as Parameters<typeof billLabel>[0]),
+  }
+}
+
+/**
+ * Total ₹ of a session's non-rejected items — what gets discarded by a force
+ * reset or parcel cancel, logged so the pattern is visible to the admin.
+ */
+async function sessionDiscardedTotal(sessionId: string): Promise<number> {
+  const { data } = await adminSupabase
+    .from('orders')
+    .select('status, order_items(price, quantity)')
+    .eq('session_id', sessionId)
+    .neq('status', 'rejected')
+  return (data ?? []).reduce(
+    (sum, order) =>
+      sum +
+      ((order.order_items as { price: number; quantity: number }[] | null) ?? []).reduce(
+        (s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0),
+        0
+      ),
+    0
+  )
+}
 
 function parseHostname(value: string | null | undefined) {
   if (!value) return ''
@@ -1520,7 +1613,7 @@ async function getSessionPrintContext(sessionId: string): Promise<SessionPrintCo
 export async function approveOrder(
   orderId: string
 ): Promise<{ orderId: string; status: 'approved' }> {
-  await requireStaff()
+  const user = await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   // Load order + idempotency guard
@@ -1572,18 +1665,28 @@ export async function approveOrder(
   })
   if (printError) throw new Error('Failed to queue KOT print job')
 
+  await logActivity({
+    restaurantId: ctx.restaurantId,
+    actor: user,
+    action: 'order_approved',
+    sessionId: order.session_id,
+    orderId,
+    label: ctx.orderType === 'parcel' ? `Parcel #${ctx.tokenNumber ?? '?'}` : `Table ${ctx.tableNumber ?? '?'}`,
+    details: { roundNumber: order.round_number },
+  })
+
   return { orderId, status: 'approved' }
 }
 
 export async function rejectOrder(
   orderId: string
 ): Promise<{ orderId: string; status: 'rejected' }> {
-  await requireStaff()
+  const user = await requireStaff()
   if (!orderId) throw new Error('orderId is required')
 
   const { data: order, error: orderError } = await adminSupabase
     .from('orders')
-    .select('id, status')
+    .select('id, status, round_number, session_id')
     .eq('id', orderId)
     .single()
   if (orderError || !order) throw new Error('Order not found')
@@ -1599,6 +1702,17 @@ export async function rejectOrder(
     .update({ status: 'rejected' })
     .eq('id', orderId)
   if (updateError) throw new Error('Failed to reject order')
+
+  const ctx = await getSessionLogContext(order.session_id)
+  await logActivity({
+    restaurantId: ctx.restaurantId,
+    actor: user,
+    action: 'order_rejected',
+    sessionId: order.session_id,
+    orderId,
+    label: ctx.label,
+    details: { roundNumber: order.round_number },
+  })
 
   return { orderId, status: 'rejected' }
 }
@@ -1649,6 +1763,7 @@ export type RawTableRow = {
     status: string
     opened_at: string
     host_name: string | null
+    pin: string | null
     orders: {
       id: string
       round_number: number
@@ -1667,7 +1782,7 @@ export async function getTablesWithSessions(restaurantId: string): Promise<RawTa
     .select(`
       id, table_number,
       table_sessions(
-        id, status, opened_at, host_name,
+        id, status, opened_at, host_name, pin,
         orders(
           id, round_number, placed_at, status,
           customers(name),
@@ -2183,10 +2298,13 @@ export async function closeTable(sessionId: string): Promise<void> {
 // hidden pending-only sessions that the grid shows as "open") and clears their
 // shared carts. No-op if the table has no live session.
 export async function forceResetTableById(tableId: string): Promise<void> {
+  // Discards live sessions with no bill — staff only, and every discard is
+  // logged with the ₹ it walked away from.
+  const user = await requireStaff()
   if (!tableId) throw new Error('tableId is required')
   const { data: sessions, error } = await adminSupabase
     .from('table_sessions')
-    .select('id')
+    .select('id, restaurant_id, restaurant_tables(table_number)')
     .eq('table_id', tableId)
     .in('status', ['active', 'bill_generated'])
   if (error) throw new Error(error.message)
@@ -2202,11 +2320,26 @@ export async function forceResetTableById(tableId: string): Promise<void> {
     .from('session_cart_items')
     .delete()
     .in('session_id', sessionIds)
+
+  for (const session of sessions) {
+    const table = session.restaurant_tables as unknown as { table_number: number } | null
+    const discarded = await sessionDiscardedTotal(session.id)
+    await logActivity({
+      restaurantId: session.restaurant_id,
+      actor: user,
+      action: 'force_reset',
+      sessionId: session.id,
+      label: table ? `Table ${table.table_number}` : null,
+      amountDelta: discarded > 0 ? -discarded : null,
+    })
+  }
 }
 
 export async function forceResetTable(sessionId: string): Promise<void> {
-  await requireStaff()
+  const user = await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
+  const ctx = await getSessionLogContext(sessionId)
+  const discarded = await sessionDiscardedTotal(sessionId)
   await adminSupabase
     .from('table_sessions')
     .update({ status: 'closed', closed_at: new Date().toISOString() })
@@ -2215,6 +2348,15 @@ export async function forceResetTable(sessionId: string): Promise<void> {
     .from('session_cart_items')
     .delete()
     .eq('session_id', sessionId)
+
+  await logActivity({
+    restaurantId: ctx.restaurantId,
+    actor: user,
+    action: 'force_reset',
+    sessionId,
+    label: ctx.label,
+    amountDelta: discarded > 0 ? -discarded : null,
+  })
 }
 
 type BillPayload = {
@@ -2416,6 +2558,19 @@ export async function generateBill({
     .eq('id', sessionId)
   if (sessionUpdateError) throw new Error('Failed to update session status')
 
+  // Guests trigger this too (Request Bill) — actor null logs as 'guest'.
+  await logActivity({
+    restaurantId: session.restaurant_id,
+    actor: await getOptionalUser(),
+    action: 'bill_printed',
+    sessionId,
+    label:
+      payload.orderType === 'parcel'
+        ? `Parcel #${payload.tokenNumber ?? '?'}`
+        : `Table ${payload.tableNumber ?? '?'}`,
+    details: { total },
+  })
+
   return { billId: bill.id, total }
 }
 
@@ -2431,7 +2586,7 @@ export async function reprintBill({
 }: {
   sessionId: string
 }): Promise<{ billId: string; total: number }> {
-  await requireStaff()
+  const user = await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
 
   const { data: session, error: sessionError } = await adminSupabase
@@ -2477,6 +2632,18 @@ export async function reprintBill({
   })
   if (printError) throw new Error('Failed to queue bill print job')
 
+  await logActivity({
+    restaurantId: session.restaurant_id,
+    actor: user,
+    action: 'bill_reprinted',
+    sessionId,
+    label:
+      payload.orderType === 'parcel'
+        ? `Parcel #${payload.tokenNumber ?? '?'}`
+        : `Table ${payload.tableNumber ?? '?'}`,
+    details: { total },
+  })
+
   return { billId: bill.id, total }
 }
 
@@ -2495,7 +2662,7 @@ export async function settleBill({
   sessionId: string
   paymentMethod: PaymentMethod
 }): Promise<{ billId: string; total: number }> {
-  await requireStaff()
+  const user = await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   if (!['cash', 'upi', 'card', 'other'].includes(paymentMethod)) {
     throw new Error('Invalid payment method')
@@ -2523,6 +2690,16 @@ export async function settleBill({
     .update({ status: 'closed', closed_at: new Date().toISOString() })
     .eq('id', sessionId)
   if (closeError) throw new Error('Bill settled but failed to close table')
+
+  const ctx = await getSessionLogContext(sessionId)
+  await logActivity({
+    restaurantId: ctx.restaurantId,
+    actor: user,
+    action: 'bill_settled',
+    sessionId,
+    label: ctx.label,
+    details: { paymentMethod, total: Number(bill.total) },
+  })
 
   return { billId: bill.id, total: Number(bill.total) }
 }
@@ -2570,7 +2747,7 @@ export async function moveTableSession({
   sessionId: string
   targetTableId: string
 }): Promise<{ targetTableNumber: number }> {
-  await requireStaff()
+  const user = await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
   if (!targetTableId) throw new Error('targetTableId is required')
 
@@ -2604,11 +2781,27 @@ export async function moveTableSession({
   if (occupiedError) throw new Error(occupiedError.message)
   if (occupied) throw new Error(`Table ${target.table_number} is already occupied`)
 
+  // Resolve the source label before the move overwrites table_id.
+  const { data: sourceTable } = await adminSupabase
+    .from('restaurant_tables')
+    .select('table_number')
+    .eq('id', session.table_id)
+    .maybeSingle()
+
   const { error: moveError } = await adminSupabase
     .from('table_sessions')
     .update({ table_id: targetTableId })
     .eq('id', sessionId)
   if (moveError) throw new Error('Failed to move table')
+
+  await logActivity({
+    restaurantId: session.restaurant_id,
+    actor: user,
+    action: 'table_moved',
+    sessionId,
+    label: sourceTable ? `Table ${sourceTable.table_number}` : null,
+    details: { toTable: target.table_number },
+  })
 
   return { targetTableNumber: target.table_number }
 }
@@ -2663,22 +2856,37 @@ export async function reprintKot(orderId: string): Promise<void> {
  * captain must call reprintBill so the printed total matches. Blocked once
  * the session is closed.
  */
+const REMOVAL_REASON_VALUES = ['customer_changed_mind', 'wrong_entry', 'out_of_stock'] as const
+
 export async function updateOrderItemQuantity({
   orderItemId,
   quantity,
+  reason,
 }: {
   orderItemId: string
   quantity: number
+  /** Required when quantity is 0 — lands in the activity log. */
+  reason?: RemovalReason
 }): Promise<void> {
-  await requireStaff()
+  const user = await requireStaff()
+  const role = staffRole(user)
   if (!orderItemId) throw new Error('orderItemId is required')
   if (!Number.isInteger(quantity) || quantity < 0 || quantity > 99) {
     throw new Error('Quantity must be between 0 and 99')
   }
+  if (reason && !REMOVAL_REASON_VALUES.includes(reason)) {
+    throw new Error('Invalid removal reason')
+  }
 
   const { data: item, error: itemError } = await adminSupabase
     .from('order_items')
-    .select('id, order_id, orders(id, status, session_id, table_sessions(status))')
+    .select(`
+      id, name, price, quantity, order_id,
+      orders(
+        id, status, session_id,
+        table_sessions(status, restaurant_id, session_type, token_number, host_name, restaurant_tables(table_number))
+      )
+    `)
     .eq('id', orderItemId)
     .single()
   if (itemError || !item) throw new Error('Order item not found')
@@ -2686,12 +2894,37 @@ export async function updateOrderItemQuantity({
   const order = item.orders as unknown as {
     id: string
     status: string
-    table_sessions: { status: string } | null
+    session_id: string
+    table_sessions: {
+      status: string
+      restaurant_id: string
+      session_type: string | null
+      token_number: number | null
+      host_name: string | null
+      restaurant_tables: { table_number: number } | null
+    } | null
   } | null
   if (!order) throw new Error('Parent order not found')
   if (order.status === 'rejected') throw new Error('Cannot edit a rejected order')
-  if (order.table_sessions?.status === 'closed') {
+  const session = order.table_sessions
+  if (session?.status === 'closed') {
     throw new Error('Session is closed — cannot edit items')
+  }
+
+  const currentQty = Number(item.quantity) || 0
+  if (quantity === currentQty) return
+
+  // Post-bill lockdown: once the bill is printed, a captain may only ADD.
+  // A quantity increase rides the same trust as Add Item — the total can only
+  // go up. Reducing or removing a billed item is the classic fraud vector,
+  // so it takes an admin (who does it from /admin/history).
+  if (session?.status === 'bill_generated' && role === 'captain' && quantity < currentQty) {
+    throw new Error('Bill already printed — only an admin can reduce or remove items')
+  }
+
+  // Removals must say why; the reason is stored on the immutable log row.
+  if (quantity === 0 && !reason) {
+    throw new Error('A reason is required to remove an item')
   }
 
   if (quantity === 0) {
@@ -2707,6 +2940,21 @@ export async function updateOrderItemQuantity({
       .eq('id', orderItemId)
     if (error) throw new Error('Failed to update quantity')
   }
+
+  const price = Number(item.price) || 0
+  await logActivity({
+    restaurantId: session?.restaurant_id ?? null,
+    actor: user,
+    action: quantity === 0 ? 'item_removed' : 'item_qty_changed',
+    sessionId: order.session_id,
+    orderId: order.id,
+    label: session ? billLabel(session) : null,
+    dishName: item.name,
+    qtyBefore: currentQty,
+    qtyAfter: quantity,
+    amountDelta: (quantity - currentQty) * price,
+    reason: reason ?? null,
+  })
 }
 
 /**
@@ -2719,12 +2967,21 @@ export async function updateOrderItemQuantity({
 export async function addItemsToSession({
   sessionId,
   items,
+  printKot = true,
 }: {
   sessionId: string
   items: { dishId: string; quantity: number }[]
+  /**
+   * false = admin-only bill correction from /admin/history: the food was
+   * already served, so no cook ticket must reach the kitchen.
+   */
+  printKot?: boolean
 }): Promise<{ orderId: string; roundNumber: number }> {
   // Creates an ALREADY-APPROVED round and fires a KOT — staff only.
-  await requireStaff()
+  const user = await requireStaff()
+  if (!printKot && staffRole(user) !== 'admin') {
+    throw new Error('Only an admin can add items without a kitchen ticket')
+  }
   if (!sessionId || !items?.length) throw new Error('sessionId and items are required')
   for (const item of items) {
     if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
@@ -2734,7 +2991,7 @@ export async function addItemsToSession({
 
   const { data: session, error: sessionError } = await adminSupabase
     .from('table_sessions')
-    .select('id, status, restaurant_id, table_id')
+    .select('id, status, restaurant_id, table_id, host_customer_id')
     .eq('id', sessionId)
     .single()
   if (sessionError || !session) throw new Error('Session not found')
@@ -2773,7 +3030,9 @@ export async function addItemsToSession({
     .from('orders')
     .insert({
       session_id: sessionId,
-      customer_id: lastOrder?.customer_id ?? null,
+      // Captain-started sessions have no prior round — fall back to the
+      // customer captured when the table was opened.
+      customer_id: lastOrder?.customer_id ?? session.host_customer_id ?? null,
       round_number: roundNumber,
       status: 'approved',
     })
@@ -2789,24 +3048,45 @@ export async function addItemsToSession({
     throw new Error('Failed to save order items')
   }
 
-  // Kitchen must still cook captain-added items — queue the KOT
   const ctx = await getSessionPrintContext(sessionId)
 
-  const { error: printError } = await adminSupabase.from('print_jobs').insert({
-    restaurant_id: ctx.restaurantId,
-    type: 'kot',
-    status: 'pending',
-    payload: {
-      tableNumber: ctx.tableNumber,
-      orderType: ctx.orderType,
-      tokenNumber: ctx.tokenNumber,
-      customerName: ctx.customerName,
-      roundNumber,
-      time: formatTimeIST(order.placed_at),
-      items: validatedItems.map((i) => ({ name: i.name, qty: i.quantity })),
-    },
-  })
-  if (printError) throw new Error('Items added but failed to queue KOT print job')
+  // Kitchen must still cook captain-added items — queue the KOT. Skipped only
+  // on admin bill corrections (printKot: false), where the food already exists.
+  if (printKot) {
+    const { error: printError } = await adminSupabase.from('print_jobs').insert({
+      restaurant_id: ctx.restaurantId,
+      type: 'kot',
+      status: 'pending',
+      payload: {
+        tableNumber: ctx.tableNumber,
+        orderType: ctx.orderType,
+        tokenNumber: ctx.tokenNumber,
+        customerName: ctx.customerName,
+        roundNumber,
+        time: formatTimeIST(order.placed_at),
+        items: validatedItems.map((i) => ({ name: i.name, qty: i.quantity })),
+      },
+    })
+    if (printError) throw new Error('Items added but failed to queue KOT print job')
+  }
+
+  const label =
+    ctx.orderType === 'parcel' ? `Parcel #${ctx.tokenNumber ?? '?'}` : `Table ${ctx.tableNumber ?? '?'}`
+  for (const added of validatedItems) {
+    await logActivity({
+      restaurantId: ctx.restaurantId,
+      actor: user,
+      action: 'item_added',
+      sessionId,
+      orderId: order.id,
+      label,
+      dishName: added.name,
+      qtyBefore: 0,
+      qtyAfter: added.quantity,
+      amountDelta: (Number(added.price) || 0) * added.quantity,
+      details: { roundNumber, kot: printKot },
+    })
+  }
 
   return { orderId: order.id, roundNumber }
 }
@@ -2911,12 +3191,12 @@ export async function getParcelSessions(restaurantId: string): Promise<RawParcel
  * report.
  */
 export async function cancelParcelSession(sessionId: string): Promise<void> {
-  await requireStaff()
+  const user = await requireStaff()
   if (!sessionId) throw new Error('sessionId is required')
 
   const { data: session, error } = await adminSupabase
     .from('table_sessions')
-    .select('id, status, session_type')
+    .select('id, status, session_type, restaurant_id, token_number')
     .eq('id', sessionId)
     .single()
   if (error || !session) throw new Error('Parcel not found')
@@ -2932,11 +3212,237 @@ export async function cancelParcelSession(sessionId: string): Promise<void> {
     .maybeSingle()
   if (bill) throw new Error('Payment already taken — cannot cancel this parcel')
 
+  const discarded = await sessionDiscardedTotal(sessionId)
+
   const { error: closeError } = await adminSupabase
     .from('table_sessions')
     .update({ status: 'closed', closed_at: new Date().toISOString() })
     .eq('id', sessionId)
   if (closeError) throw new Error(closeError.message)
+
+  await logActivity({
+    restaurantId: session.restaurant_id,
+    actor: user,
+    action: 'parcel_cancelled',
+    sessionId,
+    label: `Parcel #${session.token_number ?? '?'}`,
+    amountDelta: discarded > 0 ? -discarded : null,
+  })
+}
+
+// ── Captain walk-in orders (W01) ────────────────────────────────────────────
+
+/**
+ * Opens a table for a walk-in who didn't scan the QR: the captain picks a free
+ * table, takes name + optional phone, and punches the first round via
+ * addItemsToSession (already-approved, KOT fires). The session is a completely
+ * normal dine-in session afterwards — billing, moving, settling, history and
+ * analytics all behave as if the guest had scanned.
+ */
+export async function startCaptainOrder({
+  restaurantId,
+  tableId,
+  customerName,
+  customerPhone,
+  wantsWhatsapp,
+}: {
+  restaurantId: string
+  tableId: string
+  customerName: string
+  customerPhone?: string
+  wantsWhatsapp?: boolean
+}): Promise<{ sessionId: string; pin: string; tableNumber: number }> {
+  const user = await requireStaff()
+  if (!restaurantId || !tableId) throw new Error('restaurantId and tableId are required')
+  const name = customerName?.trim().slice(0, 60)
+  if (!name) throw new Error('Customer name is required')
+
+  const { data: tableRow, error: tableError } = await adminSupabase
+    .from('restaurant_tables')
+    .select('id, table_number, restaurant_id')
+    .eq('id', tableId)
+    .single()
+  if (tableError || !tableRow) throw new Error('Table not found')
+  if (tableRow.restaurant_id !== restaurantId) {
+    throw new Error('Table belongs to a different restaurant')
+  }
+
+  // Friendly pre-check. The unique index only covers ACTIVE sessions, so a
+  // billed-but-unsettled session would not collide on insert — check both.
+  const { data: existing } = await adminSupabase
+    .from('table_sessions')
+    .select('id')
+    .eq('table_id', tableId)
+    .in('status', ['active', 'bill_generated'])
+    .limit(1)
+    .maybeSingle()
+  if (existing) throw new Error(`Table ${tableRow.table_number} already has a running session`)
+
+  const { customerId } = await findOrCreateCustomer({
+    restaurantId,
+    name,
+    phone: customerPhone,
+    wantsWhatsapp,
+  })
+
+  const pin = String(randomInt(1000, 10000))
+  const { data: session, error: insertError } = await adminSupabase
+    .from('table_sessions')
+    .insert({
+      restaurant_id: restaurantId,
+      table_id: tableId,
+      pin,
+      status: 'active',
+      // Synthetic host id: joinTable() auto-closes sessions whose
+      // host_device_id is NULL as orphans. 'captain:…' can never match a real
+      // guest device, so a guest who scans mid-meal is routed down the normal
+      // PIN-join path (the captain reads the PIN off the TableSheet) instead
+      // of silently killing the live session or becoming its host.
+      host_device_id: `captain:${randomUUID()}`,
+      host_name: name,
+      host_customer_id: customerId,
+      joined_device_ids: [],
+    })
+    .select('id')
+    .single()
+  if (insertError || !session) {
+    // Lost a race with a QR scan or another captain — the partial unique
+    // index rejected the second INSERT.
+    if (insertError?.code === '23505') {
+      throw new Error(`Table ${tableRow.table_number} already has a running session`)
+    }
+    throw new Error('Failed to open table session')
+  }
+
+  await logActivity({
+    restaurantId,
+    actor: user,
+    action: 'order_started',
+    sessionId: session.id,
+    label: `Table ${tableRow.table_number}`,
+    details: { customerName: name },
+  })
+
+  return { sessionId: session.id, pin, tableNumber: tableRow.table_number }
+}
+
+/**
+ * Abandon guard for the walk-in flow: if the captain opened a table but closed
+ * the dish picker without adding anything, free the table again. Strictly a
+ * no-op once the session has any order — never a data-loss path.
+ */
+export async function cancelEmptySession(sessionId: string): Promise<void> {
+  await requireStaff()
+  if (!sessionId) return
+
+  const { count } = await adminSupabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', sessionId)
+  if ((count ?? 0) > 0) return
+
+  await adminSupabase
+    .from('table_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .eq('status', 'active')
+}
+
+// ── Activity log reads (A01, admin-only) ────────────────────────────────────
+
+export type ActivityLogEntry = {
+  id: string
+  createdAt: string
+  actorEmail: string | null
+  actorRole: 'admin' | 'captain' | 'guest'
+  action: ActivityAction
+  label: string | null
+  dishName: string | null
+  qtyBefore: number | null
+  qtyAfter: number | null
+  amountDelta: number | null
+  reason: string | null
+  details: Record<string, unknown> | null
+}
+
+export type ActivityLogResult = {
+  from: string
+  to: string
+  entries: ActivityLogEntry[]
+  truncated: boolean
+  /** Rollup of item_removed rows in range — the tile the admin scans first. */
+  removedCount: number
+  removedAmount: number
+}
+
+const ACTIVITY_ROW_LIMIT = 500
+
+/**
+ * Audit trail for /admin/activity — every logged staff action in an IST day
+ * range, newest first. Same range semantics as getOrderHistory. Strictly
+ * requireAdmin: captains must never see their own surveillance.
+ */
+export async function getActivityLog({
+  restaurantId,
+  from,
+  to,
+}: {
+  restaurantId: string
+  from?: string
+  to?: string
+}): Promise<ActivityLogResult> {
+  await requireAdmin()
+  if (!restaurantId) throw new Error('restaurantId is required')
+
+  const isDayKey = (value?: string) => /^\d{4}-\d{2}-\d{2}$/.test(value ?? '')
+  const rawTo = isDayKey(to) ? (to as string) : istDayKey(new Date())
+  const rawFrom = isDayKey(from) ? (from as string) : rawTo
+  const fromKey = rawFrom <= rawTo ? rawFrom : rawTo
+  const toKey = rawFrom <= rawTo ? rawTo : rawFrom
+
+  const rangeStart = istDayStart(fromKey)
+  const rangeEnd = new Date(istDayStart(toKey).getTime() + DAY_MS)
+
+  const { data, error } = await adminSupabase
+    .from('activity_log')
+    .select(
+      'id, created_at, actor_email, actor_role, action, label, dish_name, qty_before, qty_after, amount_delta, reason, details'
+    )
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', rangeStart.toISOString())
+    .lt('created_at', rangeEnd.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(ACTIVITY_ROW_LIMIT + 1)
+  if (error) throw new Error(error.message)
+
+  const rows = data ?? []
+  const truncated = rows.length > ACTIVITY_ROW_LIMIT
+
+  const entries: ActivityLogEntry[] = rows.slice(0, ACTIVITY_ROW_LIMIT).map((row) => ({
+    id: row.id,
+    createdAt: row.created_at,
+    actorEmail: row.actor_email,
+    actorRole: (row.actor_role as ActivityLogEntry['actorRole']) ?? 'guest',
+    action: row.action as ActivityAction,
+    label: row.label,
+    dishName: row.dish_name,
+    qtyBefore: row.qty_before,
+    qtyAfter: row.qty_after,
+    amountDelta: row.amount_delta === null ? null : Number(row.amount_delta),
+    reason: row.reason,
+    details: (row.details as Record<string, unknown> | null) ?? null,
+  }))
+
+  let removedCount = 0
+  let removedAmount = 0
+  for (const entry of entries) {
+    if (entry.action === 'item_removed') {
+      removedCount += 1
+      removedAmount += Math.abs(entry.amountDelta ?? 0)
+    }
+  }
+
+  return { from: fromKey, to: toKey, entries, truncated, removedCount, removedAmount }
 }
 
 export interface TableEntry {
