@@ -1,1 +1,2 @@
 - [Ordering System Security Findings](project-ordering-system-security.md) — auth gaps, RLS over-exposure, and input validation issues in the 2026-06-21 ordering system server actions
+- [Activity Log + Captain Roles Review](project-activity-log-captain-roles.md) — 2026-08-06 review of admin-captain-k-rishta: known-good role/audit patterns to reuse, one open phone-validation gap
