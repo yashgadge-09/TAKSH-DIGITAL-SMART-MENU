@@ -314,8 +314,24 @@ export default function CaptainTablesPage() {
       channelRef.current = ch
     })()
 
+    // Realtime is the fast path, but a websocket can die silently (laptop
+    // sleep, dev-server restart, stale socket auth) and the panel then shows
+    // ghost state forever — e.g. a pending-approval card for a table the
+    // admin already settled. A slow poll + refetch on tab focus guarantees
+    // both panels converge on the same DB truth within seconds regardless.
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return
+      if (restIdRef.current) fetchTables(restIdRef.current)
+    }
+    const pollId = setInterval(refreshIfVisible, 15_000)
+    document.addEventListener("visibilitychange", refreshIfVisible)
+    window.addEventListener("focus", refreshIfVisible)
+
     return () => {
       mounted = false
+      clearInterval(pollId)
+      document.removeEventListener("visibilitychange", refreshIfVisible)
+      window.removeEventListener("focus", refreshIfVisible)
       if (refetchTimerRef.current) { clearTimeout(refetchTimerRef.current); refetchTimerRef.current = null }
       if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     }

@@ -256,6 +256,28 @@ export default function IncomingOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Realtime is the fast path, but a websocket can die silently (laptop
+  // sleep, dev-server restart, stale socket auth) and the page then shows
+  // ghost state until something else forces a fetch. A slow poll + refetch
+  // on tab focus keeps this panel and the captain panel converged on the
+  // same DB truth within seconds regardless of the socket's health.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return
+      loadOrders()
+      if (restIdRef.current) fetchTables(restIdRef.current)
+    }
+    const pollId = setInterval(refreshIfVisible, 15_000)
+    document.addEventListener("visibilitychange", refreshIfVisible)
+    window.addEventListener("focus", refreshIfVisible)
+    return () => {
+      clearInterval(pollId)
+      document.removeEventListener("visibilitychange", refreshIfVisible)
+      window.removeEventListener("focus", refreshIfVisible)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Order actions ────────────────────────────────────────────────────────
 
   const handleApprove = async (orderId: string) => {
