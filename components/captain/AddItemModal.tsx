@@ -17,12 +17,18 @@ const BATCH = 80
 export function AddItemModal({
   sessionId,
   label,
+  printKot = true,
   onClose,
   onAdded,
 }: {
   sessionId: string
   /** What this round is being added to, e.g. "Table 6" or "Parcel #7". */
   label: string
+  /**
+   * false = admin bill correction (/admin/history): the food was already
+   * served, so no cook ticket goes to the kitchen. Server-enforced admin-only.
+   */
+  printKot?: boolean
   onClose: () => void
   onAdded: () => void
 }) {
@@ -38,6 +44,13 @@ export function AddItemModal({
   const [visibleCount, setVisibleCount] = useState(BATCH)
   const listRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  // While the round is being saved, closing must be impossible: the walk-in
+  // flow treats onClose as "abandoned" and frees the table — racing that
+  // against a KOT already in flight could close a session mid-order.
+  function guardedClose() {
+    if (!saving) onClose()
+  }
 
   useEffect(() => {
     let mounted = true
@@ -107,8 +120,13 @@ export function AddItemModal({
       const { roundNumber } = await addItemsToSession({
         sessionId,
         items: selected.map(([dishId, quantity]) => ({ dishId, quantity })),
+        printKot,
       })
-      toast.success(`Round ${roundNumber} added — KOT sent to kitchen`)
+      toast.success(
+        printKot
+          ? `Round ${roundNumber} added — KOT sent to kitchen`
+          : `Round ${roundNumber} added to bill — no KOT sent`
+      )
       onAdded()
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to add items")
@@ -122,7 +140,7 @@ export function AddItemModal({
       tier="raised"
       width="2xl"
       testId="add-item-modal"
-      onClose={onClose}
+      onClose={guardedClose}
       // Fixed height (not max-h): the dish list loads async, and a
       // content-sized panel would jump from stub to full-screen when it lands.
       className="h-[85dvh] md:h-[min(80dvh,44rem)]"
@@ -134,10 +152,12 @@ export function AddItemModal({
             <SheetTitle asChild>
               <h2 className="text-lg font-bold text-[#2C1810]">Add Items</h2>
             </SheetTitle>
-            <p className="truncate text-xs text-[#8E6D4E]">{label} — new KOT round</p>
+            <p className="truncate text-xs text-[#8E6D4E]">
+              {label} — {printKot ? "new KOT round" : "bill correction (no KOT)"}
+            </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={guardedClose}
             data-testid="add-item-close"
             className="-mr-2 -mt-2 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
           >

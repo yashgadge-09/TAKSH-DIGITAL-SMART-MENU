@@ -48,6 +48,15 @@ async function getAuthedUser(): Promise<User | null> {
 }
 
 /**
+ * Identifies the caller for audit logging on actions guests may also trigger
+ * (e.g. generateBill via the guest "Request Bill" button). Returns the
+ * authenticated user or null — never throws and never gates.
+ */
+export async function getOptionalUser(): Promise<User | null> {
+  return getAuthedUser()
+}
+
+/**
  * Guards a Server Action so only authenticated staff (admin OR captain) may
  * run it. Throws 'Unauthorized' otherwise. Call as the first line of any
  * action that mutates orders, tables, bills, or reads staff-only data.

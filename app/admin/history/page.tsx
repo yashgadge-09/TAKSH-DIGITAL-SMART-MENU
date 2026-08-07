@@ -6,6 +6,8 @@ import {
   getOrderHistory,
   getOrderHistoryDetail,
   getRestaurantId,
+  reprintBill,
+  updateOrderItemQuantity,
   type OrderHistoryEntry,
   type OrderHistoryResult,
   type OrderHistoryRound,
@@ -22,12 +24,19 @@ import {
   todayIST,
   type HistoryPreset,
 } from "@/lib/order-history"
+import type { RemovalReason } from "@/lib/activity"
+import { AddItemModal } from "@/components/captain/AddItemModal"
+import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
 import { toast } from "sonner"
 import {
   ChevronDown,
   ChevronRight,
   Clock,
   Hourglass,
+  Minus,
+  Pencil,
+  Plus,
+  Printer,
   Receipt,
   RefreshCw,
   ShoppingBag,
@@ -55,6 +64,14 @@ export default function AdminHistoryPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [rounds, setRounds] = useState<Record<string, OrderHistoryRound[]>>({})
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null)
+
+  // Admin bill correction (unsettled bills only — settled bills are frozen).
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  const [editBusyItemId, setEditBusyItemId] = useState<string | null>(null)
+  const [pendingRemoval, setPendingRemoval] = useState<{ sessionId: string; itemId: string; name: string } | null>(null)
+  const [addFor, setAddFor] = useState<{ sessionId: string; label: string } | null>(null)
+  const [staleBills, setStaleBills] = useState<Record<string, boolean>>({})
+  const [reprintingId, setReprintingId] = useState<string | null>(null)
 
   const range = useMemo(
     () => rangeForPreset(preset, { day, from: customFrom, to: customTo }),
@@ -128,6 +145,63 @@ export default function AdminHistoryPage() {
     } finally {
       setDetailLoadingId(null)
     }
+  }
+
+  async function refreshDetail(sessionId: string) {
+    const detail = await getOrderHistoryDetail(sessionId)
+    setRounds(prev => ({ ...prev, [sessionId]: detail }))
+  }
+
+  async function handleQtyChange(
+    sessionId: string,
+    itemId: string,
+    itemName: string,
+    newQty: number,
+    reason?: RemovalReason,
+  ) {
+    if (newQty === 0 && !reason) {
+      setPendingRemoval({ sessionId, itemId, name: itemName })
+      return
+    }
+    setEditBusyItemId(itemId)
+    try {
+      await updateOrderItemQuantity({ orderItemId: itemId, quantity: newQty, reason })
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to update item")
+      setEditBusyItemId(null)
+      return
+    }
+    toast.success(newQty === 0 ? `${itemName} removed` : `${itemName} × ${newQty}`)
+    setPendingRemoval(null)
+    setStaleBills(prev => ({ ...prev, [sessionId]: true }))
+    try {
+      await refreshDetail(sessionId)
+    } catch {
+      /* row refresh only — the edit itself already succeeded */
+    }
+    setEditBusyItemId(null)
+  }
+
+  async function handleReprint(sessionId: string) {
+    setReprintingId(sessionId)
+    try {
+      await reprintBill({ sessionId })
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to reprint bill")
+      setReprintingId(null)
+      return
+    }
+    toast.success("Corrected bill sent to printer")
+    setStaleBills(prev => ({ ...prev, [sessionId]: false }))
+    setEditingSessionId(null)
+    try {
+      // Refresh row detail + list totals — the reprint itself already succeeded.
+      await refreshDetail(sessionId)
+      await load()
+    } catch {
+      /* stale view only; the next manual refresh catches up */
+    }
+    setReprintingId(null)
   }
 
   const entries = result?.entries ?? []
@@ -348,6 +422,57 @@ export default function AdminHistoryPage() {
                                 <p className="text-sm text-[#8E6D4E]">Loading items…</p>
                               ) : detail?.length ? (
                                 <div className="space-y-3">
+                                  {/* Bill correction — unsettled bills only; a settled
+                                      bill is revenue and stays frozen forever. */}
+                                  {entry.status === "unsettled" && entry.sessionId ? (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {editingSessionId === entry.sessionId ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => setAddFor({ sessionId: entry.sessionId!, label: entry.label })}
+                                            data-testid="history-add-dish"
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#2A6B3A] px-3 py-2 text-xs font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED]"
+                                          >
+                                            <Plus className="h-3.5 w-3.5" /> Add dish (no KOT)
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleReprint(entry.sessionId!)}
+                                            disabled={reprintingId === entry.sessionId}
+                                            data-testid="history-reprint-bill"
+                                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#A46833] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#8B5A2B] disabled:opacity-50"
+                                          >
+                                            <Printer className="h-3.5 w-3.5" />
+                                            {reprintingId === entry.sessionId ? "Printing…" : "Reprint corrected bill"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingSessionId(null)}
+                                            data-testid="history-edit-done"
+                                            className="rounded-lg px-3 py-2 text-xs font-semibold text-[#8E6D4E] transition-colors hover:bg-[#F7E6D2]"
+                                          >
+                                            Done
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingSessionId(entry.sessionId!)}
+                                          data-testid="history-edit-bill"
+                                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#A46833] px-3 py-2 text-xs font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0]"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" /> Edit bill
+                                        </button>
+                                      )}
+                                      {staleBills[entry.sessionId] ? (
+                                        <span className="text-xs font-medium text-[#C47A20]" data-testid="history-bill-stale">
+                                          Items changed — reprint the bill to update the totals.
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+
                                   {detail.map(round => (
                                     <div
                                       key={round.orderId}
@@ -384,10 +509,43 @@ export default function AdminHistoryPage() {
                                             <span className="min-w-0 flex-1 truncate text-[#2C1810]">
                                               {item.name}
                                             </span>
-                                            <span className="shrink-0 text-[#8E6D4E]">
-                                              {item.quantity}× {inrExact(item.price)} ={" "}
-                                              {inrExact(item.price * item.quantity)}
-                                            </span>
+                                            {editingSessionId === entry.sessionId ? (
+                                              <span className="flex shrink-0 items-center gap-2">
+                                                <span className="flex items-center gap-1 rounded-lg border border-[#E0CBAA] bg-[#FFFBF4]">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleQtyChange(entry.sessionId!, item.id, item.name, item.quantity - 1)}
+                                                    disabled={editBusyItemId === item.id}
+                                                    data-testid={`history-item-minus-${item.id}`}
+                                                    aria-label={`Decrease ${item.name}`}
+                                                    className="flex h-8 w-8 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] disabled:opacity-40"
+                                                  >
+                                                    <Minus className="h-3.5 w-3.5" />
+                                                  </button>
+                                                  <span className="min-w-5 px-1 text-center font-semibold text-[#2C1810]" data-testid={`history-item-qty-${item.id}`}>
+                                                    {item.quantity}
+                                                  </span>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleQtyChange(entry.sessionId!, item.id, item.name, item.quantity + 1)}
+                                                    disabled={editBusyItemId === item.id}
+                                                    data-testid={`history-item-plus-${item.id}`}
+                                                    aria-label={`Increase ${item.name}`}
+                                                    className="flex h-8 w-8 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] disabled:opacity-40"
+                                                  >
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                  </button>
+                                                </span>
+                                                <span className="w-16 text-right text-[#8E6D4E]">
+                                                  {inrExact(item.price * item.quantity)}
+                                                </span>
+                                              </span>
+                                            ) : (
+                                              <span className="shrink-0 text-[#8E6D4E]">
+                                                {item.quantity}× {inrExact(item.price)} ={" "}
+                                                {inrExact(item.price * item.quantity)}
+                                              </span>
+                                            )}
                                           </li>
                                         ))}
                                       </ul>
@@ -450,6 +608,36 @@ export default function AdminHistoryPage() {
           )}
         </div>
       </div>
+
+      {pendingRemoval && (
+        <RemoveReasonDialog
+          itemName={pendingRemoval.name}
+          busy={editBusyItemId === pendingRemoval.itemId}
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={reason =>
+            handleQtyChange(pendingRemoval.sessionId, pendingRemoval.itemId, pendingRemoval.name, 0, reason)
+          }
+        />
+      )}
+
+      {addFor && (
+        <AddItemModal
+          sessionId={addFor.sessionId}
+          label={addFor.label}
+          printKot={false}
+          onClose={() => setAddFor(null)}
+          onAdded={async () => {
+            const sessionId = addFor.sessionId
+            setAddFor(null)
+            setStaleBills(prev => ({ ...prev, [sessionId]: true }))
+            try {
+              await refreshDetail(sessionId)
+            } catch {
+              /* row refresh only — the edit itself already succeeded */
+            }
+          }}
+        />
+      )}
     </AdminLayout>
   )
 }
