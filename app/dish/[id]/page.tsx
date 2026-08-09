@@ -9,6 +9,7 @@ import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
+import { toast } from "sonner";
 
 function LanguageToggle() {
   const langs = ["EN", "HI", "MR"] as const;
@@ -263,6 +264,7 @@ export default function DishDetailPage() {
 
     setShouldScrollToRecommendations(true);
     setQty(1);
+    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   };
 
   const getRecommendationName = (recommendedDish: any) =>

@@ -343,6 +343,7 @@ function MenuPageContent() {
 
     if (sharedSession) {
       playChime();
+      sharedSession.addOptimisticItem(dish);
       void addSharedCartItem({
         sessionId: sharedSession.sessionId,
         deviceId: sharedSession.deviceId,
@@ -353,6 +354,7 @@ function MenuPageContent() {
     } else {
       addItem(dish);
     }
+    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   }, [sharedSession, addItem]);
 
   const handleOpenDish = useCallback((dish: any) => {

@@ -18,6 +18,37 @@ export function useSharedCartRealtime(sessionId: string | null) {
     }
   }, [sessionId]);
 
+  // Bumps the local cart immediately on tap so the badge/drawer don't wait on the
+  // round trip (server write -> postgres_changes -> refetch); the next refetch
+  // (triggered by that same round trip) reconciles with the real DB state.
+  const addOptimistic = useCallback(
+    (dish: { id: string; name: string; price: number; image: string; category: string }, deviceId: string, displayName: string) => {
+      setItems((prev) => {
+        const existing = prev.find((item) => item.dishId === dish.id);
+        if (existing) {
+          return prev.map((item) =>
+            item.dishId === dish.id ? { ...item, quantity: item.quantity + 1 } : item
+          );
+        }
+        return [
+          ...prev,
+          {
+            id: `optimistic-${dish.id}-${Date.now()}`,
+            dishId: dish.id,
+            name: dish.name,
+            price: dish.price,
+            image: dish.image,
+            category: dish.category,
+            quantity: 1,
+            addedByDeviceId: deviceId,
+            addedByName: displayName,
+          },
+        ];
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     if (!sessionId) { setItems([]); return; }
 
@@ -45,5 +76,5 @@ export function useSharedCartRealtime(sessionId: string | null) {
     };
   }, [sessionId, refetch]);
 
-  return { items, refetch };
+  return { items, refetch, addOptimistic };
 }
