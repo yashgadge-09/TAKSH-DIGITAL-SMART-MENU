@@ -17,6 +17,7 @@ export interface SharedSessionValue {
   displayName: string;
   sharedItems: SharedCartItem[];
   refetchCart: () => Promise<void>;
+  addOptimisticItem: (dish: { id: string; name: string; price: number; image: string; category: string }) => void;
 }
 
 const SharedSessionContext = createContext<SharedSessionValue | null>(null);
@@ -49,7 +50,7 @@ export function SharedSessionProvider({
   const [hostOnboardingError, setHostOnboardingError] = useState("");
   const didJoinRef = useRef(false);
 
-  const { items: sharedItems, refetch: refetchCart } = useSharedCartRealtime(sessionId);
+  const { items: sharedItems, refetch: refetchCart, addOptimistic } = useSharedCartRealtime(sessionId);
 
   useEffect(() => {
     // StrictMode guard — runs once per mount
@@ -125,8 +126,12 @@ export function SharedSessionProvider({
     }
   };
 
+  const addOptimisticItem = (dish: { id: string; name: string; price: number; image: string; category: string }) => {
+    addOptimistic(dish, deviceId, displayName);
+  };
+
   const value: SharedSessionValue | null = sessionId
-    ? { sessionId, pin, isHost, hostName, customerId, deviceId, displayName, sharedItems, refetchCart }
+    ? { sessionId, pin, isHost, hostName, customerId, deviceId, displayName, sharedItems, refetchCart, addOptimisticItem }
     : null;
 
   return (

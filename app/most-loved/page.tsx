@@ -9,6 +9,7 @@ import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
+import { toast } from "sonner";
 
 export default function MostLovedPage() {
   const router = useRouter();
@@ -84,6 +85,7 @@ export default function MostLovedPage() {
       image: dish.image,
       category: dish.category,
     });
+    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   };
 
   return (

@@ -9,6 +9,7 @@ import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { isSameCategory } from "@/lib/utils";
 import { thumbUrl } from "@/lib/media";
+import { toast } from "sonner";
 
 export default function CategoryPage({ params }: { params: Promise<{ name: string }> }) {
   const router = useRouter();
@@ -73,6 +74,7 @@ export default function CategoryPage({ params }: { params: Promise<{ name: strin
       image: dish.image,
       category: dish.category,
     });
+    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   };
 
   return (
