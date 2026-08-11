@@ -22,6 +22,7 @@ import { ParcelSheet } from "@/components/captain/ParcelSheet"
 import { NewParcelModal } from "@/components/captain/NewParcelModal"
 import { NewTableOrderModal } from "@/components/captain/NewTableOrderModal"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { PendingOrderItems } from "@/components/captain/PendingOrderItems"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -462,14 +463,11 @@ export default function CaptainTablesPage() {
                       <Users className="h-3 w-3" /> {card.customerName}
                     </p>
                   )}
-                  <ul className="mb-3 divide-y divide-[#E8D5BC]">
-                    {card.items.map(item => (
-                      <li key={item.id} className="flex justify-between py-1 text-sm">
-                        <span className="font-medium text-[#2C1810]">{item.name}</span>
-                        <span className="text-[#8E6D4E]">× {item.quantity}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <PendingOrderItems
+                    items={card.items}
+                    disabled={isProcessing}
+                    onChanged={() => { if (restIdRef.current) fetchTables(restIdRef.current) }}
+                  />
                   {/* mt-auto pins the actions to the card foot so a short
                       order in a grid row lines up with its taller neighbours. */}
                   <div className="mt-auto flex gap-2">

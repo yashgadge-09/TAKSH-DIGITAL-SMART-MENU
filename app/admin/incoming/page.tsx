@@ -26,6 +26,7 @@ import { SettleModal } from "@/components/captain/SettleModal"
 import { ParcelSheet } from "@/components/captain/ParcelSheet"
 import { NewParcelModal } from "@/components/captain/NewParcelModal"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { PendingOrderItems } from "@/components/captain/PendingOrderItems"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -418,14 +419,13 @@ export default function IncomingOrdersPage() {
                     <span className="truncate">{customerName}</span>
                   </p>
 
-                  <ul className="mb-4 divide-y divide-[#EADCC4] border-y border-[#EADCC4]">
-                    {order.order_items.map((item, i) => (
-                      <li key={i} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-                        <span className="min-w-0 flex-1 truncate font-medium text-[#2C1810]">{item.name}</span>
-                        <span className="shrink-0 text-[#8E6D4E]">× {item.quantity}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mb-4 border-y border-[#EADCC4] py-1">
+                    <PendingOrderItems
+                      items={order.order_items}
+                      disabled={isProcessing}
+                      onChanged={loadOrders}
+                    />
+                  </div>
 
                   <div className="mt-auto flex gap-2">
                     <button

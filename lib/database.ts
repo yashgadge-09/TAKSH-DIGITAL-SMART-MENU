@@ -1649,19 +1649,33 @@ export async function approveOrder(
   // Resolve restaurant_id + table number (or parcel token) for the KOT header
   const ctx = await getSessionPrintContext(order.session_id)
 
-  // Load items for the KOT payload
+  // Claim the order atomically: the update only lands if it is still
+  // pending_approval. Two staff devices tapping Approve at once used to both
+  // pass the status check above and both queue a KOT — this conditional
+  // update makes the claim itself the serialization point, so only one wins.
+  const { data: claimed, error: claimError } = await adminSupabase
+    .from('orders')
+    .update({ status: 'approved' })
+    .eq('id', orderId)
+    .eq('status', 'pending_approval')
+    .select('id')
+  if (claimError) throw new Error('Failed to approve order')
+  if (!claimed?.length) {
+    // Lost the race — reflect whatever the winner already left behind.
+    const { data: current } = await adminSupabase.from('orders').select('status').eq('id', orderId).single()
+    if (current?.status === 'approved') return { orderId, status: 'approved' }
+    throw new Error(`Cannot approve order in status '${current?.status ?? 'unknown'}'`)
+  }
+
+  // Read items only AFTER the claim succeeds: staff can edit a pending
+  // order's items right up until this instant (updateOrderItemQuantity
+  // refuses a non-pending order), so the KOT always reflects the final state
+  // rather than whatever was there when this call started.
   const { data: items, error: itemsError } = await adminSupabase
     .from('order_items')
     .select('name, quantity')
     .eq('order_id', orderId)
   if (itemsError || !items?.length) throw new Error('Order has no items')
-
-  // Flip status first so a concurrent call sees it as no longer pending
-  const { error: updateError } = await adminSupabase
-    .from('orders')
-    .update({ status: 'approved' })
-    .eq('id', orderId)
-  if (updateError) throw new Error('Failed to approve order')
 
   // approveOrder is the ONLY creator of a KOT print job
   const { error: printError } = await adminSupabase.from('print_jobs').insert({
@@ -1712,11 +1726,28 @@ export async function rejectOrder(
     throw new Error(`Cannot reject order in status '${order.status}'`)
   }
 
-  const { error: updateError } = await adminSupabase
+  // Same conditional-claim pattern as approveOrder — a simultaneous
+  // Approve/Reject tap on two devices now resolves to exactly one outcome
+  // instead of a read-then-write race.
+  const { data: claimed, error: claimError } = await adminSupabase
     .from('orders')
     .update({ status: 'rejected' })
     .eq('id', orderId)
-  if (updateError) throw new Error('Failed to reject order')
+    .eq('status', 'pending_approval')
+    .select('id')
+  if (claimError) throw new Error('Failed to reject order')
+  if (!claimed?.length) {
+    const { data: current } = await adminSupabase.from('orders').select('status').eq('id', orderId).single()
+    if (current?.status === 'rejected') return { orderId, status: 'rejected' }
+    throw new Error(`Cannot reject order in status '${current?.status ?? 'unknown'}'`)
+  }
+
+  // Best-effort: hand the guest their items back in the shared cart instead
+  // of making them rebuild it from memory. Must never fail the rejection —
+  // the order is already rejected regardless of whether this succeeds.
+  await restoreRejectedItemsToCart(orderId, order.session_id).catch((e) => {
+    console.error('[rejectOrder] cart restore failed', e)
+  })
 
   const ctx = await getSessionLogContext(order.session_id)
   await logActivity({
@@ -1732,12 +1763,68 @@ export async function rejectOrder(
   return { orderId, status: 'rejected' }
 }
 
+/**
+ * Puts a rejected order's items back into the guest's shared cart so they
+ * don't have to rebuild it from memory. Fires only AFTER rejection — the
+ * cart still clears at placement time as before, avoiding the double-order
+ * risk a "hold the cart open while pending" design has in shared mode
+ * (another guest's phone could re-submit the same items, or merge new
+ * round-2 adds into a cart that's really an old, still-pending round).
+ * Restored rows use a synthetic device id since order_items carries no
+ * per-guest attribution — they land as a distinct cart line rather than
+ * silently inflating a live guest's own quantity.
+ */
+async function restoreRejectedItemsToCart(orderId: string, sessionId: string): Promise<void> {
+  const { data: session } = await adminSupabase
+    .from('table_sessions')
+    .select('status')
+    .eq('id', sessionId)
+    .maybeSingle()
+  // The table may have moved on (billed, closed) between placement and
+  // rejection — don't hand items back into a session no longer taking orders.
+  if (!session || session.status !== 'active') return
+
+  const { data: items, error: itemsError } = await adminSupabase
+    .from('order_items')
+    .select('dish_id, name, price, quantity')
+    .eq('order_id', orderId)
+  if (itemsError || !items?.length) return
+
+  const dishIds = [...new Set(items.map((i) => i.dish_id))]
+  const { data: dishes } = await adminSupabase
+    .from('dishes')
+    .select('id, image_url, category, is_available')
+    .in('id', dishIds)
+  const dishMap = new Map((dishes ?? []).map((d) => [d.id, d]))
+
+  const rows = items
+    // A dish that went unavailable between order and rejection can't be
+    // handed back — placeOrder would refuse it on the next attempt anyway.
+    .filter((item) => dishMap.get(item.dish_id)?.is_available !== false)
+    .map((item) => ({
+      session_id: sessionId,
+      dish_id: item.dish_id,
+      name: item.name,
+      price: item.price,
+      image: normalizeImageUrl(dishMap.get(item.dish_id)?.image_url ?? null) || null,
+      category: dishMap.get(item.dish_id)?.category ?? null,
+      quantity: item.quantity,
+      added_by_device_id: `restored:${orderId}`,
+      added_by_name: 'Returned by staff',
+    }))
+  if (!rows.length) return
+
+  await adminSupabase.from('session_cart_items').insert(rows)
+}
+
 export type PendingOrder = {
   id: string
   round_number: number
   placed_at: string
   customers: { name: string } | null
-  order_items: { name: string; quantity: number }[]
+  // `id` is required here (not just name/quantity) so the incoming queue can
+  // edit a pending order's items via updateOrderItemQuantity before Approve.
+  order_items: { id: string; name: string; quantity: number }[]
   table_sessions: { restaurant_tables: { table_number: number } | null } | null
 }
 
@@ -1747,7 +1834,7 @@ export async function getPendingOrders(): Promise<PendingOrder[]> {
     .from('orders')
     .select(
       'id, round_number, placed_at, ' +
-      'order_items(name, quantity), ' +
+      'order_items(id, name, quantity), ' +
       'customers(name), ' +
       'table_sessions(restaurant_tables(table_number))'
     )
@@ -2946,6 +3033,22 @@ export async function updateOrderItemQuantity({
   }
 
   if (quantity === 0) {
+    // An order can never be emptied out to zero items via edit — a pending
+    // order with no items would jam getPendingOrders (approveOrder throws on
+    // an empty order), and a served/billed order with no items makes no
+    // sense either. The whole order/round has its own cancel path (Reject).
+    const { count } = await adminSupabase
+      .from('order_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('order_id', order.id)
+    if ((count ?? 0) <= 1) {
+      throw new Error(
+        order.status === 'pending_approval'
+          ? 'Cannot remove the last item — reject the order instead'
+          : 'Cannot remove the last item from an order'
+      )
+    }
+
     const { error } = await adminSupabase
       .from('order_items')
       .delete()
