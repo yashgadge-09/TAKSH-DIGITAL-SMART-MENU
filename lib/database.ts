@@ -897,6 +897,35 @@ export async function getMostLovedDishRatings(limit = 10) {
     .slice(0, safeLimit)
 }
 
+export async function getMostOrderedDishes(limit = 10, days = 30) {
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 10)))
+  const safeDays = Math.max(1, Math.min(90, Math.floor(Number(days) || 30)))
+  const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await adminSupabase
+    .from('orders')
+    .select('status, placed_at, order_items(dish_id, quantity)')
+    .neq('status', 'rejected')
+    .gte('placed_at', since)
+
+  if (error) throw error
+
+  const totals = new Map<string, number>()
+  ;(data || []).forEach((order: any) => {
+    ;(order.order_items || []).forEach((item: any) => {
+      const dishId = String(item?.dish_id || '').trim()
+      const qty = Number(item?.quantity) || 0
+      if (!dishId || qty <= 0) return
+      totals.set(dishId, (totals.get(dishId) || 0) + qty)
+    })
+  })
+
+  return Array.from(totals.entries())
+    .map(([dishId, orderCount]) => ({ dishId, orderCount }))
+    .sort((a, b) => b.orderCount - a.orderCount)
+    .slice(0, safeLimit)
+}
+
 function buildDayBuckets(days: number) {
   const buckets: Array<{
     key: string

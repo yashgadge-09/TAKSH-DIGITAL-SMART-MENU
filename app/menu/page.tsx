@@ -2,14 +2,14 @@
 
 import { Suspense, useEffect, useState, useRef, useMemo, useCallback, memo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Plus, ChefHat, Lock } from "lucide-react";
+import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Flame, Plus, ChefHat, Lock } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
 import { OrderFlow } from "@/components/OrderFlow";
 import { OrderLikeModal } from "@/components/OrderLikeModal";
 import { ReviewModal } from "@/components/ReviewModal";
 import { RateUsCard } from "@/components/RateUsCard";
-import { getAllDishes, getCategories, getMostLovedDishRatings, submitDishRatingsFromOrder, trackMenuView, addSharedCartItem } from "@/lib/database";
+import { getAllDishes, getCategories, getMostOrderedDishes, submitDishRatingsFromOrder, trackMenuView, addSharedCartItem } from "@/lib/database";
 import { trackCartEventClient } from "@/lib/client-analytics";
 import { playChime, thumbUrl, isVideoUrl } from "@/lib/media";
 import { getOrCreateSessionId, shouldTrackClientEvent } from "@/lib/session";
@@ -22,7 +22,7 @@ import { isSameCategory, normalizeCategory, toSingular } from "@/lib/utils";
 const PREVIEW_LIMIT = 6;
 const MENU_REFETCH_COOLDOWN_MS = 60_000;
 
-type MostLovedRatingRow = { dishId: string; averageRating: number; ratingsCount: number };
+type MostOrderedRow = { dishId: string; orderCount: number };
 
 type AddToCartDish = { id: string; name: string; price: number; image: string; category: string };
 
@@ -124,12 +124,12 @@ const DishCard = memo(function DishCard({
 
 const ScrollCard = memo(function ScrollCard({
   dish,
-  showRating = false,
+  showOrderCount = false,
   onAdd,
   onOpen,
 }: {
   dish: any;
-  showRating?: boolean;
+  showOrderCount?: boolean;
   onAdd: (dish: AddToCartDish) => void;
   onOpen: (dish: any) => void;
 }) {
@@ -153,11 +153,10 @@ const ScrollCard = memo(function ScrollCard({
             ADD <Plus className="h-3 w-3" strokeWidth={2.4} />
           </button>
         </div>
-        {showRating && Number.isFinite(Number(dish.averageRating)) && (
+        {showOrderCount && Number(dish.orderCount) > 0 && (
           <div className="inline-flex w-fit items-center gap-1 rounded-full border border-[color:var(--brand-gold)]/30 px-2 py-0.5">
-            <Star className="h-3 w-3 fill-[color:var(--brand-gold)] text-[color:var(--brand-gold)]" />
-            <span className="text-[10px] font-semibold text-[color:var(--brand-gold)]">{Number(dish.averageRating).toFixed(1)}</span>
-            <span className="text-[9px] tracking-wider text-[color:var(--brand-gold-muted)]">· {Number(dish.ratingsCount) || 0} RATINGS</span>
+            <Flame className="h-3 w-3 fill-[color:var(--brand-gold)] text-[color:var(--brand-gold)]" />
+            <span className="text-[9px] tracking-wider text-[color:var(--brand-gold-muted)]">ORDERED {Number(dish.orderCount)}× THIS MONTH</span>
           </div>
         )}
       </div>
@@ -193,7 +192,7 @@ function MenuPageContent() {
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [lastAddedCategory, setLastAddedCategory] = useState<string | null>(null);
-  const [mostLovedRatings, setMostLovedRatings] = useState<MostLovedRatingRow[]>([]);
+  const [mostOrderedDishes, setMostOrderedDishes] = useState<MostOrderedRow[]>([]);
   const [lastConfirmedOrderItems, setLastConfirmedOrderItems] = useState<CartItem[]>([]);
   const [isOrderRatingOpen, setIsOrderRatingOpen] = useState(false);
   const [isSavingDishRatings, setIsSavingDishRatings] = useState(false);
@@ -229,10 +228,10 @@ function MenuPageContent() {
     try {
       lastLoadRef.current = Date.now();
       setIsLoading(true);
-      const [data, categoryData, liveMostLovedRatings] = await Promise.all([
+      const [data, categoryData, liveMostOrdered] = await Promise.all([
         getAllDishes(),
         getCategories().catch(() => []),
-        getMostLovedDishRatings(10).catch(() => []),
+        getMostOrderedDishes(10).catch(() => []),
       ]);
       const mappedDishes = (data || []).map((dish: any) => ({
         ...dish,
@@ -257,7 +256,7 @@ function MenuPageContent() {
         isTodaysSpecial: dish.is_todays_special ?? false,
       }));
       setDishes(mappedDishes);
-      setMostLovedRatings(Array.isArray(liveMostLovedRatings) ? liveMostLovedRatings : []);
+      setMostOrderedDishes(Array.isArray(liveMostOrdered) ? liveMostOrdered : []);
       const categoryNames = Array.isArray(categoryData) 
         ? Array.from(new Set(categoryData.map((c: any) => String(c?.name || "").trim()).filter(Boolean)))
         : [];
@@ -324,16 +323,16 @@ function MenuPageContent() {
   }, [localizedDishes, searchQuery, activeCategory]);
 
   const guestFavorites = useMemo(() => {
-    if (mostLovedRatings.length === 0) return [];
+    if (mostOrderedDishes.length === 0) return [];
     const byId = new Map(localizedDishes.map(d => [String(d.id), d]));
-    return mostLovedRatings
+    return mostOrderedDishes
       .map(r => {
         const d = byId.get(String(r.dishId));
         if (!d) return null;
-        return { ...d, averageRating: r.averageRating, ratingsCount: r.ratingsCount };
+        return { ...d, orderCount: r.orderCount };
       })
       .filter((d): d is any => Boolean(d));
-  }, [localizedDishes, mostLovedRatings]);
+  }, [localizedDishes, mostOrderedDishes]);
 
   const chefSpecials = useMemo(() => localizedDishes.filter(d => d.isChefSpecial), [localizedDishes]);
   const todaysSpecials = useMemo(() => localizedDishes.filter(d => d.isTodaysSpecial), [localizedDishes]);
@@ -414,11 +413,10 @@ function MenuPageContent() {
     return grouped;
   }, [filteredDishes, menuTabs]);
 
-  const handleOrderConfirmed = (orderedItems: CartItem[]) => {
-    const sanitized = orderedItems.filter(item => item?.id && item?.name);
-    if (sanitized.length === 0) return;
-    setLastConfirmedOrderItems(sanitized);
-    setIsOrderRatingOpen(true);
+  const handleOrderConfirmed = (_orderedItems: CartItem[]) => {
+    // Pre-meal star ratings removed — nobody can rate taste before the food
+    // arrives. Component/table/action kept in place for a future post-meal
+    // rating feature; this just stops the trigger.
   };
 
   const closeOrderRatingModal = () => { setIsOrderRatingOpen(false); setLastConfirmedOrderItems([]); };
@@ -429,8 +427,6 @@ function MenuPageContent() {
     try {
       const sessionId = getOrCreateSessionId();
       await submitDishRatingsFromOrder(ratedItems, sessionId);
-      const updated = await getMostLovedDishRatings(10).catch(() => []);
-      setMostLovedRatings(Array.isArray(updated) ? updated : []);
       toast("Thanks for rating your dishes!", { icon: "⭐" });
       closeOrderRatingModal();
     } catch (error) { console.error("Failed to save dish ratings", error); toast("Couldn't save ratings. Please try again."); }
@@ -624,7 +620,7 @@ function MenuPageContent() {
                   </div>
                 </div>
                 <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {guestFavorites.map(dish => <ScrollCard key={dish.id} dish={dish} showRating onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
+                  {guestFavorites.map(dish => <ScrollCard key={dish.id} dish={dish} showOrderCount onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
                 </div>
               </section>
             )}

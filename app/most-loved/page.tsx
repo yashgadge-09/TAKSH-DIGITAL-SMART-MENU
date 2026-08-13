@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChefHat, Plus, Star, RefreshCw, ShoppingCart } from "lucide-react";
-import { getAllDishes, getMostLovedDishRatings, trackMenuView } from "@/lib/database";
+import { ArrowLeft, ChefHat, Plus, Flame, RefreshCw, ShoppingCart } from "lucide-react";
+import { getAllDishes, getMostOrderedDishes, trackMenuView } from "@/lib/database";
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -22,22 +22,21 @@ export default function MostLovedPage() {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const [allDishes, lovedRatings] = await Promise.all([
+        const [allDishes, mostOrdered] = await Promise.all([
           getAllDishes(Date.now()),
-          getMostLovedDishRatings(20)
+          getMostOrderedDishes(20)
         ]);
 
         const dishesById = new Map(allDishes.map((d: any) => [String(d.id), d]));
-        
-        const mappedDishes = (lovedRatings || [])
-          .map((rating: any) => {
-            const dish = dishesById.get(String(rating.dishId));
+
+        const mappedDishes = (mostOrdered || [])
+          .map((row: any) => {
+            const dish = dishesById.get(String(row.dishId));
             if (!dish) return null;
-            
+
             return {
               ...dish,
-              averageRating: rating.averageRating,
-              ratingsCount: rating.ratingsCount,
+              orderCount: row.orderCount,
               name: dish[`name_${lang}`] || dish.name?.[lang] || dish.name_en || "",
               nameRaw: {
                 en: dish.name_en || dish.name?.en || "",
@@ -137,7 +136,7 @@ export default function MostLovedPage() {
               <span className="text-3xl">❤️</span>
             </div>
             <p className="font-serif text-[18px] text-[color:var(--brand-gold)]">No dishes loved yet</p>
-            <p className="mt-1 text-[13px] text-[color:var(--brand-gold-muted)]">Be the first to rate your favourite dishes!</p>
+            <p className="mt-1 text-[13px] text-[color:var(--brand-gold-muted)]">Once orders start coming in, the most popular dishes will show up here!</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -199,18 +198,15 @@ function DishCard({ dish, index, onAdd, onClick }: any) {
           {dish.name}
         </h3>
         
-        {/* Rating Display */}
-        {Number.isFinite(Number(dish.averageRating)) && (
+        {/* Order count display */}
+        {Number(dish.orderCount) > 0 && (
           <div className="mt-1 flex items-center gap-1.5">
             <div className="flex items-center gap-0.5">
-              <Star className="h-3 w-3 fill-[color:var(--brand-gold)] text-[color:var(--brand-gold)]" />
+              <Flame className="h-3 w-3 fill-[color:var(--brand-gold)] text-[color:var(--brand-gold)]" />
               <span className="text-[11px] font-bold text-[color:var(--brand-gold)]">
-                {Number(dish.averageRating).toFixed(1)}
+                Ordered {Number(dish.orderCount)}× this month
               </span>
             </div>
-            <span className="text-[10px] text-[color:var(--brand-gold-muted)]">
-              ({dish.ratingsCount} ratings)
-            </span>
           </div>
         )}
 
