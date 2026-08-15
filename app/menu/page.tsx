@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useMemo, useCallback, memo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import Link from "next/link";
 import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Flame, Plus, ChefHat, Lock } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
@@ -681,6 +682,13 @@ function MenuPageContent() {
         {/* ── Rate Us Card ── */}
         <div ref={reviewSectionRef} className="px-4 pb-6" id="review-section">
           <RateUsCard />
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="px-4 pb-6 text-center">
+          <Link href="/privacy-policy" className="text-[12px] font-medium text-[color:var(--brand-gold-muted)] underline underline-offset-2 transition hover:text-[color:var(--brand-gold)]">
+            Privacy Policy
+          </Link>
         </div>
       </div>
 
