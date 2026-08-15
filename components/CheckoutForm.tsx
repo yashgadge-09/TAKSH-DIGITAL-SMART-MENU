@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { type CartItem } from "@/context/CartContext";
 import { findOrCreateCustomer, placeOrder } from "@/lib/database";
@@ -42,6 +43,18 @@ export function OrderItemsList({ items }: { items: CartItem[] }) {
         <span className="font-serif text-[16px] font-semibold text-[color:var(--brand-gold)]">₹{total}</span>
       </div>
     </div>
+  );
+}
+
+function PrivacyNotice() {
+  return (
+    <p className="text-center text-[11px] leading-snug text-[color:var(--brand-gold-soft)]/40">
+      By ordering, you agree to our{" "}
+      <Link href="/privacy-policy" className="underline underline-offset-2 hover:text-[color:var(--brand-gold-soft)]/60">
+        Privacy Policy
+      </Link>
+      .
+    </p>
   );
 }
 
@@ -121,6 +134,8 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
           <p className="text-center text-[13px] font-medium text-red-400">{error}</p>
         )}
 
+        <PrivacyNotice />
+
         <button
           onClick={handleConfirmPrefilled}
           disabled={isSubmitting}
@@ -199,6 +214,8 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
       {error && (
         <p className="text-center text-[13px] font-medium text-red-400">{error}</p>
       )}
+
+      <PrivacyNotice />
 
       <button
         onClick={handleSubmit}
