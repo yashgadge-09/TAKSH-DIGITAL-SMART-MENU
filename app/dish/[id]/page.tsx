@@ -3,12 +3,15 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ChefHat, Sparkles, Minus, Plus, ShoppingCart } from "lucide-react";
-import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView } from "@/lib/database";
+import { getDishById, getDishRecommendations, getMoreLikeThisDishes, trackDishView, addSharedCartItem } from "@/lib/database";
 import { getOrCreateSessionId } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useMenuHome, useResolvedTableEntry, TableSessionProvider } from "@/context/TableSessionContext";
+import { useSharedSession, SharedSessionProvider } from "@/context/SharedSessionContext";
+import { trackCartEventClient } from "@/lib/client-analytics";
 import Link from "next/link";
-import { thumbUrl } from "@/lib/media";
+import { thumbUrl, playChime } from "@/lib/media";
 import { toast } from "sonner";
 
 function LanguageToggle() {
@@ -44,6 +47,26 @@ function LanguageToggle() {
 }
 
 export default function DishDetailPage() {
+  const tableEntry = useResolvedTableEntry();
+
+  if (tableEntry) {
+    return (
+      <TableSessionProvider value={tableEntry}>
+        <SharedSessionProvider
+          restaurantId={tableEntry.restaurantId}
+          tableId={tableEntry.tableId}
+          tableNumber={tableEntry.tableNumber}
+        >
+          <DishDetailContent />
+        </SharedSessionProvider>
+      </TableSessionProvider>
+    );
+  }
+
+  return <DishDetailContent />;
+}
+
+function DishDetailContent() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
@@ -51,15 +74,20 @@ export default function DishDetailPage() {
   const { language: lang, t } = useLanguage();
   const searchParams = useSearchParams();
   const fromCategory = searchParams.get('from');
+  const menuHome = useMenuHome();
+  const sharedSession = useSharedSession();
+  const cartBadgeCount = sharedSession
+    ? sharedSession.sharedItems.reduce((sum, item) => sum + item.quantity, 0)
+    : totalItems;
 
   const handleBack = () => {
     window.scrollTo({ top: 0, behavior: 'instant' });
     if (fromCategory) {
-      router.push(`/menu?category=${encodeURIComponent(fromCategory)}`);
+      router.push(`${menuHome}?category=${encodeURIComponent(fromCategory)}`);
     } else if (rawDish?.category) {
-      router.push(`/menu?category=${encodeURIComponent(rawDish.category)}`);
+      router.push(`${menuHome}?category=${encodeURIComponent(rawDish.category)}`);
     } else {
-      router.push('/menu');
+      router.push(menuHome);
     }
   };
 
@@ -252,14 +280,30 @@ export default function DishDetailPage() {
       ? dish.images[0]
       : (dish.image || "");
 
-    for (let i = 0; i < qty; i++) {
-      addItem({
-        id: dish.id,
-        name: dish.name,
-        price: dish.price,
-        image: itemImage,
-        category: dish.category || "Main",
-      });
+    const dishForCart = {
+      id: dish.id,
+      name: dish.name,
+      price: dish.price,
+      image: itemImage,
+      category: dish.category || "Main",
+    };
+
+    if (sharedSession) {
+      playChime();
+      for (let i = 0; i < qty; i++) sharedSession.addOptimisticItem(dishForCart);
+      (async () => {
+        for (let i = 0; i < qty; i++) {
+          await addSharedCartItem({
+            sessionId: sharedSession.sessionId,
+            deviceId: sharedSession.deviceId,
+            displayName: sharedSession.displayName,
+            dish: dishForCart,
+          }).catch(() => {});
+        }
+      })();
+      trackCartEventClient(dish.id, dish.name, dish.category || "General", Number(dish.price) || 0);
+    } else {
+      for (let i = 0; i < qty; i++) addItem(dishForCart);
     }
 
     setShouldScrollToRecommendations(true);
@@ -284,7 +328,11 @@ export default function DishDetailPage() {
   const uniqueMoreLikeThisDishes = moreLikeThisDishes.filter(
     (item) => !recommendationIds.has(item.id)
   );
-  const isCurrentDishInCart = Boolean(dish?.id) && items.some((item) => item.id === dish.id);
+  const isCurrentDishInCart = Boolean(dish?.id) && (
+    sharedSession
+      ? sharedSession.sharedItems.some((item) => item.dishId === dish.id)
+      : items.some((item) => item.id === dish.id)
+  );
 
   const heroFadeDistance = typeof window !== "undefined" ? Math.max(window.innerHeight * 0.6, 360) : 600;
   const fadeProgress = Math.min(1, scrollY / heroFadeDistance);
@@ -432,13 +480,13 @@ export default function DishDetailPage() {
             <button
               type="button"
               aria-label="Open Cart"
-              onClick={() => router.push("/menu?cart=open")}
+              onClick={() => router.push(`${menuHome}?cart=open`)}
               className="pointer-events-auto relative grid h-10 w-10 place-items-center rounded-full bg-[color:var(--brand-gold-soft)]/95 shadow-md backdrop-blur transition hover:bg-[color:var(--brand-gold-soft)]"
             >
               <ShoppingCart className="h-[18px] w-[18px] text-[color:var(--brand-bg-deep)]" strokeWidth={2.2} />
-              {totalItems > 0 && (
+              {cartBadgeCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#8B0000] px-1 text-[11px] font-extrabold text-[color:var(--brand-gold)] shadow-[0_0_10px_rgba(139,0,0,0.8)] ring-1 ring-[color:var(--brand-gold)]">
-                  {totalItems}
+                  {cartBadgeCount}
                 </span>
               )}
             </button>

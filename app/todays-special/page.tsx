@@ -7,6 +7,7 @@ import { getAllDishes, trackMenuView } from "@/lib/database";
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useMenuHome } from "@/context/TableSessionContext";
 import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
 import { toast } from "sonner";
@@ -15,6 +16,7 @@ export default function TodaysSpecialPage() {
   const router = useRouter();
   const { addItem, totalItems } = useCart();
   const { language: lang, t } = useLanguage();
+  const menuHome = useMenuHome();
   const [dishes, setDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -95,8 +97,8 @@ export default function TodaysSpecialPage() {
               </p>
             </div>
             {/* Cart shortcut */}
-            <Link 
-              href="/menu?cart=open"
+            <Link
+              href={`${menuHome}?cart=open`}
               className="relative grid h-9 w-9 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] ml-auto"
             >
               <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />

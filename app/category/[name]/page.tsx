@@ -7,6 +7,7 @@ import { getAllDishes, trackMenuView } from "@/lib/database";
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useMenuHome } from "@/context/TableSessionContext";
 import { isSameCategory } from "@/lib/utils";
 import { thumbUrl } from "@/lib/media";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ export default function CategoryPage({ params }: { params: Promise<{ name: strin
   
   const { addItem, totalItems } = useCart();
   const { language: lang, t } = useLanguage();
+  const menuHome = useMenuHome();
   const [dishes, setDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -98,8 +100,8 @@ export default function CategoryPage({ params }: { params: Promise<{ name: strin
               </p>
             </div>
             {/* Cart shortcut */}
-            <button 
-              onClick={() => router.push("/menu")}
+            <button
+              onClick={() => router.push(menuHome)}
               className="relative grid h-9 w-9 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] ml-auto"
             >
               <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
