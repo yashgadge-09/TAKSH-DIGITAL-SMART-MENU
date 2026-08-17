@@ -8,6 +8,7 @@ import { headers } from 'next/headers'
 import { getOptionalUser, requireAdmin, requireStaff } from './auth-guard'
 import { requireServerEnv } from './env'
 import { REMOVAL_REASONS, type ActivityAction, type RemovalReason } from './activity'
+import { isValidIndianPhone, PHONE_VALIDATION_MESSAGE } from './phone'
 
 const adminSupabase = createClient(
   requireServerEnv('NEXT_PUBLIC_SUPABASE_URL'),
@@ -3410,8 +3411,8 @@ export async function startCaptainOrder({
   // Client validates too, but phone is the customers dedup key — never let a
   // bypassed client write garbage into it.
   const phone = customerPhone?.trim() || undefined
-  if (phone && !/^\d{10}$/.test(phone)) {
-    throw new Error('Phone must be a 10-digit number')
+  if (phone && !isValidIndianPhone(phone)) {
+    throw new Error(PHONE_VALIDATION_MESSAGE)
   }
 
   const { data: tableRow, error: tableError } = await adminSupabase
@@ -3999,6 +4000,12 @@ export async function findOrCreateCustomer({
   if (!restaurantId || !name?.trim()) throw new Error('restaurantId and name are required')
 
   const normalizedPhone = phone?.trim() || null
+  // The dedup key for `customers` — validate here regardless of what the
+  // caller already checked, since this is the one function every phone-
+  // collecting flow (checkout, host onboarding, captain walk-in) ends at.
+  if (normalizedPhone && !isValidIndianPhone(normalizedPhone)) {
+    throw new Error(PHONE_VALIDATION_MESSAGE)
+  }
 
   if (normalizedPhone) {
     const { data: existing } = await adminSupabase

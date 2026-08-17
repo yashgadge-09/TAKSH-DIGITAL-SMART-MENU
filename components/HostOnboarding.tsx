@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Lock, Loader2 } from "lucide-react";
+import { cleanPhoneInput, isValidIndianPhone } from "@/lib/phone";
 
 interface HostOnboardingProps {
   tableNumber: number;
@@ -17,8 +18,10 @@ export function HostOnboarding({ tableNumber, pin, isSubmitting, error, initialN
   const [phone, setPhone] = useState("");
   const [wantsWhatsapp, setWantsWhatsapp] = useState(false);
 
+  const phoneInvalid = phone.length > 0 && !isValidIndianPhone(phone);
+
   const handleSubmit = () => {
-    if (!name.trim() || isSubmitting) return;
+    if (!name.trim() || phoneInvalid || isSubmitting) return;
     onSubmit({ name: name.trim(), phone: phone.trim(), wantsWhatsapp });
   };
 
@@ -76,11 +79,17 @@ export function HostOnboarding({ tableNumber, pin, isSubmitting, error, initialN
                 type="tel"
                 inputMode="numeric"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => setPhone(cleanPhoneInput(e.target.value))}
                 placeholder="10-digit mobile number"
+                maxLength={10}
                 disabled={isSubmitting}
-                className="w-full rounded-xl border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg)] px-4 py-3 text-[14px] text-[color:var(--brand-gold-soft)] placeholder:text-[color:var(--brand-gold-soft)]/30 focus:border-[color:var(--brand-gold)] focus:outline-none focus:ring-1 focus:ring-[color:var(--brand-gold)]/40 disabled:opacity-50"
+                className={`w-full rounded-xl border bg-[color:var(--brand-bg)] px-4 py-3 text-[14px] text-[color:var(--brand-gold-soft)] placeholder:text-[color:var(--brand-gold-soft)]/30 focus:outline-none focus:ring-1 focus:ring-[color:var(--brand-gold)]/40 disabled:opacity-50 ${
+                  phoneInvalid ? "border-red-400/60" : "border-[color:var(--brand-gold)]/30 focus:border-[color:var(--brand-gold)]"
+                }`}
               />
+              {phoneInvalid && (
+                <p className="text-[11px] text-red-400">Enter a valid 10-digit number, or leave it empty.</p>
+              )}
             </div>
 
             {phone.trim().length > 0 && (
@@ -106,7 +115,7 @@ export function HostOnboarding({ tableNumber, pin, isSubmitting, error, initialN
 
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || !name.trim()}
+            disabled={isSubmitting || !name.trim() || phoneInvalid}
             className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-bold text-[color:var(--brand-bg-deep)] shadow-[0_8px_20px_-8px_rgba(212,166,86,0.6)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: "linear-gradient(180deg, #f5d98c 0%, var(--brand-gold) 100%)" }}
           >

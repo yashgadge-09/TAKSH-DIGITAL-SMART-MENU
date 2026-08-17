@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { type CartItem } from "@/context/CartContext";
 import { findOrCreateCustomer, placeOrder } from "@/lib/database";
+import { cleanPhoneInput, isValidIndianPhone, PHONE_VALIDATION_MESSAGE } from "@/lib/phone";
 
 interface CheckoutFormProps {
   sessionId: string;
@@ -97,7 +98,7 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
     if (!trimmedName) { setError("Please enter your name."); return; }
     const trimmedPhone = phone.trim();
     if (!trimmedPhone) { setError("Please enter your phone number."); return; }
-    if (!/^\d{10}$/.test(trimmedPhone)) { setError("Please enter a valid 10-digit phone number."); return; }
+    if (!isValidIndianPhone(trimmedPhone)) { setError(PHONE_VALIDATION_MESSAGE); return; }
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError("");
@@ -184,8 +185,9 @@ export function CheckoutForm({ sessionId, restaurantId, items, onPlaced, prefill
             type="tel"
             inputMode="numeric"
             value={phone}
-            onChange={e => setPhone(e.target.value)}
+            onChange={e => { setPhone(cleanPhoneInput(e.target.value)); setError(""); }}
             placeholder="10-digit mobile number"
+            maxLength={10}
             disabled={isSubmitting}
             className="w-full rounded-xl border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg)] px-4 py-3 text-[14px] text-[color:var(--brand-gold-soft)] placeholder:text-[color:var(--brand-gold-soft)]/30 focus:border-[color:var(--brand-gold)] focus:outline-none focus:ring-1 focus:ring-[color:var(--brand-gold)]/40 disabled:opacity-50"
           />

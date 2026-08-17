@@ -5,6 +5,7 @@ import { startCaptainOrder } from "@/lib/database"
 import { toast } from "sonner"
 import { X, UtensilsCrossed, ArrowRight } from "lucide-react"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
+import { isValidIndianPhone } from "@/lib/phone"
 
 /**
  * Walk-in order without a QR scan (W01): the captain picks the free table the
@@ -34,7 +35,7 @@ export function NewTableOrderModal({
   const nameInputRef = useRef<HTMLInputElement | null>(null)
 
   const cleanPhone = phone.replace(/[^\d]/g, "")
-  const phoneInvalid = cleanPhone.length > 0 && cleanPhone.length !== 10
+  const phoneInvalid = cleanPhone.length > 0 && !isValidIndianPhone(cleanPhone)
   const canCreate = !!tableId && name.trim().length > 0 && !phoneInvalid
 
   async function handleCreate() {
@@ -148,7 +149,7 @@ export function NewTableOrderModal({
         }`}
       />
       {phoneInvalid && (
-        <p className="mt-1 text-xs text-red-500">Enter a 10-digit number, or leave it empty.</p>
+        <p className="mt-1 text-xs text-red-500">Enter a valid 10-digit mobile number, or leave it empty.</p>
       )}
 
       {cleanPhone.length === 10 && (
