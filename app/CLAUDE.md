@@ -10,14 +10,15 @@ All routes use Next.js 16 App Router. The root `page.tsx` immediately redirects 
 
 | Route | File | Notes |
 |---|---|---|
-| `/menu` | `app/menu/page.tsx` | Main catalog — `"use client"`, fetches all dishes |
-| `/[slug]/table/[number]` | `app/[slug]/table/[number]/page.tsx` | T06 — QR table entry; resolves restaurant+table, wraps `<MenuPage />` in `<TableSessionProvider>` |
-| `/category/[name]` | `app/category/[name]/page.tsx` | Dynamic category view |
-| `/dish/[id]` | `app/dish/[id]/page.tsx` | Dish detail with recommendations |
-| `/chefs-favourites` | `app/chefs-favourites/page.tsx` | `is_chef_special = true` dishes |
-| `/most-loved` | `app/most-loved/page.tsx` | Ranked by favourites count |
-| `/todays-special` | `app/todays-special/page.tsx` | `is_todays_special = true` dishes |
+| `/menu` | `app/menu/page.tsx` + `app/menu/menu-client.tsx` | Main catalog. `page.tsx` is an **async Server Component** — awaits `getMenuInitialData()` (`lib/database.ts`, `unstable_cache`-backed, narrowed columns) and reads the `searchParams` prop, passing both down as props to `MenuPage`/`MenuPageContent` in `menu-client.tsx` (`"use client"`). Dishes render in the initial server HTML — no client-side fetch on first paint. `MenuPageContent` deliberately does **not** call `useSearchParams()` (that hook forces Next to defer the whole subtree to client rendering during SSR); initial `category`/`search`/`cart` state comes from the server props instead, with `usePathname()` + `router.replace` used to keep the URL in sync afterwards. Heavy modals (`CartDrawer`, `OrderFlow`, `ReviewModal`, `NotificationPrompt`) are `next/dynamic({ ssr: false })` and lazy-mounted on first interaction |
+| `/[slug]/table/[number]` | `app/[slug]/table/[number]/page.tsx` | T06 — QR table entry; async Server Component. Resolves restaurant+table via cached `getTableEntryCached` and fetches `getMenuInitialData()` in parallel, then wraps `<MenuPage initialDishes initialCategories initialCategory initialSearch initialCartOpen />` in `<TableSessionProvider>` — same SSR treatment as `/menu` |
+| `/dish/[id]` | `app/dish/[id]/page.tsx` | Dish detail with recommendations. `"use client"` — no `generateMetadata()`. Fetches `getDishById` first and paints immediately, then `Promise.allSettled`s the two recommendation queries in parallel (previously three sequential awaits) |
+| `/chefs-favourites` | `app/chefs-favourites/page.tsx` | `is_chef_special = true` dishes. Uses the cached `getAllDishes()` (no cache-bust timestamp); language switch is a client-side re-map, not a refetch |
+| `/most-loved` | `app/most-loved/page.tsx` | Ranked by order count (`getMostOrderedDishesCached`). Same cached-fetch + client-side localization pattern as the other curated pages |
+| `/todays-special` | `app/todays-special/page.tsx` | `is_todays_special = true` dishes. Same cached-fetch pattern |
 | `/preview` | `app/preview/page.tsx` | Admin preview of customer view |
+
+`/category/[name]` was removed (2026) — it was dead code (nothing linked to it; the menu's category chips filter client-side over already-loaded dishes).
 
 ### Admin Routes (`/admin/`)
 
@@ -71,7 +72,11 @@ All API routes are Next.js Route Handlers (`route.ts`).
 
 ### Metadata & SEO
 
-Dish detail pages export `generateMetadata()` using dish name/description for per-page Open Graph tags. Images are served via Next.js `<Image>` with remote patterns: `images.unsplash.com`, `res.cloudinary.com`, and `NEXT_PUBLIC_IMAGE_CDN_HOST`.
+`/dish/[id]` is a client component and does **not** export `generateMetadata()`. Guest-facing images (menu grid, dish page) are plain `<img>` tags run through `thumbUrl()` (`lib/media.ts`) for Cloudinary-style resizing — not `next/image`. Admin pages (`admin/menu`, `admin/categories`) do use Next's `<Image>`, with remote patterns: `images.unsplash.com`, `res.cloudinary.com`, and `NEXT_PUBLIC_IMAGE_CDN_HOST`.
+
+### Loading states
+
+Every route group has a `loading.tsx` (`app/loading.tsx`, `app/menu/loading.tsx`, `app/[slug]/table/[number]/loading.tsx`, `app/dish/[id]/loading.tsx`, `app/admin/loading.tsx`, `app/captain/loading.tsx`) plus a root `app/error.tsx`. Shared loader primitives live in `components/BrandLoader.tsx`: `BrandSpinner`, `FullScreenLoader`, and `PendingOverlay` (an absolute translucent layer that dims stale content in place while a filter/range change is in flight — used on `/admin/analytics` and available for any other "don't show old data as current" case). `components/MenuSkeleton.tsx` backs the two menu `loading.tsx` files.
 
 ### Globals
 

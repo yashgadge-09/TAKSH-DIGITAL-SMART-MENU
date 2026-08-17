@@ -95,6 +95,7 @@ function DishDetailContent() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [moreLikeThisDishes, setMoreLikeThisDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRecsLoading, setIsRecsLoading] = useState(false);
 
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recommendationSectionRef = useRef<HTMLDivElement | null>(null);
@@ -203,10 +204,13 @@ function DishDetailContent() {
     let mounted = true;
     (async () => {
       try {
+        // Paint the dish itself as soon as it's back — don't hold the whole
+        // page hostage to two recommendation queries that only need its category.
         const fetchedDish = await getDishById(id);
         if (!mounted || !fetchedDish) return;
 
         setRawDish(fetchedDish);
+        setIsLoading(false);
 
         const trackingKey = `taksh:last-dish-view-${fetchedDish.id}`;
         const now = Date.now();
@@ -220,26 +224,22 @@ function DishDetailContent() {
           ).catch(() => { });
         }
 
-        const dishRecommendations = await getDishRecommendations(
-          fetchedDish.id,
-          fetchedDish.category || "",
-          4,
-          10
-        );
-
-        const sameCategoryDishes = await getMoreLikeThisDishes(
-          fetchedDish.id,
-          fetchedDish.category || "",
-          10
-        );
+        setIsRecsLoading(true);
+        const [recsResult, moreLikeResult] = await Promise.allSettled([
+          getDishRecommendations(fetchedDish.id, fetchedDish.category || "", 4, 10),
+          getMoreLikeThisDishes(fetchedDish.id, fetchedDish.category || "", 10),
+        ]);
 
         if (mounted) {
+          const dishRecommendations = recsResult.status === "fulfilled" ? recsResult.value : [];
+          const sameCategoryDishes = moreLikeResult.status === "fulfilled" ? moreLikeResult.value : [];
           setRecommendations(
             (dishRecommendations || [])
               .filter((recommendedDish: any) => recommendedDish.id !== fetchedDish.id)
               .slice(0, 10)
           );
           setMoreLikeThisDishes((sameCategoryDishes || []).slice(0, 10));
+          setIsRecsLoading(false);
         }
       } catch (err) {
         console.error(err);

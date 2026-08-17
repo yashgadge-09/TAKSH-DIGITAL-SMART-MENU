@@ -31,6 +31,7 @@ import {
   Hourglass,
 } from "lucide-react"
 import Image from "next/image"
+import { FullScreenLoader } from "@/components/BrandLoader"
 
 const EMPTY_RATING_DISTRIBUTION = [
   { stars: 5, count: 0, percentage: 0 },
@@ -396,6 +397,14 @@ export default function AnalyticsPage() {
   const maxWeekViews = Math.max(...topDishesWeekData.map((dish: any) => Number(dish.views) || 0), 1)
   const maxMentions = Math.max(...topRatedDishesData.map((dish: any) => Number(dish.mentions) || 0), 1)
 
+  if (revenueLoading && !revenue) {
+    return (
+      <AdminLayout>
+        <FullScreenLoader variant="admin" label="Loading analytics…" />
+      </AdminLayout>
+    )
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -430,8 +439,9 @@ export default function AnalyticsPage() {
                 type="date"
                 value={selectedDate}
                 max={todayIST()}
+                disabled={revenueLoading}
                 onChange={e => setSelectedDate(e.target.value)}
-                className="rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm text-[#2C1810] focus:outline-none focus:ring-2 focus:ring-[#A46833]"
+                className="rounded-xl border border-[#D4B391] bg-white px-3 py-2 text-sm text-[#2C1810] focus:outline-none focus:ring-2 focus:ring-[#A46833] disabled:opacity-60"
               />
             </div>
 
@@ -440,8 +450,9 @@ export default function AnalyticsPage() {
                 <button
                   key={days}
                   type="button"
+                  disabled={revenueLoading}
                   onClick={() => setRangeDays(days)}
-                  className={`px-3 py-2 text-sm font-semibold transition-colors ${
+                  className={`px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
                     rangeDays === days
                       ? "bg-[#A46833] text-[#FFF8EE]"
                       : "bg-white text-[#7A5A3A] hover:bg-[#F7E6D2]"

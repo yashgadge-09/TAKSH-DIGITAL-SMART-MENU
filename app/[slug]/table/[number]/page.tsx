@@ -1,13 +1,14 @@
-import { getTableEntry } from "@/lib/database";
+import { getTableEntryCached, getMenuInitialData } from "@/lib/database";
 import { TableSessionProvider } from "@/context/TableSessionContext";
 import { SharedSessionProvider } from "@/context/SharedSessionContext";
-import MenuPage from "@/app/menu/page";
+import { MenuPage } from "@/app/menu/menu-client";
 
 interface Props {
   params: Promise<{ slug: string; number: string }>;
+  searchParams: Promise<{ category?: string; search?: string; cart?: string }>;
 }
 
-export default async function TableEntryPage({ params }: Props) {
+export default async function TableEntryPage({ params, searchParams }: Props) {
   const { slug, number } = await params;
 
   const tableNumber = Number.parseInt(number, 10);
@@ -15,7 +16,11 @@ export default async function TableEntryPage({ params }: Props) {
     return <TableNotFound />;
   }
 
-  const entry = await getTableEntry(slug, tableNumber);
+  const [entry, menuData, urlParams] = await Promise.all([
+    getTableEntryCached(slug, tableNumber),
+    getMenuInitialData(),
+    searchParams,
+  ]);
   if (!entry) {
     return <TableNotFound />;
   }
@@ -34,7 +39,13 @@ export default async function TableEntryPage({ params }: Props) {
         tableId={entry.tableId}
         tableNumber={entry.tableNumber}
       >
-        <MenuPage />
+        <MenuPage
+          initialDishes={menuData.dishes}
+          initialCategories={menuData.categories}
+          initialCategory={urlParams.category}
+          initialSearch={urlParams.search}
+          initialCartOpen={urlParams.cart === "open"}
+        />
       </SharedSessionProvider>
     </TableSessionProvider>
   );
