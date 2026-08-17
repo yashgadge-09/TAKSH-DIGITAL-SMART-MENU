@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import { joinTable, registerHost, type SharedCartItem } from "@/lib/database";
 import { getOrCreateSessionId, getOrCreateDisplayName, setDisplayName } from "@/lib/session";
 import { useSharedCartRealtime } from "@/hooks/useSharedCartRealtime";
+import { supabase } from "@/lib/supabase";
 import { JoinPinPrompt } from "@/components/JoinPinPrompt";
 import { HostOnboarding } from "@/components/HostOnboarding";
 
@@ -125,6 +126,32 @@ export function SharedSessionProvider({
       setHostOnboardingSubmitting(false);
     }
   };
+
+  // The host's real name may not be saved yet (HostOnboarding still open) at the
+  // moment a guest device joins — joinTable() only returns a point-in-time
+  // snapshot of host_name. Without this, a guest who joined during that window
+  // is stuck showing "Guest" forever, even after the host finishes onboarding.
+  // table_sessions is already in the supabase_realtime publication (used by
+  // /admin/tables), so subscribe here too to pick up the correction live.
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const channel = supabase
+      .channel(`table-session-${sessionId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "table_sessions", filter: `id=eq.${sessionId}` },
+        (payload) => {
+          const updatedName = (payload.new as { host_name?: string | null }).host_name;
+          if (updatedName) setHostName(updatedName);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionId]);
 
   const addOptimisticItem = (dish: { id: string; name: string; price: number; image: string; category: string }) => {
     addOptimistic(dish, deviceId, displayName);

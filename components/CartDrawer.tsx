@@ -89,8 +89,6 @@ export function CartDrawer({
   const handleDecrease = async (item: typeof displayItems[0]) => {
     if (isSharedMode) {
       const si = item as typeof sharedItems[0];
-      const canEdit = si.addedByDeviceId === sharedSession!.deviceId || sharedSession!.isHost;
-      if (!canEdit) return;
       try {
         await updateSharedCartItemQty({
           sessionId: sharedSession!.sessionId,
@@ -109,8 +107,6 @@ export function CartDrawer({
   const handleIncrease = async (item: typeof displayItems[0]) => {
     if (isSharedMode) {
       const si = item as typeof sharedItems[0];
-      const canEdit = si.addedByDeviceId === sharedSession!.deviceId || sharedSession!.isHost;
-      if (!canEdit) return;
       try {
         await updateSharedCartItemQty({
           sessionId: sharedSession!.sessionId,
@@ -125,11 +121,10 @@ export function CartDrawer({
     }
   };
 
-  const canEditItem = (item: typeof displayItems[0]) => {
-    if (!isSharedMode) return true;
-    const si = item as typeof sharedItems[0];
-    return si.addedByDeviceId === sharedSession!.deviceId || sharedSession!.isHost;
-  };
+  // Every joined table member — host or guest — can edit any item's quantity;
+  // it's one shared cart. The server enforces the same rule in
+  // updateSharedCartItemQty / removeSharedCartItem.
+  const canEditItem = () => true;
 
   return (
     <>
@@ -239,7 +234,7 @@ export function CartDrawer({
               <ul className="space-y-5">
                 {displayItems.map((item) => {
                   const image = item.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
-                  const canEdit = canEditItem(item);
+                  const canEdit = canEditItem();
                   const attribution = isSharedMode
                     ? ((item as typeof sharedItems[0]).addedByDeviceId === sharedSession!.deviceId
                         ? "you"

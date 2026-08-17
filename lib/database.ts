@@ -3919,7 +3919,7 @@ export async function updateSharedCartItemQty({
 
   const { data: item } = await adminSupabase
     .from('session_cart_items')
-    .select('added_by_device_id')
+    .select('id')
     .eq('id', itemId)
     .eq('session_id', sessionId)
     .maybeSingle()
@@ -3927,11 +3927,15 @@ export async function updateSharedCartItemQty({
 
   const { data: session } = await adminSupabase
     .from('table_sessions')
-    .select('host_device_id')
+    .select('host_device_id, joined_device_ids')
     .eq('id', sessionId)
     .maybeSingle()
 
-  const canEdit = item.added_by_device_id === deviceId || session?.host_device_id === deviceId
+  // Any device that has actually joined this table's shared session — host or
+  // guest — may edit any item's quantity, not just the one they personally
+  // added. It's one shared cart for the whole table.
+  const canEdit =
+    session?.host_device_id === deviceId || (session?.joined_device_ids ?? []).includes(deviceId)
   if (!canEdit) throw new Error('Permission denied')
 
   if (quantity <= 0) {
@@ -3957,7 +3961,7 @@ export async function removeSharedCartItem({
 
   const { data: item } = await adminSupabase
     .from('session_cart_items')
-    .select('added_by_device_id')
+    .select('id')
     .eq('id', itemId)
     .eq('session_id', sessionId)
     .maybeSingle()
@@ -3965,11 +3969,12 @@ export async function removeSharedCartItem({
 
   const { data: session } = await adminSupabase
     .from('table_sessions')
-    .select('host_device_id')
+    .select('host_device_id, joined_device_ids')
     .eq('id', sessionId)
     .maybeSingle()
 
-  const canEdit = item.added_by_device_id === deviceId || session?.host_device_id === deviceId
+  const canEdit =
+    session?.host_device_id === deviceId || (session?.joined_device_ids ?? []).includes(deviceId)
   if (!canEdit) throw new Error('Permission denied')
 
   await adminSupabase.from('session_cart_items').delete().eq('id', itemId)
