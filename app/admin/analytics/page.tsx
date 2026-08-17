@@ -769,9 +769,11 @@ export default function AnalyticsPage() {
             )}
           </PremiumPanel>
 
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-bold text-[#2C1810]">Google Business Intelligence</h2>
+        {false && (
+          <>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-bold text-[#2C1810]">Google Business Intelligence</h2>
             <p className="text-sm text-[#8E7F71]">
               Real-time sentiment from {googleStats?.placeName || "your Google Maps profile"}.
             </p>
@@ -903,6 +905,8 @@ export default function AnalyticsPage() {
             </div>
           </PremiumPanel>
         </div>
+          </>
+        )}
       </div>
     </AdminLayout>
   )
