@@ -33,21 +33,8 @@ export const metadata: Metadata = {
   description: 'Discover handcrafted Indian classics at Taksh — a luxurious pure vegetarian dining experience.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/Tastefy_logo.png',
+    apple: '/Tastefy_logo.png',
   },
 }
 
