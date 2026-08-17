@@ -179,16 +179,20 @@ export default function CaptainHistoryPage() {
         <div className="rounded-xl border border-[#4A3623] bg-[#241710] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A98D6B]">Orders</p>
           <p className="mt-1 text-xl font-bold text-[#F2C786]">
-            {loading && !result ? "…" : entries.length}
+            {loading ? "…" : entries.length}
           </p>
         </div>
         <div className="rounded-xl border border-[#2F6B45] bg-[#16281C] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7FC9A0]">Collected</p>
-          <p className="mt-1 text-xl font-bold text-[#A8E6C0]">{inr(result?.settledTotal ?? 0)}</p>
+          <p className="mt-1 text-xl font-bold text-[#A8E6C0]">
+            {loading ? "…" : inr(result?.settledTotal ?? 0)}
+          </p>
         </div>
         <div className="rounded-xl border border-[#7A4F2F] bg-[#2A1B10] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[#D8A76A]">Unpaid</p>
-          <p className="mt-1 text-xl font-bold text-[#F0C896]">{inr(result?.unsettledTotal ?? 0)}</p>
+          <p className="mt-1 text-xl font-bold text-[#F0C896]">
+            {loading ? "…" : inr(result?.unsettledTotal ?? 0)}
+          </p>
         </div>
       </section>
 
@@ -206,7 +210,7 @@ export default function CaptainHistoryPage() {
 
       {/* ── Order list ────────────────────────────────────────────────────── */}
       <section className="px-4 pt-5 md:px-6 lg:px-8">
-        {loading && !result ? (
+        {loading ? (
           <div className="py-16 text-center text-[#A98D6B]">Loading history…</div>
         ) : entries.length === 0 ? (
           <p className="rounded-xl border border-dashed border-[#4A3623] px-4 py-6 text-center text-xs text-[#8A7A66]">

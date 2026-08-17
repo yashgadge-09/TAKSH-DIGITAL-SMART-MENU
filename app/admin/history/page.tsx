@@ -295,7 +295,7 @@ export default function AdminHistoryPage() {
               <Receipt className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase tracking-[0.06em]">Orders billed</span>
             </div>
-            <p className="mt-2 text-3xl font-bold text-[#2C1810]">{loading && !result ? "…" : entries.length}</p>
+            <p className="mt-2 text-3xl font-bold text-[#2C1810]">{loading ? "…" : entries.length}</p>
             <p className="mt-1 text-xs text-[#8E6D4E]">{rangeLabel(range)}</p>
           </div>
 
@@ -304,9 +304,13 @@ export default function AdminHistoryPage() {
               <Wallet className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase tracking-[0.06em]">Settled</span>
             </div>
-            <p className="mt-2 text-3xl font-bold text-[#14401F]">{inr(result?.settledTotal ?? 0)}</p>
+            <p className="mt-2 text-3xl font-bold text-[#14401F]">
+              {loading ? "…" : inr(result?.settledTotal ?? 0)}
+            </p>
             <p className="mt-1 text-xs text-[#3F6B4C]">
-              {result?.settledCount ?? 0} bill{result?.settledCount === 1 ? "" : "s"} paid
+              {loading
+                ? "…"
+                : `${result?.settledCount ?? 0} bill${result?.settledCount === 1 ? "" : "s"} paid`}
             </p>
           </div>
 
@@ -315,9 +319,13 @@ export default function AdminHistoryPage() {
               <Hourglass className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase tracking-[0.06em]">Awaiting payment</span>
             </div>
-            <p className="mt-2 text-3xl font-bold text-[#2C1810]">{inr(result?.unsettledTotal ?? 0)}</p>
+            <p className="mt-2 text-3xl font-bold text-[#2C1810]">
+              {loading ? "…" : inr(result?.unsettledTotal ?? 0)}
+            </p>
             <p className="mt-1 text-xs text-[#8E6D4E]">
-              {result?.unsettledCount ?? 0} bill{result?.unsettledCount === 1 ? "" : "s"} printed, not settled
+              {loading
+                ? "…"
+                : `${result?.unsettledCount ?? 0} bill${result?.unsettledCount === 1 ? "" : "s"} printed, not settled`}
             </p>
           </div>
         </div>
@@ -335,7 +343,9 @@ export default function AdminHistoryPage() {
             <span className="text-xs text-[#8E6D4E]">Click a row for the item breakdown</span>
           </div>
 
-          {entries.length ? (
+          {loading ? (
+            <p className="px-5 py-8 text-sm text-[#8E6D4E]">Loading order history…</p>
+          ) : entries.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -603,7 +613,7 @@ export default function AdminHistoryPage() {
             </div>
           ) : (
             <p className="px-5 py-8 text-sm text-[#8E6D4E]">
-              {loading ? "Loading order history…" : "No orders were billed in this range."}
+              No orders were billed in this range.
             </p>
           )}
         </div>

@@ -1,28 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+
+const SPLASH_SEEN_KEY = "taksh_splash_seen";
 
 export function SplashScreen() {
+  const pathname = usePathname();
   const [isHiding, setIsHiding] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // Admin/captain staff don't need the brand moment on every login, and
+  // guests only see it once per browser session — repeat visits (and the
+  // now-instant SSR menu) shouldn't be hidden behind a multi-second animation.
+  const isStaffRoute = pathname?.startsWith("/admin") || pathname?.startsWith("/captain");
+
   useEffect(() => {
+    if (isStaffRoute) return;
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(SPLASH_SEEN_KEY)) return;
+
     setMounted(true);
-    // Start the smooth fade out right after the 3rd loading dot completes (approx 2s + 0.3s buffer)
     const hideTimeout = setTimeout(() => {
       setIsHiding(true);
-    }, 2300);
+      window.sessionStorage.setItem(SPLASH_SEEN_KEY, "1");
+    }, 1200);
 
-    // Completely unmount the splash screen after the 1 second fade transition completes
     const removeTimeout = setTimeout(() => {
       setMounted(false);
-    }, 3300);
+    }, 2000);
 
     return () => {
       clearTimeout(hideTimeout);
       clearTimeout(removeTimeout);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStaffRoute]);
 
   if (!mounted) return null;
 

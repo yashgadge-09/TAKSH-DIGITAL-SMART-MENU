@@ -428,6 +428,56 @@ export async function getAllDishes(timestamp?: number) {
   return getAllDishesCached();
 }
 
+// ── Menu grid list — narrowed columns, SSR-cached (perf: avoids shipping
+// ingredients_*/etc for a card grid that never renders them) ───────────────
+const MENU_LIST_COLUMNS =
+  'id, name_en, name_hi, name_mr, description_en, description_hi, description_mr, ' +
+  'taste_en, taste_hi, taste_mr, price, image_url, category, spice_level, ' +
+  'is_chef_special, is_guest_favorite, is_trending, is_todays_special, created_at'
+
+const getMenuListCached = unstable_cache(
+  async () => {
+    const { data, error } = await supabase
+      .from('dishes')
+      .select(MENU_LIST_COLUMNS)
+      .eq('is_available', true)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+  ['menu-dishes-v2'],
+  { revalidate: 300, tags: ['dishes'] }
+);
+
+export async function getMenuListDishes() {
+  return getMenuListCached();
+}
+
+const getCategoriesCachedInternal = unstable_cache(
+  async () => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('order_index', { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+  ['categories-v1'],
+  { revalidate: 300, tags: ['categories'] }
+);
+
+export async function getCategoriesCached() {
+  return getCategoriesCachedInternal();
+}
+
+export async function getMenuInitialData() {
+  const [dishes, categories] = await Promise.all([
+    getMenuListDishes(),
+    getCategoriesCached(),
+  ]);
+  return { dishes: dishes || [], categories: categories || [] };
+}
+
 const getDishByIdCached = unstable_cache(
   async (id: string) => {
     const { data, error } = await supabase
@@ -539,6 +589,7 @@ export async function addCategory(name: string) {
     .select()
     .maybeSingle()
   if (error) throw error
+  revalidateTag('categories')
   return data
 }
 
@@ -549,6 +600,7 @@ export async function deleteCategory(id: string) {
     .delete()
     .eq('id', id)
   if (error) throw error
+  revalidateTag('categories')
 }
 
 export async function updateCategory(id: string, payload: { image_url?: string | null }) {
@@ -560,6 +612,7 @@ export async function updateCategory(id: string, payload: { image_url?: string |
     .select()
     .maybeSingle()
   if (error) throw error
+  revalidateTag('categories')
   return data
 }
 
@@ -925,6 +978,18 @@ export async function getMostOrderedDishes(limit = 10, days = 30) {
     .map(([dishId, orderCount]) => ({ dishId, orderCount }))
     .sort((a, b) => b.orderCount - a.orderCount)
     .slice(0, safeLimit)
+}
+
+// Recomputing the 30-day order aggregation per guest is wasteful — it barely
+// changes minute to minute. Short TTL cache keeps the "Most Ordered" strip fresh.
+const getMostOrderedDishesCachedInternal = unstable_cache(
+  async (limit: number, days: number) => getMostOrderedDishes(limit, days),
+  ['most-ordered'],
+  { revalidate: 120 }
+);
+
+export async function getMostOrderedDishesCached(limit = 10, days = 30) {
+  return getMostOrderedDishesCachedInternal(limit, days);
 }
 
 function buildDayBuckets(days: number) {
@@ -3673,6 +3738,18 @@ export async function getTableEntry(
     slug,
     restaurantName: restaurant.name,
   }
+}
+
+// Tables are static seed data (16 rows) — safe to cache for an hour so every
+// QR scan doesn't do two sequential adminSupabase round-trips.
+const getTableEntryCachedInternal = unstable_cache(
+  async (slug: string, tableNumber: number) => getTableEntry(slug, tableNumber),
+  ['table-entry'],
+  { revalidate: 3600, tags: ['tables'] }
+);
+
+export async function getTableEntryCached(slug: string, tableNumber: number) {
+  return getTableEntryCachedInternal(slug, tableNumber);
 }
 
 // ─── Shared cart ────────────────────────────────────────────────────────────

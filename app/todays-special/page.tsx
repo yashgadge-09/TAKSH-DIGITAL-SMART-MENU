@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChefHat, Plus, Star, RefreshCw, ShoppingCart } from "lucide-react";
 import { getAllDishes, trackMenuView } from "@/lib/database";
@@ -12,46 +12,47 @@ import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
 import { toast } from "sonner";
 
+function localizeDish(dish: any, lang: string) {
+  return {
+    ...dish,
+    name: dish[`name_${lang}`] || dish.name?.[lang] || dish.name_en || "",
+    nameRaw: {
+      en: dish.name_en || dish.name?.en || "",
+      hi: dish.name_hi || dish.name?.hi || "",
+      mr: dish.name_mr || dish.name?.mr || "",
+    },
+    description: dish[`description_${lang}`] || dish.description?.[lang] || dish.description_en || "",
+    image: (() => {
+      if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
+      if (typeof dish.image_url === "string" && dish.image_url.startsWith("[")) {
+        try {
+          const p = JSON.parse(dish.image_url);
+          if (Array.isArray(p) && p.length > 0) return p[0];
+        } catch {}
+      }
+      return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+    })(),
+    tasteDescription: dish[`taste_${lang}`] || dish.taste_en || "",
+    spiceLevel: Number(dish.spice_level ?? 0),
+    hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
+    isChefSpecial: dish.is_chef_special ?? false,
+  };
+}
+
 export default function TodaysSpecialPage() {
   const router = useRouter();
   const { addItem, totalItems } = useCart();
   const { language: lang, t } = useLanguage();
   const menuHome = useMenuHome();
-  const [dishes, setDishes] = useState<any[]>([]);
+  const [rawDishes, setRawDishes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const data = await getAllDishes(Date.now());
-        const mappedDishes = (data || [])
-          .filter((dish: any) => dish.is_todays_special)
-          .map((dish: any) => ({
-            ...dish,
-            name: dish[`name_${lang}`] || dish.name?.[lang] || dish.name_en || "",
-            nameRaw: {
-              en: dish.name_en || dish.name?.en || "",
-              hi: dish.name_hi || dish.name?.hi || "",
-              mr: dish.name_mr || dish.name?.mr || "",
-            },
-            description: dish[`description_${lang}`] || dish.description?.[lang] || dish.description_en || "",
-            image: (() => {
-              if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
-              if (typeof dish.image_url === "string" && dish.image_url.startsWith("[")) {
-                try {
-                  const p = JSON.parse(dish.image_url);
-                  if (Array.isArray(p) && p.length > 0) return p[0];
-                } catch {}
-              }
-              return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
-            })(),
-            tasteDescription: dish[`taste_${lang}`] || dish.taste_en || "",
-            spiceLevel: Number(dish.spice_level ?? 0),
-            hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
-            isChefSpecial: dish.is_chef_special ?? false,
-          }));
-        setDishes(mappedDishes);
+        const data = await getAllDishes();
+        setRawDishes((data || []).filter((dish: any) => dish.is_todays_special));
       } catch (err) {
         console.error("Failed to load today's specials", err);
       } finally {
@@ -63,7 +64,9 @@ export default function TodaysSpecialPage() {
     if (shouldTrackClientEvent("menu-view", 30000)) {
       void trackMenuView().catch(() => {});
     }
-  }, [lang]);
+  }, []);
+
+  const dishes = useMemo(() => rawDishes.map(d => localizeDish(d, lang)), [rawDishes, lang]);
 
   const handleAddDishToCart = (dish: any) => {
     addItem({

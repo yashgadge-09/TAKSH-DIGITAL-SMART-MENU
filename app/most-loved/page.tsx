@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChefHat, Plus, Flame, RefreshCw, ShoppingCart } from "lucide-react";
-import { getAllDishes, getMostOrderedDishes, trackMenuView } from "@/lib/database";
+import { getAllDishes, getMostOrderedDishesCached, trackMenuView } from "@/lib/database";
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -12,12 +12,40 @@ import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
 import { toast } from "sonner";
 
+function localizeDish(dish: any, lang: string, orderCount: number) {
+  return {
+    ...dish,
+    orderCount,
+    name: dish[`name_${lang}`] || dish.name?.[lang] || dish.name_en || "",
+    nameRaw: {
+      en: dish.name_en || dish.name?.en || "",
+      hi: dish.name_hi || dish.name?.hi || "",
+      mr: dish.name_mr || dish.name?.mr || "",
+    },
+    description: dish[`description_${lang}`] || dish.description?.[lang] || dish.description_en || "",
+    image: (() => {
+      if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
+      if (typeof dish.image_url === "string" && dish.image_url.startsWith("[")) {
+        try {
+          const p = JSON.parse(dish.image_url);
+          if (Array.isArray(p) && p.length > 0) return p[0];
+        } catch {}
+      }
+      return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+    })(),
+    tasteDescription: dish[`taste_${lang}`] || dish.taste_en || "",
+    spiceLevel: Number(dish.spice_level ?? 0),
+    hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
+    isChefSpecial: dish.is_chef_special ?? false,
+  };
+}
+
 export default function MostLovedPage() {
   const router = useRouter();
   const { addItem, totalItems } = useCart();
   const { language: lang, t } = useLanguage();
   const menuHome = useMenuHome();
-  const [dishes, setDishes] = useState<any[]>([]);
+  const [rawEntries, setRawEntries] = useState<Array<{ dish: any; orderCount: number }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -25,46 +53,21 @@ export default function MostLovedPage() {
       try {
         setIsLoading(true);
         const [allDishes, mostOrdered] = await Promise.all([
-          getAllDishes(Date.now()),
-          getMostOrderedDishes(20)
+          getAllDishes(),
+          getMostOrderedDishesCached(20)
         ]);
 
         const dishesById = new Map(allDishes.map((d: any) => [String(d.id), d]));
 
-        const mappedDishes = (mostOrdered || [])
+        const entries = (mostOrdered || [])
           .map((row: any) => {
             const dish = dishesById.get(String(row.dishId));
             if (!dish) return null;
-
-            return {
-              ...dish,
-              orderCount: row.orderCount,
-              name: dish[`name_${lang}`] || dish.name?.[lang] || dish.name_en || "",
-              nameRaw: {
-                en: dish.name_en || dish.name?.en || "",
-                hi: dish.name_hi || dish.name?.hi || "",
-                mr: dish.name_mr || dish.name?.mr || "",
-              },
-              description: dish[`description_${lang}`] || dish.description?.[lang] || dish.description_en || "",
-              image: (() => {
-                if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
-                if (typeof dish.image_url === "string" && dish.image_url.startsWith("[")) {
-                  try {
-                    const p = JSON.parse(dish.image_url);
-                    if (Array.isArray(p) && p.length > 0) return p[0];
-                  } catch {}
-                }
-                return dish.image_url || dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
-              })(),
-              tasteDescription: dish[`taste_${lang}`] || dish.taste_en || "",
-              spiceLevel: Number(dish.spice_level ?? 0),
-              hasSpiceIndicator: Number(dish.spice_level ?? 0) > 0,
-              isChefSpecial: dish.is_chef_special ?? false,
-            };
+            return { dish, orderCount: row.orderCount };
           })
-          .filter(Boolean);
-          
-        setDishes(mappedDishes);
+          .filter((e): e is { dish: any; orderCount: number } => Boolean(e));
+
+        setRawEntries(entries);
       } catch (err) {
         console.error("Failed to load most loved dishes", err);
       } finally {
@@ -76,7 +79,12 @@ export default function MostLovedPage() {
     if (shouldTrackClientEvent("menu-view", 30000)) {
       void trackMenuView().catch(() => {});
     }
-  }, [lang]);
+  }, []);
+
+  const dishes = useMemo(
+    () => rawEntries.map(e => localizeDish(e.dish, lang, e.orderCount)),
+    [rawEntries, lang]
+  );
 
   const handleAddDishToCart = (dish: any) => {
     addItem({

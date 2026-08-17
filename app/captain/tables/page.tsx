@@ -23,6 +23,7 @@ import { NewParcelModal } from "@/components/captain/NewParcelModal"
 import { NewTableOrderModal } from "@/components/captain/NewTableOrderModal"
 import { AddItemModal } from "@/components/captain/AddItemModal"
 import { PendingOrderItems } from "@/components/captain/PendingOrderItems"
+import { Skeleton } from "@/components/ui/skeleton"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -508,7 +509,13 @@ export default function CaptainTablesPage() {
           </button>
         </div>
 
-        {parcels.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5 2xl:grid-cols-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-[104px] rounded-2xl" />
+            ))}
+          </div>
+        ) : parcels.length === 0 ? (
           <p className="rounded-xl border border-dashed border-[#4A3623] px-4 py-3 text-xs text-[#8A7A66]">
             No takeaway orders right now.
           </p>
@@ -567,7 +574,11 @@ export default function CaptainTablesPage() {
         </div>
 
         {loading ? (
-          <div className="py-16 text-center text-[#A98D6B]">Loading tables…</div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5 2xl:grid-cols-6" data-testid="table-grid-loading">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-square rounded-2xl" />
+            ))}
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5 2xl:grid-cols-6" data-testid="table-grid">
             {tables.map(table => {
