@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import {
   CheckCircle, XCircle, Clock, Users, Inbox,
   Receipt, ChefHat, ShoppingBag, Plus, Bell, LayoutGrid, Wallet,
+  LayoutDashboard,
   type LucideIcon,
 } from "lucide-react"
 // The captain panel owns the table/parcel model and every service action on it.
@@ -51,11 +52,13 @@ const STATUS = {
   bill_generated: { label: "Bill Requested", dot: "bg-[#C47A20]", card: "border-[#F0C896] bg-[linear-gradient(145deg,#FFFBF4_0%,#FEF0D8_100%)]", text: "text-[#8B4513]" },
 } satisfies Record<CaptainTable["status"], { label: string; dot: string; card: string; text: string }>
 
-// Below md the page becomes a 3-way pager instead of one long scroll — see
-// MobileSectionTabs. Desktop is unaffected: all three sections stay stacked.
-type MobileSection = "pending" | "parcels" | "tables"
+// Below md the page becomes a 4-way pager instead of one long scroll — see
+// MobileSectionTabs. Desktop is unaffected: the summary and all three
+// sections stay stacked and visible together, always.
+type MobileSection = "data" | "pending" | "parcels" | "tables"
 
 const MOBILE_TABS: { key: MobileSection; label: string; icon: LucideIcon }[] = [
+  { key: "data", label: "Overview", icon: LayoutDashboard },
   { key: "pending", label: "Approval", icon: Bell },
   { key: "parcels", label: "Parcel", icon: ShoppingBag },
   { key: "tables", label: "Tables", icon: LayoutGrid },
@@ -66,16 +69,16 @@ function MobileSectionTabs({
   onChange,
   counts,
 }: {
-  active: MobileSection | null
+  active: MobileSection
   onChange: (section: MobileSection) => void
-  counts: Record<MobileSection, number>
+  counts: Partial<Record<MobileSection, number>>
 }) {
   return (
     <div className="sticky top-14 z-20 -mx-4 mb-6 border-b border-[#E8D5BC] bg-[#FFFBF4]/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6 md:hidden">
-      <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[#D4B391] bg-white p-1">
+      <div className="grid grid-cols-4 gap-1.5 rounded-xl border border-[#D4B391] bg-white p-1">
         {MOBILE_TABS.map(tab => {
           const isActive = active === tab.key
-          const count = counts[tab.key]
+          const count = counts[tab.key] ?? 0
           return (
             <button
               key={tab.key}
@@ -186,10 +189,10 @@ function StatTile({
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function IncomingOrdersPage() {
-  // Which section the mobile pager shows — null means none yet (the tab bar
-  // is visible, nothing below it is, until the admin taps a tab). Ignored at
-  // md+, where all three sections are always stacked and visible.
-  const [activeMobileSection, setActiveMobileSection] = useState<MobileSection | null>(null)
+  // Which pane the mobile pager shows — starts on "data" (the floor summary,
+  // the same thing shown first before this pager existed). Ignored at md+,
+  // where the summary and all three sections are always stacked and visible.
+  const [activeMobileSection, setActiveMobileSection] = useState<MobileSection>("data")
 
   // Pending approvals
   const [orders, setOrders] = useState<PendingOrder[]>([])
@@ -395,13 +398,12 @@ export default function IncomingOrdersPage() {
       </div>
 
       {/* ── Floor summary ───────────────────────────────────────────────── */}
-      {/* Below md this is start-screen content only — once a tab is tapped,
-          the selected section takes over the same space. At md+ it's
-          always visible alongside the (always-stacked) sections. */}
+      {/* Below md this is its own "Overview" tab — see MobileSectionTabs. At
+          md+ it's always visible alongside the (always-stacked) sections. */}
       <div
         className={cn(
           "mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4",
-          activeMobileSection === null ? "grid" : "hidden",
+          activeMobileSection === "data" ? "grid" : "hidden",
           "md:grid"
         )}
       >
@@ -434,19 +436,6 @@ export default function IncomingOrdersPage() {
           accent="#A46833"
         />
       </div>
-
-      {/* Below md, nothing past this point renders until a tab above is
-          tapped — see MobileSectionTabs and the per-section visibility
-          classes. At md+ all three sections are always shown, unaffected. */}
-      <p
-        className={cn(
-          "mb-8 rounded-2xl border border-dashed border-[#D9C3A5] bg-[#FFFBF4]/70 px-5 py-6 text-center text-sm text-[#8E7F71]",
-          activeMobileSection === null ? "block" : "hidden",
-          "md:hidden"
-        )}
-      >
-        Tap a section above to view it.
-      </p>
 
       {/* ── Waiting approval ────────────────────────────────────────────── */}
       <section className={cn("mb-8", activeMobileSection === "pending" ? "block" : "hidden", "md:block")}>
