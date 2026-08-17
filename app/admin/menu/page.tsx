@@ -6,6 +6,8 @@ import { AdminLayout } from "@/components/AdminSidebar"
 import { Plus, X, Search, Crop as CropIcon } from "lucide-react"
 import Image from "next/image"
 import { ImageCropperModal } from "@/components/ImageCropperModal"
+import { MediaLightbox } from "@/components/MediaLightbox"
+import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import {
   addDish,
   deleteDish,
@@ -763,12 +765,20 @@ function MenuPageContent() {
 
       {/* Add/Edit Form Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] shadow-[0_25px_60px_rgba(0,0,0,0.35)]">
+        <ResponsiveSheet
+          variant="sheet"
+          width="2xl"
+          onClose={() => { setShowAddForm(false); resetForm() }}
+          className="bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)]"
+          testId="dish-form-sheet"
+        >
+          <div className="flex h-full flex-col overflow-y-auto overscroll-contain">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E8D3BD] bg-[#FFF4E8]/95 p-6 backdrop-blur-sm">
-              <h2 className="text-[#2C1810] font-bold text-xl">
-                {editingItem ? "Edit Dish" : "Add New Dish"}
-              </h2>
+              <SheetTitle asChild>
+                <h2 className="text-[#2C1810] font-bold text-xl">
+                  {editingItem ? "Edit Dish" : "Add New Dish"}
+                </h2>
+              </SheetTitle>
               <button
                 onClick={() => {
                   setShowAddForm(false)
@@ -1209,7 +1219,7 @@ function MenuPageContent() {
                 {/* Nutritional Info */}
                 <div>
                   <label className="block text-[#2C1810] text-sm font-medium mb-3">Nutritional Information</label>
-                  <div className="grid grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                     <div>
                       <label className="block text-[#B89A7D] text-xs mb-1">Calories</label>
                       <input
@@ -1367,20 +1377,11 @@ function MenuPageContent() {
               </div>
             </div>
           </div>
-        </div>
+        </ResponsiveSheet>
       )}
 
       {previewMediaUrl && (
-        <div className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4">
-          <button
-            type="button"
-            onClick={() => setPreviewMediaUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center transition-colors"
-            aria-label="Close preview"
-          >
-            <X className="w-6 h-6" />
-          </button>
-
+        <MediaLightbox onClose={() => setPreviewMediaUrl(null)}>
           <div className="relative w-full max-w-3xl max-h-[88vh]">
             {isVideoMedia(previewMediaUrl) ? (
               <video
@@ -1397,7 +1398,7 @@ function MenuPageContent() {
               />
             )}
           </div>
-        </div>
+        </MediaLightbox>
       )}
 
       {cropImageUrl && (
@@ -1411,61 +1412,78 @@ function MenuPageContent() {
 
       {/* Delete Confirmation Modal */}
       {deleteModalOpen && itemToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-[#FFF4E8] rounded-2xl w-full max-w-md p-6 border border-[#D4B391] shadow-xl">
+        <ResponsiveSheet
+          variant="dialog"
+          width="md"
+          onClose={() => setDeleteModalOpen(false)}
+          className="bg-[#FFF4E8] p-6"
+          testId="dish-delete-dialog"
+        >
+          <SheetTitle asChild>
             <h3 className="text-xl font-bold text-[#2C1810] mb-2">Delete Dish</h3>
-            <p className="text-[#8E6D4E] mb-6">
-              Are you sure you want to delete <span className="font-bold">"{itemToDelete.name.en}"</span>? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteModalOpen(false)}
-                disabled={isSaving}
-                className="px-4 py-2 rounded-lg border border-[#D4B391] bg-white text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={isSaving}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                {isSaving ? "Deleting..." : "Delete Dish"}
-              </button>
-            </div>
+          </SheetTitle>
+          <p className="text-[#8E6D4E] mb-6">
+            Are you sure you want to delete <span className="font-bold">"{itemToDelete.name.en}"</span>? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-lg border border-[#D4B391] bg-white text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
+            >
+              {isSaving ? "Deleting..." : "Delete Dish"}
+            </button>
           </div>
-        </div>
+        </ResponsiveSheet>
       )}
 
       {/* Validation Error Modal */}
       {errorModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-[#FFF4E8] rounded-2xl w-full max-w-md p-6 border border-[#D4B391] shadow-xl">
-            <div className="flex items-center justify-between mb-4">
+        <ResponsiveSheet
+          variant="dialog"
+          tier="raised"
+          width="md"
+          onClose={() => setErrorModalOpen(false)}
+          className="bg-[#FFF4E8] p-6"
+          testId="dish-validation-dialog"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <SheetTitle asChild>
               <h3 className="text-xl font-bold text-red-600">Missing Information</h3>
-              <button onClick={() => setErrorModalOpen(false)} className="text-[#8E6D4E] hover:text-[#2C1810]">
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-[#2C1810] font-medium mb-3">Please fill in the following required fields:</p>
-            <ul className="list-disc list-inside text-[#8E6D4E] mb-6 space-y-1">
-              {validationErrors.map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setErrorModalOpen(false)
-                  scrollToError(validationErrors)
-                }}
-                className="px-5 py-2 rounded-lg bg-[#E8650A] text-white font-bold hover:bg-[#C74E33] transition-colors"
-              >
-                Okay, got it
-              </button>
-            </div>
+            </SheetTitle>
+            <button
+              onClick={() => setErrorModalOpen(false)}
+              aria-label="Close"
+              className="rounded-md p-1 text-[#8E6D4E] hover:text-[#2C1810] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
+            >
+              <X size={20} />
+            </button>
           </div>
-        </div>
+          <p className="text-[#2C1810] font-medium mb-3">Please fill in the following required fields:</p>
+          <ul className="list-disc list-inside text-[#8E6D4E] mb-6 space-y-1">
+            {validationErrors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+          <div className="flex justify-end">
+            <button
+              onClick={() => {
+                setErrorModalOpen(false)
+                scrollToError(validationErrors)
+              }}
+              className="px-5 py-2 rounded-lg bg-[#E8650A] text-white font-bold hover:bg-[#C74E33] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
+            >
+              Okay, got it
+            </button>
+          </div>
+        </ResponsiveSheet>
       )}
     </AdminLayout>
   )

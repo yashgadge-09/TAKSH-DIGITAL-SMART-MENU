@@ -5,6 +5,7 @@ import { AdminLayout } from "@/components/AdminSidebar"
 import { Plus, X, Search, Trash2, Star } from "lucide-react"
 import Image from "next/image"
 import { getAllDishesAdmin, updateDish } from "@/lib/database"
+import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 
 interface MenuItem {
   id: string;
@@ -204,15 +205,24 @@ function TodaysSpecialContent() {
 
       {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-3xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] shadow-[0_25px_60px_rgba(0,0,0,0.35)] overflow-hidden">
+        <ResponsiveSheet
+          variant="sheet"
+          width="2xl"
+          onClose={() => setShowAddModal(false)}
+          className="bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)]"
+          testId="todays-special-add-sheet"
+        >
+          <div className="flex h-full flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-[#E8D3BD] bg-[#FFF4E8]/95 p-6 backdrop-blur-sm shrink-0">
-              <h2 className="text-[#2C1810] font-bold text-xl flex items-center gap-2">
-                Add to Today's Special
-              </h2>
+              <SheetTitle asChild>
+                <h2 className="text-[#2C1810] font-bold text-xl flex items-center gap-2">
+                  Add to Today's Special
+                </h2>
+              </SheetTitle>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-[#B89A7D] hover:text-[#2C1810] transition-colors p-1"
+                aria-label="Close"
+                className="rounded-md text-[#B89A7D] hover:text-[#2C1810] transition-colors p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -279,7 +289,7 @@ function TodaysSpecialContent() {
               </div>
             </div>
           </div>
-        </div>
+        </ResponsiveSheet>
       )}
     </AdminLayout>
   )

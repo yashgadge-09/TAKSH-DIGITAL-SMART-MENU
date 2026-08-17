@@ -50,29 +50,6 @@ const STATUS = {
   bill_generated: { label: "Bill Requested", dot: "bg-[#C47A20]", card: "border-[#F0C896] bg-[linear-gradient(145deg,#FFFBF4_0%,#FEF0D8_100%)]", text: "text-[#8B4513]" },
 } satisfies Record<CaptainTable["status"], { label: string; dot: string; card: string; text: string }>
 
-/**
- * The captain sheets and modals are sized for a phone — full-bleed, edge to
- * edge. Stretched across an admin desktop they read as a banner rather than a
- * panel, so cap and centre them here. Scoped to this page: the captain panel
- * keeps its full-width sheet. `margin-inline: auto` against left/right 0 does
- * the centring so the components' own transforms stay untouched.
- */
-const SHEET_DESKTOP_CSS = `
-@media (min-width: 768px) {
-  [data-testid="table-sheet"],
-  [data-testid="parcel-sheet"],
-  [data-testid="settle-modal"],
-  [data-testid="move-modal"],
-  [data-testid="new-parcel-modal"],
-  [data-testid="add-item-modal"] {
-    left: 0;
-    right: 0;
-    width: min(100% - 3rem, 560px);
-    margin-inline: auto;
-  }
-}
-`
-
 // ── Shared section furniture ────────────────────────────────────────────────
 // One heading and one empty state for all three sections. Previously each rolled
 // its own, which is what made the page read as three unrelated blocks.
@@ -325,8 +302,6 @@ export default function IncomingOrdersPage() {
 
   return (
     <AdminLayout>
-      <style>{SHEET_DESKTOP_CSS}</style>
-
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
