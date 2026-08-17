@@ -395,7 +395,16 @@ export default function IncomingOrdersPage() {
       </div>
 
       {/* ── Floor summary ───────────────────────────────────────────────── */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Below md this is start-screen content only — once a tab is tapped,
+          the selected section takes over the same space. At md+ it's
+          always visible alongside the (always-stacked) sections. */}
+      <div
+        className={cn(
+          "mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4",
+          activeMobileSection === null ? "grid" : "hidden",
+          "md:grid"
+        )}
+      >
         <StatTile
           icon={Bell}
           label="Waiting approval"
