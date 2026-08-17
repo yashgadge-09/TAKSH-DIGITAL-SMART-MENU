@@ -70,8 +70,7 @@ const LINE = "-".repeat(WIDTH)
 const LINE_SM = "-".repeat(WIDTH_SM)
 
 type Seg =
-  | { text: string; center?: boolean; bold?: boolean; size?: "tall" | "big" | "small" }
-  | { qr: string }
+  { text: string; center?: boolean; bold?: boolean; size?: "tall" | "big" | "small" }
 
 // ESC/POS output is single-byte, so strip anything non-ASCII (₹, ─, accents).
 function toAscii(s: string): string {
@@ -167,11 +166,6 @@ function itemRows(item: { name: string; qty: number; price: number }): string[] 
   return rows
 }
 
-function upiLink(p: BillPayload): string {
-  const pn = encodeURIComponent(toAscii(p.restaurantName) || "Restaurant")
-  return `upi://pay?pa=${p.upiId}&pn=${pn}&am=${p.total.toFixed(2)}&cu=INR`
-}
-
 export function billSegments(p: BillPayload): Seg[] {
   const { date, time } = nowIST()
   const segs: Seg[] = [
@@ -204,13 +198,6 @@ export function billSegments(p: BillPayload): Seg[] {
     { text: amountLine("TOTAL", p.total), bold: true, size: "tall" },
     { text: LINE_SM, size: "small" },
   )
-  if (p.upiId) {
-    segs.push(
-      { qr: upiLink(p) },
-      { text: "Scan to pay via UPI", center: true, size: "small" },
-      { text: `UPI: ${p.upiId}`, center: true, size: "small" },
-    )
-  }
   segs.push({ text: "Thank you! Visit again", center: true, size: "small" })
   return segs
 }
@@ -220,28 +207,12 @@ export function billSegments(p: BillPayload): Seg[] {
 export function segsToText(segs: Seg[]): string {
   return segs
     .map(s => {
-      if ("qr" in s) return `[UPI QR] ${s.qr}`
       if (!s.center) return s.text
       const width = s.size === "small" ? WIDTH_SM : WIDTH
       const pad = Math.max(0, Math.floor((width - s.text.length) / 2))
       return " ".repeat(pad) + s.text
     })
     .join("\n")
-}
-
-// ESC/POS: model-2 QR, size 6, error correction M, store + print
-function qrBuffer(data: string): Buffer {
-  const bytes = Buffer.from(data, "ascii")
-  const len = bytes.length + 3
-  return Buffer.concat([
-    Buffer.from([0x1b, 0x61, 0x01]),                                   // center
-    Buffer.from([0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]), // model 2
-    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x06]),       // module size 6
-    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31]),       // EC level M
-    Buffer.from([0x1d, 0x28, 0x6b, len & 0xff, (len >> 8) & 0xff, 0x31, 0x50, 0x30]),
-    bytes,                                                                // store data
-    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]),       // print
-  ])
 }
 
 // Thermal printers can't render UTF-8 like ₹ and ─ — map them to ASCII so the
@@ -256,10 +227,6 @@ function toPrinterSafe(text: string): string {
 function compile(segs: Seg[]): Buffer {
   const out: Buffer[] = [Buffer.from([0x1b, 0x40])] // init
   for (const s of segs) {
-    if ("qr" in s) {
-      out.push(qrBuffer(s.qr))
-      continue
-    }
     out.push(Buffer.from([0x1b, 0x61, s.center ? 0x01 : 0x00]))          // align
     out.push(Buffer.from([0x1b, 0x45, s.bold ? 0x01 : 0x00]))            // bold
     // ESC M — Font B (smaller standard font, 42 cols) for "small", Font A otherwise
