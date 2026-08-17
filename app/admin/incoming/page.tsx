@@ -66,7 +66,7 @@ function MobileSectionTabs({
   onChange,
   counts,
 }: {
-  active: MobileSection
+  active: MobileSection | null
   onChange: (section: MobileSection) => void
   counts: Record<MobileSection, number>
 }) {
@@ -186,9 +186,10 @@ function StatTile({
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function IncomingOrdersPage() {
-  // Which section the mobile pager shows — ignored at md+, where all three
-  // sections are always stacked and visible.
-  const [activeMobileSection, setActiveMobileSection] = useState<MobileSection>("pending")
+  // Which section the mobile pager shows — null means none yet (the tab bar
+  // is visible, nothing below it is, until the admin taps a tab). Ignored at
+  // md+, where all three sections are always stacked and visible.
+  const [activeMobileSection, setActiveMobileSection] = useState<MobileSection | null>(null)
 
   // Pending approvals
   const [orders, setOrders] = useState<PendingOrder[]>([])
@@ -365,6 +366,12 @@ export default function IncomingOrdersPage() {
 
   return (
     <AdminLayout>
+      <MobileSectionTabs
+        active={activeMobileSection}
+        onChange={setActiveMobileSection}
+        counts={{ pending: orders.length, parcels: parcels.length, tables: occupiedCount }}
+      />
+
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -419,11 +426,18 @@ export default function IncomingOrdersPage() {
         />
       </div>
 
-      <MobileSectionTabs
-        active={activeMobileSection}
-        onChange={setActiveMobileSection}
-        counts={{ pending: orders.length, parcels: parcels.length, tables: occupiedCount }}
-      />
+      {/* Below md, nothing past this point renders until a tab above is
+          tapped — see MobileSectionTabs and the per-section visibility
+          classes. At md+ all three sections are always shown, unaffected. */}
+      <p
+        className={cn(
+          "mb-8 rounded-2xl border border-dashed border-[#D9C3A5] bg-[#FFFBF4]/70 px-5 py-6 text-center text-sm text-[#8E7F71]",
+          activeMobileSection === null ? "block" : "hidden",
+          "md:hidden"
+        )}
+      >
+        Tap a section above to view it.
+      </p>
 
       {/* ── Waiting approval ────────────────────────────────────────────── */}
       <section className={cn("mb-8", activeMobileSection === "pending" ? "block" : "hidden", "md:block")}>
