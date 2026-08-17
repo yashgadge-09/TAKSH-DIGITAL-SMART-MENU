@@ -6,6 +6,8 @@ import { AdminLayout } from "@/components/AdminSidebar"
 import { Trash2, Search, X, Plus, Crop as CropIcon, ImageIcon } from "lucide-react"
 import Image from "next/image"
 import { ImageCropperModal } from "@/components/ImageCropperModal"
+import { MediaLightbox } from "@/components/MediaLightbox"
+import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import {
   addCategory,
   deleteCategory,
@@ -362,16 +364,27 @@ function CategoriesPageContent() {
 
       {/* ── Category Image Modal ── */}
       {imageModalOpen && editingImageCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70" onClick={closeImageModal} />
-          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] shadow-[0_25px_60px_rgba(0,0,0,0.4)]">
+        <ResponsiveSheet
+          variant="sheet"
+          width="2xl"
+          onClose={closeImageModal}
+          className="bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)]"
+          testId="category-image-sheet"
+        >
+          <div className="flex h-full flex-col overflow-y-auto overscroll-contain">
             {/* Modal header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E8D3BD] bg-[#FFF4E8]/95 px-6 py-4 backdrop-blur-sm">
               <div>
-                <h3 className="text-[#2C1810] font-bold text-lg">Category Image</h3>
+                <SheetTitle asChild>
+                  <h3 className="text-[#2C1810] font-bold text-lg">Category Image</h3>
+                </SheetTitle>
                 <p className="text-[#B89A7D] text-xs mt-0.5">{editingImageCategory.name}</p>
               </div>
-              <button onClick={closeImageModal} className="text-[#B89A7D] hover:text-[#2C1810] transition-colors">
+              <button
+                onClick={closeImageModal}
+                aria-label="Close"
+                className="rounded-md p-1 text-[#B89A7D] hover:text-[#2C1810] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -465,19 +478,18 @@ function CategoriesPageContent() {
               </div>
             </div>
           </div>
-        </div>
+        </ResponsiveSheet>
       )}
 
       {/* ── Preview Modal ── */}
       {previewUrl && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85" onClick={() => setPreviewUrl(null)}>
-          <button className="absolute top-4 right-4 text-white" onClick={() => setPreviewUrl(null)}><X className="w-6 h-6" /></button>
+        <MediaLightbox onClose={() => setPreviewUrl(null)}>
           {isVideo(previewUrl) ? (
             <video src={previewUrl} controls autoPlay className="max-w-[90vw] max-h-[85vh] rounded-xl" />
           ) : (
             <img src={previewUrl} alt="Preview" className="max-w-[90vw] max-h-[85vh] rounded-xl object-contain" />
           )}
-        </div>
+        </MediaLightbox>
       )}
 
       {/* ── Crop Modal ── */}
@@ -492,28 +504,33 @@ function CategoriesPageContent() {
 
       {/* ── Delete Confirmation Modal ── */}
       {deleteModalOpen && categoryToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/70" onClick={closeDeleteModal} />
-          <div className="relative mx-4 w-full max-w-[360px] rounded-2xl border border-[#D4B391] bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] p-6 shadow-[0_14px_30px_rgba(90,53,25,0.2)]">
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-4"><Trash2 className="w-10 h-10 text-[#ef4444]" /></div>
+        <ResponsiveSheet
+          variant="dialog"
+          width="md"
+          onClose={closeDeleteModal}
+          className="bg-[linear-gradient(150deg,#FFF8EE_0%,#FAEBD8_100%)] p-6"
+          testId="category-delete-dialog"
+        >
+          <div className="flex flex-col items-center text-center">
+            <div className="mb-4"><Trash2 className="w-10 h-10 text-[#ef4444]" /></div>
+            <SheetTitle asChild>
               <h3 className="text-[#2C1810] font-bold text-xl mb-2">Delete Category?</h3>
-              <p className="text-[#8E7F71] text-sm mb-6">
-                Are you sure you want to delete <span className="text-[#2C1810]">{categoryToDelete.name}</span>? The dishes inside will not be deleted.
-              </p>
-              <div className="flex gap-3 w-full">
-                <button onClick={closeDeleteModal}
-                  className="flex-1 h-11 rounded-xl border border-[#D4B391] font-medium text-[#2C1810] hover:bg-[#F3E2CD] transition-colors">
-                  Cancel
-                </button>
-                <button onClick={confirmDelete} disabled={isSaving}
-                  className="flex-1 h-11 rounded-xl bg-[#C74E33] font-bold text-[#FFE2D8] hover:bg-[#B9442A] disabled:opacity-60 disabled:cursor-not-allowed transition-colors">
-                  {isSaving ? "Deleting..." : "Delete"}
-                </button>
-              </div>
+            </SheetTitle>
+            <p className="text-[#8E7F71] text-sm mb-6">
+              Are you sure you want to delete <span className="text-[#2C1810]">{categoryToDelete.name}</span>? The dishes inside will not be deleted.
+            </p>
+            <div className="flex gap-3 w-full">
+              <button onClick={closeDeleteModal}
+                className="flex-1 h-11 rounded-xl border border-[#D4B391] font-medium text-[#2C1810] hover:bg-[#F3E2CD] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]">
+                Cancel
+              </button>
+              <button onClick={confirmDelete} disabled={isSaving}
+                className="flex-1 h-11 rounded-xl bg-[#C74E33] font-bold text-[#FFE2D8] hover:bg-[#B9442A] disabled:opacity-60 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C74E33]">
+                {isSaving ? "Deleting..." : "Delete"}
+              </button>
             </div>
           </div>
-        </div>
+        </ResponsiveSheet>
       )}
     </AdminLayout>
   )

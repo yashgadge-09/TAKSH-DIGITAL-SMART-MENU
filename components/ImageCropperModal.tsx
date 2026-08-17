@@ -5,6 +5,7 @@ import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import { X, Check } from 'lucide-react'
 import getCroppedImg from '@/lib/cropImage'
+import { ResponsiveSheet, SheetTitle } from '@/components/captain/ResponsiveSheet'
 
 interface ImageCropperModalProps {
   imageSrc: string
@@ -65,16 +66,29 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const proxiedImageSrc = `/api/proxy-image?url=${encodeURIComponent(imageSrc)}`;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-[#FFF4E8] rounded-2xl w-full max-w-2xl overflow-hidden border border-[#D4B391] shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-[#E8D3BD]">
-          <h3 className="font-bold text-[#2C1810]">Crop Image</h3>
-          <button onClick={onCancel} className="text-[#8E6D4E] hover:text-[#2C1810]">
+    <ResponsiveSheet
+      variant="sheet"
+      tier="raised"
+      width="2xl"
+      onClose={onCancel}
+      className="bg-[#FFF4E8]"
+      testId="image-cropper-sheet"
+    >
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#E8D3BD] p-4">
+          <SheetTitle asChild>
+            <h3 className="font-bold text-[#2C1810]">Crop Image</h3>
+          </SheetTitle>
+          <button
+            onClick={onCancel}
+            aria-label="Close"
+            className="rounded-md p-1 text-[#8E6D4E] transition-colors hover:bg-[#F3E2CD] hover:text-[#2C1810] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
+          >
             <X size={20} />
           </button>
         </div>
-        
-        <div className="relative w-full max-h-[65vh] overflow-y-auto bg-black/5 flex items-center justify-center p-4">
+
+        <div className="relative w-full flex-1 overflow-y-auto overscroll-contain bg-black/5 flex items-center justify-center p-4">
           <ReactCrop
             crop={crop}
             onChange={(_, percentCrop) => setCrop(percentCrop)}
@@ -92,21 +106,21 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             />
           </ReactCrop>
         </div>
-        
-        <div className="p-4 flex gap-3 justify-between items-center bg-[#FFF4E8] border-t border-[#E8D3BD]">
+
+        <div className="shrink-0 p-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between sm:items-center bg-[#FFF4E8] border-t border-[#E8D3BD] pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <p className="text-[#8E6D4E] text-xs font-medium">Adjust the square over the subject.</p>
           <div className="flex gap-3">
             <button
               onClick={onCancel}
               disabled={isProcessing}
-              className="px-5 py-2.5 rounded-lg border border-[#D4B391] bg-white text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors"
+              className="flex-1 sm:flex-initial px-5 py-2.5 rounded-lg border border-[#D4B391] bg-white text-[#2C1810] font-medium hover:bg-[#F3E2CD] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={isProcessing}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#E8650A] text-white font-bold hover:bg-[#C74E33] transition-colors disabled:opacity-50"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-[#E8650A] text-white font-bold hover:bg-[#C74E33] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8650A]"
             >
               {isProcessing ? "Processing..." : (
                 <>
@@ -118,6 +132,6 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </ResponsiveSheet>
   )
 }

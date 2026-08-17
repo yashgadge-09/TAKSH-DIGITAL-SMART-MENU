@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { AdminLayout } from "@/components/AdminSidebar"
+import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import {
   approveOrder, rejectOrder, getPendingOrders, type PendingOrder,
@@ -11,6 +12,7 @@ import { toast } from "sonner"
 import {
   CheckCircle, XCircle, Clock, Users, Inbox,
   Receipt, ChefHat, ShoppingBag, Plus, Bell, LayoutGrid, Wallet,
+  LayoutDashboard,
   type LucideIcon,
 } from "lucide-react"
 // The captain panel owns the table/parcel model and every service action on it.
@@ -50,28 +52,65 @@ const STATUS = {
   bill_generated: { label: "Bill Requested", dot: "bg-[#C47A20]", card: "border-[#F0C896] bg-[linear-gradient(145deg,#FFFBF4_0%,#FEF0D8_100%)]", text: "text-[#8B4513]" },
 } satisfies Record<CaptainTable["status"], { label: string; dot: string; card: string; text: string }>
 
-/**
- * The captain sheets and modals are sized for a phone — full-bleed, edge to
- * edge. Stretched across an admin desktop they read as a banner rather than a
- * panel, so cap and centre them here. Scoped to this page: the captain panel
- * keeps its full-width sheet. `margin-inline: auto` against left/right 0 does
- * the centring so the components' own transforms stay untouched.
- */
-const SHEET_DESKTOP_CSS = `
-@media (min-width: 768px) {
-  [data-testid="table-sheet"],
-  [data-testid="parcel-sheet"],
-  [data-testid="settle-modal"],
-  [data-testid="move-modal"],
-  [data-testid="new-parcel-modal"],
-  [data-testid="add-item-modal"] {
-    left: 0;
-    right: 0;
-    width: min(100% - 3rem, 560px);
-    margin-inline: auto;
-  }
+// Below md the page becomes a 4-way pager instead of one long scroll — see
+// MobileSectionTabs. Desktop is unaffected: the summary and all three
+// sections stay stacked and visible together, always.
+type MobileSection = "data" | "pending" | "parcels" | "tables"
+
+const MOBILE_TABS: { key: MobileSection; label: string; icon: LucideIcon }[] = [
+  { key: "data", label: "Overview", icon: LayoutDashboard },
+  { key: "pending", label: "Approval", icon: Bell },
+  { key: "parcels", label: "Parcel", icon: ShoppingBag },
+  { key: "tables", label: "Tables", icon: LayoutGrid },
+]
+
+function MobileSectionTabs({
+  active,
+  onChange,
+  counts,
+}: {
+  active: MobileSection
+  onChange: (section: MobileSection) => void
+  counts: Partial<Record<MobileSection, number>>
+}) {
+  return (
+    <div className="sticky top-14 z-20 -mx-4 mb-6 border-b border-[#E8D5BC] bg-[#FFFBF4]/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6 md:hidden">
+      <div className="grid grid-cols-4 gap-1.5 rounded-xl border border-[#D4B391] bg-white p-1">
+        {MOBILE_TABS.map(tab => {
+          const isActive = active === tab.key
+          const count = counts[tab.key] ?? 0
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => onChange(tab.key)}
+              data-testid={`mobile-section-tab-${tab.key}`}
+              className={cn(
+                "flex flex-col items-center gap-0.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]",
+                isActive ? "bg-[#F0A33D] text-[#2B170D]" : "text-[#7A5A3A] hover:bg-[#F7E6D2]"
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span className="flex items-center gap-1">
+                {tab.label}
+                {count > 0 && (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 text-[10px] font-bold",
+                      isActive ? "bg-[#2B170D] text-[#F0A33D]" : "bg-[#F0DCC0] text-[#7A5A3A]"
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
-`
 
 // ── Shared section furniture ────────────────────────────────────────────────
 // One heading and one empty state for all three sections. Previously each rolled
@@ -150,6 +189,11 @@ function StatTile({
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function IncomingOrdersPage() {
+  // Which pane the mobile pager shows — starts on "data" (the floor summary,
+  // the same thing shown first before this pager existed). Ignored at md+,
+  // where the summary and all three sections are always stacked and visible.
+  const [activeMobileSection, setActiveMobileSection] = useState<MobileSection>("data")
+
   // Pending approvals
   const [orders, setOrders] = useState<PendingOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(true)
@@ -325,7 +369,11 @@ export default function IncomingOrdersPage() {
 
   return (
     <AdminLayout>
-      <style>{SHEET_DESKTOP_CSS}</style>
+      <MobileSectionTabs
+        active={activeMobileSection}
+        onChange={setActiveMobileSection}
+        counts={{ pending: orders.length, parcels: parcels.length, tables: occupiedCount }}
+      />
 
       {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -350,7 +398,15 @@ export default function IncomingOrdersPage() {
       </div>
 
       {/* ── Floor summary ───────────────────────────────────────────────── */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Below md this is its own "Overview" tab — see MobileSectionTabs. At
+          md+ it's always visible alongside the (always-stacked) sections. */}
+      <div
+        className={cn(
+          "mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4",
+          activeMobileSection === "data" ? "grid" : "hidden",
+          "md:grid"
+        )}
+      >
         <StatTile
           icon={Bell}
           label="Waiting approval"
@@ -382,7 +438,7 @@ export default function IncomingOrdersPage() {
       </div>
 
       {/* ── Waiting approval ────────────────────────────────────────────── */}
-      <section className="mb-8">
+      <section className={cn("mb-8", activeMobileSection === "pending" ? "block" : "hidden", "md:block")}>
         <SectionHeading icon={Bell} title="Waiting Approval" count={orders.length} accent="#C0392B" />
 
         {ordersLoading ? (
@@ -453,7 +509,7 @@ export default function IncomingOrdersPage() {
       </section>
 
       {/* ── Parcel / takeaway ───────────────────────────────────────────── */}
-      <section className="mb-8">
+      <section className={cn("mb-8", activeMobileSection === "parcels" ? "block" : "hidden", "md:block")}>
         <SectionHeading icon={ShoppingBag} title="Parcel · Takeaway" count={parcels.length} accent="#2A6B3A">
           <button
             onClick={() => setNewParcelOpen(true)}
@@ -513,7 +569,7 @@ export default function IncomingOrdersPage() {
       </section>
 
       {/* ── Tables ──────────────────────────────────────────────────────── */}
-      <section>
+      <section className={cn(activeMobileSection === "tables" ? "block" : "hidden", "md:block")}>
         <SectionHeading icon={LayoutGrid} title="Tables" accent="#A46833">
           {!tablesLoading && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#8E6D4E]">
