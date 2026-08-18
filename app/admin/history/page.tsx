@@ -432,54 +432,66 @@ export default function AdminHistoryPage() {
                                 <p className="text-sm text-[#8E6D4E]">Loading items…</p>
                               ) : detail?.length ? (
                                 <div className="space-y-3">
-                                  {/* Bill correction — unsettled bills only; a settled
-                                      bill is revenue and stays frozen forever. */}
-                                  {entry.status === "unsettled" && entry.sessionId ? (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {editingSessionId === entry.sessionId ? (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={() => setAddFor({ sessionId: entry.sessionId!, label: entry.label })}
-                                            data-testid="history-add-dish"
-                                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#2A6B3A] px-3 py-2 text-xs font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED]"
-                                          >
-                                            <Plus className="h-3.5 w-3.5" /> Add dish (no KOT)
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleReprint(entry.sessionId!)}
-                                            disabled={reprintingId === entry.sessionId}
-                                            data-testid="history-reprint-bill"
-                                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#A46833] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#8B5A2B] disabled:opacity-50"
-                                          >
-                                            <Printer className="h-3.5 w-3.5" />
-                                            {reprintingId === entry.sessionId ? "Printing…" : "Reprint corrected bill"}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => setEditingSessionId(null)}
-                                            data-testid="history-edit-done"
-                                            className="rounded-lg px-3 py-2 text-xs font-semibold text-[#8E6D4E] transition-colors hover:bg-[#F7E6D2]"
-                                          >
-                                            Done
-                                          </button>
-                                        </>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => setEditingSessionId(entry.sessionId!)}
-                                          data-testid="history-edit-bill"
-                                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#A46833] px-3 py-2 text-xs font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0]"
+                                  {/* Bill correction — admin-only for settled bills (server
+                                      enforces this too); editing booked revenue is intentional
+                                      here, but flagged clearly since it changes recorded totals. */}
+                                  {entry.sessionId ? (
+                                    <div className="flex flex-col gap-2">
+                                      {entry.status === "settled" ? (
+                                        <p
+                                          className="rounded-lg border border-[#E8B4A0] bg-[#FDECE5] px-3 py-2 text-xs font-medium text-[#8B3B1E]"
+                                          data-testid="history-settled-warning"
                                         >
-                                          <Pencil className="h-3.5 w-3.5" /> Edit bill
-                                        </button>
-                                      )}
-                                      {staleBills[entry.sessionId] ? (
-                                        <span className="text-xs font-medium text-[#C47A20]" data-testid="history-bill-stale">
-                                          Items changed — reprint the bill to update the totals.
-                                        </span>
+                                          This bill is already settled — editing it changes recorded
+                                          revenue for {dateTimeIST(entry.settledAt ?? entry.generatedAt)}.
+                                        </p>
                                       ) : null}
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        {editingSessionId === entry.sessionId ? (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => setAddFor({ sessionId: entry.sessionId!, label: entry.label })}
+                                              data-testid="history-add-dish"
+                                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#2A6B3A] px-3 py-2 text-xs font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED]"
+                                            >
+                                              <Plus className="h-3.5 w-3.5" /> Add dish (no KOT)
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleReprint(entry.sessionId!)}
+                                              disabled={reprintingId === entry.sessionId}
+                                              data-testid="history-reprint-bill"
+                                              className="inline-flex items-center gap-1.5 rounded-lg bg-[#A46833] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#8B5A2B] disabled:opacity-50"
+                                            >
+                                              <Printer className="h-3.5 w-3.5" />
+                                              {reprintingId === entry.sessionId ? "Printing…" : "Reprint corrected bill"}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setEditingSessionId(null)}
+                                              data-testid="history-edit-done"
+                                              className="rounded-lg px-3 py-2 text-xs font-semibold text-[#8E6D4E] transition-colors hover:bg-[#F7E6D2]"
+                                            >
+                                              Done
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingSessionId(entry.sessionId!)}
+                                            data-testid="history-edit-bill"
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#A46833] px-3 py-2 text-xs font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0]"
+                                          >
+                                            <Pencil className="h-3.5 w-3.5" /> Edit bill
+                                          </button>
+                                        )}
+                                        {staleBills[entry.sessionId] ? (
+                                          <span className="text-xs font-medium text-[#C47A20]" data-testid="history-bill-stale">
+                                            Items changed — reprint the bill to update the totals.
+                                          </span>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   ) : null}
 

@@ -2788,6 +2788,7 @@ export async function reprintBill({
   sessionId: string
 }): Promise<{ billId: string; total: number }> {
   const user = await requireStaff()
+  const role = staffRole(user)
   if (!sessionId) throw new Error('sessionId is required')
 
   const { data: session, error: sessionError } = await adminSupabase
@@ -2804,7 +2805,11 @@ export async function reprintBill({
       host_name: string | null
     }>()
   if (sessionError || !session) throw new Error('Session not found')
-  if (session.status === 'closed') throw new Error('Session is closed — cannot reprint bill')
+  // A closed session includes settled bills — only an admin may reprint a
+  // settled bill (correcting booked revenue from /admin/history).
+  if (session.status === 'closed' && role !== 'admin') {
+    throw new Error('Session is closed — cannot reprint bill')
+  }
 
   const { data: bill, error: billError } = await adminSupabase
     .from('bills')
@@ -2815,7 +2820,7 @@ export async function reprintBill({
     .maybeSingle()
   if (billError) throw new Error(billError.message)
   if (!bill) throw new Error('No bill found — generate the bill first')
-  if (bill.settled_at) throw new Error('Bill already settled — cannot reprint')
+  if (bill.settled_at && role !== 'admin') throw new Error('Bill already settled — cannot reprint')
 
   const { payload, subtotal, gstAmount, total } = await computeBillForSession(session)
 
@@ -2842,7 +2847,7 @@ export async function reprintBill({
       payload.orderType === 'parcel'
         ? `Parcel #${payload.tokenNumber ?? '?'}`
         : `Table ${payload.tableNumber ?? '?'}`,
-    details: { total },
+    details: bill.settled_at ? { total, postSettlement: true } : { total },
   })
 
   return { billId: bill.id, total }
@@ -3107,7 +3112,9 @@ export async function updateOrderItemQuantity({
   if (!order) throw new Error('Parent order not found')
   if (order.status === 'rejected') throw new Error('Cannot edit a rejected order')
   const session = order.table_sessions
-  if (session?.status === 'closed') {
+  // A closed session includes settled bills — only an admin may reopen the
+  // numbers on booked revenue (from /admin/history), never a captain.
+  if (session?.status === 'closed' && role !== 'admin') {
     throw new Error('Session is closed — cannot edit items')
   }
 
@@ -3170,6 +3177,7 @@ export async function updateOrderItemQuantity({
     qtyAfter: quantity,
     amountDelta: (quantity - currentQty) * price,
     reason: reason ?? null,
+    details: session?.status === 'closed' ? { postSettlement: true } : null,
   })
 }
 
@@ -3211,7 +3219,11 @@ export async function addItemsToSession({
     .eq('id', sessionId)
     .single()
   if (sessionError || !session) throw new Error('Session not found')
-  if (session.status === 'closed') throw new Error('Session is closed — cannot add items')
+  // A closed session includes settled bills — only an admin may add to a
+  // settled bill (from /admin/history), never a captain.
+  if (session.status === 'closed' && staffRole(user) !== 'admin') {
+    throw new Error('Session is closed — cannot add items')
+  }
 
   // Snapshot dish name + price at order time (same pattern as placeOrder)
   const dishIds = items.map((i) => i.dishId)
@@ -3300,7 +3312,7 @@ export async function addItemsToSession({
       qtyBefore: 0,
       qtyAfter: added.quantity,
       amountDelta: (Number(added.price) || 0) * added.quantity,
-      details: { roundNumber, kot: printKot },
+      details: { roundNumber, kot: printKot, ...(session.status === 'closed' ? { postSettlement: true } : {}) },
     }))
   )
 

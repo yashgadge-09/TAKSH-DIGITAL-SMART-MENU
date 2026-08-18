@@ -14,7 +14,6 @@ import {
   inrExact,
   rangeForPreset,
   rangeLabel,
-  timeIST,
   todayIST,
   type HistoryPreset,
 } from "@/lib/order-history"
@@ -133,7 +132,6 @@ export default function AdminActivityPage() {
     return all.filter(e => allowed.includes(e.action))
   }, [result, filter])
 
-  const multiDay = range.from !== range.to
   const discardedResets = (result?.entries ?? []).filter(
     e => (e.action === "force_reset" || e.action === "parcel_cancelled")
   )
@@ -294,7 +292,7 @@ export default function AdminActivityPage() {
                 <thead>
                   <tr className="border-b border-[#E8D5BC]">
                     <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">
-                      {multiDay ? "When (IST)" : "Time (IST)"}
+                      When (IST)
                     </th>
                     <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#8E6D4E]">
                       Who
@@ -339,7 +337,7 @@ export default function AdminActivityPage() {
                     return (
                       <tr key={entry.id} className="transition-colors hover:bg-[#F5EBD8]">
                         <td className="whitespace-nowrap px-5 py-3 text-[#6B5744]">
-                          {multiDay ? dateTimeIST(entry.createdAt) : timeIST(entry.createdAt)}
+                          {dateTimeIST(entry.createdAt)}
                         </td>
                         <td className="px-5 py-3">
                           <span className="flex items-center gap-2">
