@@ -13,7 +13,7 @@ import { shouldTrackClientEvent } from "@/lib/session";
 import { useSharedSession } from "@/context/SharedSessionContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
-import { isSameCategory, normalizeCategory } from "@/lib/utils";
+import { isSameCategory, normalizeCategory, stringSimilarity } from "@/lib/utils";
 import { RateUsCard } from "@/components/RateUsCard";
 import { BrandSpinner, PendingOverlay } from "@/components/BrandLoader";
 
@@ -298,6 +298,33 @@ function DishListSection({
   );
 }
 
+// Search results render as one relevance-ranked list, not grouped by
+// category — grouping would put an earlier category's loose match ahead of
+// the dish the guest is actually typing toward.
+function SearchResultsList({
+  dishes,
+  handleAddDishToCart,
+  handleOpenDish,
+}: {
+  dishes: any[];
+  handleAddDishToCart: (dish: AddToCartDish) => void;
+  handleOpenDish: (dish: any) => void;
+}) {
+  const { visible, sentinelRef, done } = useIncrementalList(dishes);
+  return (
+    <div className="mb-8">
+      <div className="space-y-4">
+        {visible.map((dish: any) => <DishCard key={dish.id} dish={dish} onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
+      </div>
+      {!done && (
+        <div ref={sentinelRef} className="flex justify-center py-6">
+          <BrandSpinner size="sm" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MenuPageContent({
   initialDishes,
   initialCategories,
@@ -324,6 +351,16 @@ function MenuPageContent({
     : totalItems;
   const [activeCategory, setActiveCategory] = useState(initialCategory || "All");
   const [searchQuery, setSearchQuery] = useState(initialSearch || "");
+  // Filtering/grouping/re-rendering ~440 dishes on every keystroke is heavy
+  // enough on a mid-range phone that typed characters visibly lag behind —
+  // by the time the filter catches up, only the fully-typed name has landed.
+  // Debounce the value the filter actually reads; the input itself stays
+  // bound to `searchQuery` so typing still echoes instantly.
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(initialSearch || "");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 150);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeCategory !== "All") params.set("category", activeCategory);
@@ -456,7 +493,7 @@ function MenuPageContent({
   );
 
   const filteredDishes = useMemo(() => {
-    const sl = searchQuery.toLowerCase().trim();
+    const sl = debouncedSearchQuery.toLowerCase().trim();
     return localizedDishes.filter(d => {
       const matchesSearch = !sl
         || (d.name || "").toLowerCase().includes(sl)
@@ -464,7 +501,57 @@ function MenuPageContent({
       const matchesCategory = sl ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
       return matchesSearch && matchesCategory;
     });
-  }, [localizedDishes, searchQuery, activeCategory]);
+  }, [localizedDishes, debouncedSearchQuery, activeCategory]);
+
+  // Plain substring filtering leaves matches in category/menu order, so a
+  // loose match in an earlier category (e.g. "Cream of Palak Soup") can
+  // outrank the dish the guest is actually typing toward ("Palak Paneer").
+  // Rank name-prefix matches first, then whole-word matches, then any other
+  // substring match, then dishes that only matched via their description.
+  const rankedSearchResults = useMemo(() => {
+    const sl = debouncedSearchQuery.toLowerCase().trim();
+    if (!sl) return filteredDishes;
+    const escaped = sl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const wordBoundary = new RegExp(`\\b${escaped}`, "i");
+    const scoreOf = (d: any) => {
+      const name = (d.name || "").toLowerCase();
+      if (name === sl) return 0;
+      if (name.startsWith(sl)) return 1;
+      if (wordBoundary.test(name)) return 2;
+      if (name.includes(sl)) return 3;
+      return 4;
+    };
+    return [...filteredDishes].sort((a, b) => {
+      const diff = scoreOf(a) - scoreOf(b);
+      if (diff !== 0) return diff;
+      return (a.name || "").length - (b.name || "").length;
+    });
+  }, [filteredDishes, debouncedSearchQuery]);
+
+  // Typo tolerance: when a query matches nothing, offer the closest dish
+  // name by edit distance ("veg leji" -> "Veg Laziz") instead of a dead end.
+  const suggestedDish = useMemo(() => {
+    if (!debouncedSearchQuery || filteredDishes.length > 0) return null;
+    const sl = debouncedSearchQuery.toLowerCase().trim().replace(/\s+/g, " ");
+    if (sl.length < 3) return null;
+    let best: any = null;
+    let bestSimilarity = 0;
+    for (const d of localizedDishes) {
+      const name = (d.name || "").toLowerCase().trim().replace(/\s+/g, " ");
+      if (!name) continue;
+      const similarity = stringSimilarity(sl, name);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        best = d;
+      }
+    }
+    return bestSimilarity >= 0.5 ? best : null;
+  }, [debouncedSearchQuery, filteredDishes.length, localizedDishes]);
+
+  const applySuggestedSearch = useCallback((name: string) => {
+    setSearchQuery(name);
+    setDebouncedSearchQuery(name);
+  }, []);
 
   const guestFavorites = useMemo(() => {
     if (mostOrderedDishes.length === 0) return [];
@@ -537,6 +624,7 @@ function MenuPageContent({
     pendingScrollCategoryRef.current = cat === "All" ? null : cat;
     setActiveCategory(cat);
     setSearchQuery("");
+    setDebouncedSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -698,7 +786,7 @@ function MenuPageContent({
         )}
 
         {/* ── Discovery sections (All + no search + no spice filter) ── */}
-        {activeCategory === "All" && !searchQuery && (
+        {activeCategory === "All" && !debouncedSearchQuery && (
           <>
             {todaysSpecials.length > 0 && (
               <section className="mt-6">
@@ -762,7 +850,7 @@ function MenuPageContent({
 
         {/* ── Dish listing ── */}
         <div className="px-4 mt-6">
-          {activeCategory === "All" && !searchQuery ? (
+          {activeCategory === "All" && !debouncedSearchQuery ? (
             previewCategories.map((tab, tabIndex) => {
               const catDishes = groupedDishes[tab.categoryValue] || [];
               if (catDishes.length === 0) return null;
@@ -782,6 +870,12 @@ function MenuPageContent({
                 </div>
               );
             })
+          ) : debouncedSearchQuery ? (
+            <SearchResultsList
+              dishes={rankedSearchResults}
+              handleAddDishToCart={handleAddDishToCart}
+              handleOpenDish={handleOpenDish}
+            />
           ) : (
             Array.from(new Set([...menuTabs, ...Object.keys(groupedDishes)])).filter(cat => groupedDishes[cat] && groupedDishes[cat].length > 0).map(cat => (
               <DishListSection
@@ -804,8 +898,21 @@ function MenuPageContent({
                 {t("noDishesFound")}
               </p>
               <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--brand-gold-muted)]">
-                {searchQuery ? t("tryDifferentKeywords") : t("noDishesAvailable")}
+                {debouncedSearchQuery ? t("tryDifferentKeywords") : t("noDishesAvailable")}
               </p>
+              {suggestedDish && (
+                <button
+                  type="button"
+                  onClick={() => applySuggestedSearch(suggestedDish.name)}
+                  className="mt-4 text-[13px] text-[color:var(--brand-gold-muted)] transition hover:text-[color:var(--brand-gold)]"
+                >
+                  Did you mean{" "}
+                  <span className="font-semibold text-[color:var(--brand-gold)] underline underline-offset-2">
+                    {suggestedDish.name}
+                  </span>
+                  ? Tap to search instead
+                </button>
+              )}
             </div>
           )}
         </div>
