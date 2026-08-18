@@ -298,6 +298,33 @@ function DishListSection({
   );
 }
 
+// Search results render as one relevance-ranked list, not grouped by
+// category — grouping would put an earlier category's loose match ahead of
+// the dish the guest is actually typing toward.
+function SearchResultsList({
+  dishes,
+  handleAddDishToCart,
+  handleOpenDish,
+}: {
+  dishes: any[];
+  handleAddDishToCart: (dish: AddToCartDish) => void;
+  handleOpenDish: (dish: any) => void;
+}) {
+  const { visible, sentinelRef, done } = useIncrementalList(dishes);
+  return (
+    <div className="mb-8">
+      <div className="space-y-4">
+        {visible.map((dish: any) => <DishCard key={dish.id} dish={dish} onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
+      </div>
+      {!done && (
+        <div ref={sentinelRef} className="flex justify-center py-6">
+          <BrandSpinner size="sm" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MenuPageContent({
   initialDishes,
   initialCategories,
@@ -475,6 +502,31 @@ function MenuPageContent({
       return matchesSearch && matchesCategory;
     });
   }, [localizedDishes, debouncedSearchQuery, activeCategory]);
+
+  // Plain substring filtering leaves matches in category/menu order, so a
+  // loose match in an earlier category (e.g. "Cream of Palak Soup") can
+  // outrank the dish the guest is actually typing toward ("Palak Paneer").
+  // Rank name-prefix matches first, then whole-word matches, then any other
+  // substring match, then dishes that only matched via their description.
+  const rankedSearchResults = useMemo(() => {
+    const sl = debouncedSearchQuery.toLowerCase().trim();
+    if (!sl) return filteredDishes;
+    const escaped = sl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const wordBoundary = new RegExp(`\\b${escaped}`, "i");
+    const scoreOf = (d: any) => {
+      const name = (d.name || "").toLowerCase();
+      if (name === sl) return 0;
+      if (name.startsWith(sl)) return 1;
+      if (wordBoundary.test(name)) return 2;
+      if (name.includes(sl)) return 3;
+      return 4;
+    };
+    return [...filteredDishes].sort((a, b) => {
+      const diff = scoreOf(a) - scoreOf(b);
+      if (diff !== 0) return diff;
+      return (a.name || "").length - (b.name || "").length;
+    });
+  }, [filteredDishes, debouncedSearchQuery]);
 
   const guestFavorites = useMemo(() => {
     if (mostOrderedDishes.length === 0) return [];
@@ -793,6 +845,12 @@ function MenuPageContent({
                 </div>
               );
             })
+          ) : debouncedSearchQuery ? (
+            <SearchResultsList
+              dishes={rankedSearchResults}
+              handleAddDishToCart={handleAddDishToCart}
+              handleOpenDish={handleOpenDish}
+            />
           ) : (
             Array.from(new Set([...menuTabs, ...Object.keys(groupedDishes)])).filter(cat => groupedDishes[cat] && groupedDishes[cat].length > 0).map(cat => (
               <DishListSection
