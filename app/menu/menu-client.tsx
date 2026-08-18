@@ -324,6 +324,16 @@ function MenuPageContent({
     : totalItems;
   const [activeCategory, setActiveCategory] = useState(initialCategory || "All");
   const [searchQuery, setSearchQuery] = useState(initialSearch || "");
+  // Filtering/grouping/re-rendering ~440 dishes on every keystroke is heavy
+  // enough on a mid-range phone that typed characters visibly lag behind —
+  // by the time the filter catches up, only the fully-typed name has landed.
+  // Debounce the value the filter actually reads; the input itself stays
+  // bound to `searchQuery` so typing still echoes instantly.
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(initialSearch || "");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 150);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeCategory !== "All") params.set("category", activeCategory);
@@ -456,7 +466,7 @@ function MenuPageContent({
   );
 
   const filteredDishes = useMemo(() => {
-    const sl = searchQuery.toLowerCase().trim();
+    const sl = debouncedSearchQuery.toLowerCase().trim();
     return localizedDishes.filter(d => {
       const matchesSearch = !sl
         || (d.name || "").toLowerCase().includes(sl)
@@ -464,7 +474,7 @@ function MenuPageContent({
       const matchesCategory = sl ? true : (activeCategory === "All" || isSameCategory(d.category, activeCategory));
       return matchesSearch && matchesCategory;
     });
-  }, [localizedDishes, searchQuery, activeCategory]);
+  }, [localizedDishes, debouncedSearchQuery, activeCategory]);
 
   const guestFavorites = useMemo(() => {
     if (mostOrderedDishes.length === 0) return [];
@@ -537,6 +547,7 @@ function MenuPageContent({
     pendingScrollCategoryRef.current = cat === "All" ? null : cat;
     setActiveCategory(cat);
     setSearchQuery("");
+    setDebouncedSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -698,7 +709,7 @@ function MenuPageContent({
         )}
 
         {/* ── Discovery sections (All + no search + no spice filter) ── */}
-        {activeCategory === "All" && !searchQuery && (
+        {activeCategory === "All" && !debouncedSearchQuery && (
           <>
             {todaysSpecials.length > 0 && (
               <section className="mt-6">
@@ -762,7 +773,7 @@ function MenuPageContent({
 
         {/* ── Dish listing ── */}
         <div className="px-4 mt-6">
-          {activeCategory === "All" && !searchQuery ? (
+          {activeCategory === "All" && !debouncedSearchQuery ? (
             previewCategories.map((tab, tabIndex) => {
               const catDishes = groupedDishes[tab.categoryValue] || [];
               if (catDishes.length === 0) return null;
@@ -804,7 +815,7 @@ function MenuPageContent({
                 {t("noDishesFound")}
               </p>
               <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--brand-gold-muted)]">
-                {searchQuery ? t("tryDifferentKeywords") : t("noDishesAvailable")}
+                {debouncedSearchQuery ? t("tryDifferentKeywords") : t("noDishesAvailable")}
               </p>
             </div>
           )}
