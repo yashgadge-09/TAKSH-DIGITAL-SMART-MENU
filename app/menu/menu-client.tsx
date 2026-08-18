@@ -13,7 +13,7 @@ import { shouldTrackClientEvent } from "@/lib/session";
 import { useSharedSession } from "@/context/SharedSessionContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
-import { isSameCategory, normalizeCategory } from "@/lib/utils";
+import { isSameCategory, normalizeCategory, stringSimilarity } from "@/lib/utils";
 import { RateUsCard } from "@/components/RateUsCard";
 import { BrandSpinner, PendingOverlay } from "@/components/BrandLoader";
 
@@ -528,6 +528,31 @@ function MenuPageContent({
     });
   }, [filteredDishes, debouncedSearchQuery]);
 
+  // Typo tolerance: when a query matches nothing, offer the closest dish
+  // name by edit distance ("veg leji" -> "Veg Laziz") instead of a dead end.
+  const suggestedDish = useMemo(() => {
+    if (!debouncedSearchQuery || filteredDishes.length > 0) return null;
+    const sl = debouncedSearchQuery.toLowerCase().trim().replace(/\s+/g, " ");
+    if (sl.length < 3) return null;
+    let best: any = null;
+    let bestSimilarity = 0;
+    for (const d of localizedDishes) {
+      const name = (d.name || "").toLowerCase().trim().replace(/\s+/g, " ");
+      if (!name) continue;
+      const similarity = stringSimilarity(sl, name);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        best = d;
+      }
+    }
+    return bestSimilarity >= 0.5 ? best : null;
+  }, [debouncedSearchQuery, filteredDishes.length, localizedDishes]);
+
+  const applySuggestedSearch = useCallback((name: string) => {
+    setSearchQuery(name);
+    setDebouncedSearchQuery(name);
+  }, []);
+
   const guestFavorites = useMemo(() => {
     if (mostOrderedDishes.length === 0) return [];
     const byId = new Map(localizedDishes.map(d => [String(d.id), d]));
@@ -875,6 +900,19 @@ function MenuPageContent({
               <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--brand-gold-muted)]">
                 {debouncedSearchQuery ? t("tryDifferentKeywords") : t("noDishesAvailable")}
               </p>
+              {suggestedDish && (
+                <button
+                  type="button"
+                  onClick={() => applySuggestedSearch(suggestedDish.name)}
+                  className="mt-4 text-[13px] text-[color:var(--brand-gold-muted)] transition hover:text-[color:var(--brand-gold)]"
+                >
+                  Did you mean{" "}
+                  <span className="font-semibold text-[color:var(--brand-gold)] underline underline-offset-2">
+                    {suggestedDish.name}
+                  </span>
+                  ? Tap to search instead
+                </button>
+              )}
             </div>
           )}
         </div>
