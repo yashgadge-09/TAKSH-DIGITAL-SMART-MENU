@@ -12,6 +12,13 @@ const RECEPTION_PRINTER_IP   = process.env.RECEPTION_PRINTER_IP ?? "192.168.1.10
 const POLL_MS                = parseInt(process.env.POLL_MS ?? "2000", 10)
 const PRINTER_PORT           = 9100
 
+// Bill header lines the web app does not send — restaurants only stores name,
+// address, gstin and upi_id. Override any of them in .env without a code change.
+const BILL_BRAND   = process.env.BILL_BRAND   ?? "TASTEFY"
+const BILL_COMPANY = process.env.BILL_COMPANY ?? "SHREEJA HOSPITALITY"
+const BILL_EMAIL   = process.env.BILL_EMAIL   ?? "shreejahospitality@gmail.com"
+const BILL_MOBILE  = process.env.BILL_MOBILE  ?? "8793604904"
+
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
   console.error("[bridge] SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
   process.exit(1)
@@ -60,14 +67,15 @@ type PrintJob = {
 //
 // Slips are described as a list of segments; the same segments render to
 // plain text (mock mode) or to an ESC/POS byte stream (real mode).
-// WIDTH = 32 chars fits both 80mm and 58mm printers at Font A.
-// WIDTH_SM = 42 chars is Font B ("small") on the same paper — 32 Font A cols
-// and 42 Font B cols both span ~48mm, so mixed-size slips keep flush edges.
+// WIDTH = 48 chars is a full 80mm line at Font A; WIDTH_SM = 64 is Font B
+// ("small") on the same paper. Both span the full 72mm print area, so mixed-size
+// slips keep flush edges. On 58mm paper these must drop to 32 and 42.
 
-const WIDTH = 32
-const WIDTH_SM = 42
+const WIDTH = 48
+const WIDTH_SM = 64
 const LINE = "-".repeat(WIDTH)
 const LINE_SM = "-".repeat(WIDTH_SM)
+const DOTS = ". ".repeat(WIDTH / 2).trimEnd()
 
 type Seg =
   { text: string; center?: boolean; bold?: boolean; size?: "tall" | "big" | "small" }
@@ -104,32 +112,50 @@ function nowIST(): { date: string; time: string } {
   return { date: `${dd}/${mo}/${yy}`, time: `${hh}:${mi}` }
 }
 
-// ── KOT: table/token stays 4x for kitchen glance; the rest is compact ───────
+// ── KOT: centred header block, then a left/right Item–Qty table ─────────────
+
+// "Dish name .......... 3", wrapping names too long to share the qty's line
+function kotItemRows(name: string, qty: number): string[] {
+  const q = String(qty)
+  const clean = toAscii(name)
+  const nameWidth = WIDTH - q.length - 1
+  if (clean.length <= nameWidth) return [pair(clean, q)]
+
+  const rows = [pair(clean.slice(0, nameWidth), q)]
+  let rest = clean.slice(nameWidth)
+  while (rest.length > 0) {
+    rows.push("  " + rest.slice(0, WIDTH - 2))
+    rest = rest.slice(WIDTH - 2)
+  }
+  return rows
+}
 
 export function kotSegments(p: KotPayload): Seg[] {
   // A parcel has no table — the daily token is what the counter calls out, so
   // it takes the table's place in the header at the same size.
   const isParcel = p.orderType === "parcel"
+  const { date } = nowIST()
 
   const segs: Seg[] = [
+    { text: "Running Table", center: true, bold: true, size: "tall" },
+    { text: `${date} ${p.time}`, center: true },
+    { text: `KOT - ${p.roundNumber}`, center: true },
+    { text: isParcel ? "Parcel" : "Dine In", center: true, bold: true, size: "tall" },
     isParcel
-      ? { text: `PARCEL #${p.tokenNumber ?? "-"}`, bold: true, size: "big" }
-      : { text: `TABLE ${p.tableNumber ?? "-"}`, bold: true, size: "big" },
+      ? { text: `Token No: ${p.tokenNumber ?? "-"}`, center: true, bold: true, size: "tall" }
+      : { text: `Table No: ${p.tableNumber ?? "-"}`, center: true, bold: true, size: "tall" },
   ]
   if (isParcel && p.customerName) {
-    segs.push({ text: `NAME: ${toAscii(p.customerName).toUpperCase()}`, bold: true })
+    segs.push({ text: `Name: ${toAscii(p.customerName)}`, center: true, bold: true })
   }
   segs.push(
-    { text: `KOT  Round ${p.roundNumber}  Time ${p.time}`, size: "small" },
+    { text: DOTS },
+    { text: pair("Item", "Qty.") },
     { text: LINE },
   )
   for (const i of p.items) {
-    segs.push({
-      text: `${String(i.qty).padStart(2)} x ${toAscii(i.name).toUpperCase()}`,
-      bold: true,
-    })
+    for (const row of kotItemRows(i.name, i.qty)) segs.push({ text: row, bold: true })
   }
-  segs.push({ text: LINE })
   return segs
 }
 
@@ -149,56 +175,92 @@ function consolidateItems(rounds: BillPayload["rounds"]) {
   return Array.from(merged.values())
 }
 
-// Columns: ITEM(22) QTY(3) RATE(7) AMT(10) = 42 (Font B); long names wrap below
+// Columns: ITEM(20) QTY(5) PRICE(11) AMOUNT(12) = 48; long names wrap below
 function itemRows(item: { name: string; qty: number; price: number }): string[] {
   const name = toAscii(item.name)
   const rows = [
-    name.slice(0, 22).padEnd(22) +
-      String(item.qty).padStart(3) +
-      money(item.price).padStart(7) +
-      money(item.qty * item.price).padStart(10),
+    name.slice(0, 20).padEnd(20) +
+      String(item.qty).padStart(5) +
+      item.price.toFixed(2).padStart(11) +
+      (item.qty * item.price).toFixed(2).padStart(12),
   ]
-  let rest = name.slice(22)
+  let rest = name.slice(20)
   while (rest.length > 0) {
-    rows.push("  " + rest.slice(0, WIDTH_SM - 2))
-    rest = rest.slice(WIDTH_SM - 2)
+    rows.push("  " + rest.slice(0, WIDTH - 2))
+    rest = rest.slice(WIDTH - 2)
   }
   return rows
 }
 
+// Word-wrap a long line (the address) into centred rows
+function centredWrap(text: string): Seg[] {
+  const words = toAscii(text).split(" ")
+  const lines: string[] = []
+  let line = ""
+  for (const w of words) {
+    if (line && (line + " " + w).length > WIDTH) { lines.push(line); line = w }
+    else line = line ? `${line} ${w}` : w
+  }
+  if (line) lines.push(line)
+  return lines.map(l => ({ text: l, center: true }))
+}
+
+// A totals row: label right-aligned at col 36, amount right-aligned at col 48
+function totalsRow(prefix: string, label: string, amount: number): string {
+  return prefix.padEnd(24) + label.padStart(12) + amount.toFixed(2).padStart(12)
+}
+
 export function billSegments(p: BillPayload): Seg[] {
   const { date, time } = nowIST()
+  const items = consolidateItems(p.rounds)
+  const totalQty = items.reduce((n, i) => n + i.qty, 0)
+  // One GST figure arrives from the app; a tax invoice shows it split in half
+  // as CGST + SGST, which is how intra-state GST is levied. Give the odd paisa
+  // to SGST so the two halves always add back to the total the app calculated.
+  const halfRate = p.gstRate / 2
+  const cgst = Math.round((p.gstAmount / 2) * 100) / 100
+  const sgst = Math.round((p.gstAmount - cgst) * 100) / 100
+
   const segs: Seg[] = [
-    { text: toAscii(p.restaurantName).toUpperCase(), center: true, bold: true, size: "tall" },
+    { text: BILL_BRAND, center: true, bold: true, size: "tall" },
+    { text: `( ${toAscii(p.restaurantName).toUpperCase()} )`, center: true, bold: true, size: "tall" },
   ]
-  if (p.address) segs.push({ text: toAscii(p.address), center: true, size: "small" })
-  if (p.gstin) segs.push({ text: `GSTIN: ${p.gstin}`, center: true, size: "small" })
+  if (BILL_COMPANY) segs.push({ text: BILL_COMPANY, center: true, bold: true })
+  if (p.address) segs.push(...centredWrap(p.address))
+  if (BILL_EMAIL) segs.push({ text: `Email: ${BILL_EMAIL}`, center: true })
+  if (BILL_MOBILE) segs.push({ text: `Mob: ${BILL_MOBILE}`, center: true })
+  if (p.gstin) segs.push({ text: `GST NO: ${p.gstin}`, center: true })
+
   const orderLabel =
-    p.orderType === "parcel" ? `PARCEL #${p.tokenNumber ?? "-"}` : `Table: ${p.tableNumber ?? "-"}`
+    p.orderType === "parcel"
+      ? `Parcel: #${p.tokenNumber ?? "-"}`
+      : `Dine In: ${p.tableNumber ?? "-"}`
+
   segs.push(
-    { text: LINE_SM, size: "small" },
-    { text: pair(orderLabel, `Bill To: ${toAscii(p.customerName)}`, WIDTH_SM), size: "small" },
-    { text: pair(`Date: ${date}`, `Time: ${time}`, WIDTH_SM), size: "small" },
-    { text: LINE_SM, size: "small" },
+    { text: LINE },
+    { text: `Name: ${toAscii(p.customerName) || "_".repeat(30)}` },
+    { text: LINE },
+    { text: pair(`Date: ${date}`, orderLabel) },
+    { text: `Time: ${time}` },
+    { text: LINE },
     {
-      text: "ITEM".padEnd(22) + "QTY".padStart(3) + "RATE".padStart(7) + "AMT".padStart(10),
-      bold: true,
-      size: "small",
+      text: "Item".padEnd(20) + "Qty.".padStart(5) + "Price".padStart(11) + "Amount".padStart(12),
     },
-    { text: LINE_SM, size: "small" },
+    { text: "" },
   )
-  for (const item of consolidateItems(p.rounds)) {
-    for (const row of itemRows(item)) segs.push({ text: row, size: "small" })
+  for (const item of items) {
+    for (const row of itemRows(item)) segs.push({ text: row })
   }
   segs.push(
-    { text: LINE_SM, size: "small" },
-    { text: amountLine("Subtotal", p.subtotal, WIDTH_SM), size: "small" },
-    { text: amountLine(`GST @ ${p.gstRate}%`, p.gstAmount, WIDTH_SM), size: "small" },
-    { text: LINE_SM, size: "small" },
-    { text: amountLine("TOTAL", p.total), bold: true, size: "tall" },
-    { text: LINE_SM, size: "small" },
+    { text: LINE },
+    { text: totalsRow(`Total Qty: ${totalQty}`, "Sub Total", p.subtotal) },
+    { text: totalsRow("", `CGST ${halfRate}%`, cgst) },
+    { text: totalsRow("", `SGST ${halfRate}%`, sgst) },
+    { text: LINE },
+    { text: pair("  Grand Total", `Rs. ${p.total.toFixed(2)}`), bold: true, size: "tall" },
+    { text: LINE },
+    { text: "Thanks & Visit Again", center: true },
   )
-  segs.push({ text: "Thank you! Visit again", center: true, size: "small" })
   return segs
 }
 
