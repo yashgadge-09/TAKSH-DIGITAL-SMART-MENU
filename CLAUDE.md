@@ -223,7 +223,7 @@ The three optional fields carry parcel orders (`orderType: 'parcel'`): the KOT p
 
 **Restaurant ops (ordering system — T01 schema applied):**
 - `restaurants` — slug `taksh`, id `c7b441fe-…`
-- `restaurant_tables` — 16 tables (1–16) seeded for `taksh`
+- `restaurant_tables` — 18 tables (1–18) seeded for `taksh`
 - `table_sessions` — active sessions with 4-digit PIN; status: `active | bill_generated | closed`; `session_type` (`dine_in|parcel`) + `token_number` — a parcel has `table_id NULL` and is identified by its daily token instead (P01)
 - `parcel_counters` — one row per restaurant per IST day; incremented atomically by the `next_parcel_token()` RPC so concurrent parcels never share a token. Service-role only (no RLS policies), same as `print_jobs`
 - `customers` — name + optional phone; reused by phone per restaurant

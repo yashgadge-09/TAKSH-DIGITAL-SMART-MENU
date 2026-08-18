@@ -112,7 +112,7 @@ Notification → review funnel by table number and date.
 All tables are seeded and actively used by the ordering flow (T01–T14).
 
 - **`restaurants`** (1 row) — slug `taksh`, id `c7b441fe-…`; columns: `name`, `address`, `gstin`, `upi_id`
-- **`restaurant_tables`** (16 rows) — tables 1–16 seeded for `taksh`; FK to `restaurants`
+- **`restaurant_tables`** (18 rows) — tables 1–18 seeded for `taksh`; FK to `restaurants`
 - **`table_sessions`** — active dining sessions with 4-digit PIN; status: `active` / `bill_generated` / `closed`; `host_device_id` + `host_name` columns for shared-cart host tracking (added by `2026062501_shared_cart.sql`)
 - **`customers`** — name + optional phone; reused by `(restaurant_id, phone)`; `whatsapp_opted_in` bool
 - **`orders`** — round-based ordering per session; status: `pending_approval` / `approved` / `rejected` / `served`; default `pending_approval`
