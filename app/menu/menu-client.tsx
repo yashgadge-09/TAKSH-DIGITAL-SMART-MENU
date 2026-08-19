@@ -12,7 +12,6 @@ import { playChime, thumbUrl, isVideoUrl } from "@/lib/media";
 import { shouldTrackClientEvent } from "@/lib/session";
 import { useSharedSession } from "@/context/SharedSessionContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { toast } from "sonner";
 import { isSameCategory, normalizeCategory, stringSimilarity } from "@/lib/utils";
 import { RateUsCard } from "@/components/RateUsCard";
 import { StickyCartBar } from "@/components/StickyCartBar";
@@ -580,7 +579,6 @@ function MenuPageContent({
     } else {
       addItem(dish);
     }
-    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   }, [sharedSession, addItem]);
 
   const handleOpenDish = useCallback((dish: any) => {

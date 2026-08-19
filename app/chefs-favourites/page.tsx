@@ -10,7 +10,6 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useMenuHome } from "@/context/TableSessionContext";
 import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
-import { toast } from "sonner";
 import { StickyCartBar } from "@/components/StickyCartBar";
 
 function localizeDish(dish: any, lang: string) {
@@ -80,7 +79,6 @@ export default function ChefsFavouritesPage() {
       image: dish.image,
       category: dish.category,
     });
-    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   };
 
   return (
