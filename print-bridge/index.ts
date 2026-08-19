@@ -35,7 +35,7 @@ type KotPayload = {
   tableNumber: number | null
   roundNumber: number
   time: string        // "HH:MM" IST
-  items: { name: string; qty: number }[]
+  items: { name: string; qty: number; note?: string }[]
   orderType?: "dine_in" | "parcel"
   tokenNumber?: number | null
   customerName?: string | null
@@ -130,6 +130,20 @@ function kotItemRows(name: string, qty: number): string[] {
   return rows
 }
 
+// "  * make it spicy" — indented, unbold, wrapped under the item's qty row
+function kotNoteRows(note: string): string[] {
+  const clean = toAscii(note)
+  if (!clean) return []
+  const prefix = "  * "
+  const rows = [prefix + clean.slice(0, WIDTH - prefix.length)]
+  let rest = clean.slice(WIDTH - prefix.length)
+  while (rest.length > 0) {
+    rows.push("    " + rest.slice(0, WIDTH - 4))
+    rest = rest.slice(WIDTH - 4)
+  }
+  return rows
+}
+
 export function kotSegments(p: KotPayload): Seg[] {
   // A parcel has no table — the daily token is what the counter calls out, so
   // it takes the table's place in the header at the same size.
@@ -155,6 +169,7 @@ export function kotSegments(p: KotPayload): Seg[] {
   )
   for (const i of p.items) {
     for (const row of kotItemRows(i.name, i.qty)) segs.push({ text: row, bold: true })
+    if (i.note) for (const row of kotNoteRows(i.note)) segs.push({ text: row })
   }
   return segs
 }
