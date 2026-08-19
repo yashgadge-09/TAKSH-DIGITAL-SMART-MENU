@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo, useCallback, memo, useTransition 
 import dynamic from "next/dynamic";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, ShoppingCart, RefreshCw, ChevronRight, Star, Flame, Plus, ChefHat, Lock } from "lucide-react";
+import { Search, ShoppingCart, RefreshCw, ChevronRight, Flame, Plus, ChefHat, Lock } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { getMenuListDishes, getCategories, getMostOrderedDishesCached, trackMenuView, addSharedCartItem } from "@/lib/database";
 import { trackCartEventClient } from "@/lib/client-analytics";
@@ -15,6 +15,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { toast } from "sonner";
 import { isSameCategory, normalizeCategory, stringSimilarity } from "@/lib/utils";
 import { RateUsCard } from "@/components/RateUsCard";
+import { StickyCartBar } from "@/components/StickyCartBar";
 import { BrandSpinner, PendingOverlay } from "@/components/BrandLoader";
 
 // Heavy, closed-by-default overlays — kept out of the initial /menu bundle.
@@ -344,11 +345,14 @@ function MenuPageContent({
   // dish grid would never appear in the SSR'd HTML. Initial values instead
   // come from the server-rendered `searchParams` prop (see app/menu/page.tsx).
   const pathname = usePathname();
-  const { totalItems, addItem, items } = useCart();
+  const { totalItems, totalPrice, addItem, items } = useCart();
   const sharedSession = useSharedSession();
   const cartBadgeCount = sharedSession
     ? sharedSession.sharedItems.reduce((sum, item) => sum + item.quantity, 0)
     : totalItems;
+  const cartBadgeTotal = sharedSession
+    ? sharedSession.sharedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    : totalPrice;
   const [activeCategory, setActiveCategory] = useState(initialCategory || "All");
   const [searchQuery, setSearchQuery] = useState(initialSearch || "");
   // Filtering/grouping/re-rendering ~440 dishes on every keystroke is heavy
@@ -404,14 +408,6 @@ function MenuPageContent({
   const hasSeedData = Boolean(initialDishes && initialDishes.length > 0);
   const [isLoading, setIsLoading] = useState(!hasSeedData);
   const { language: lang, setLanguage: setLang, t } = useLanguage();
-  const [isReviewSectionVisible, setIsReviewSectionVisible] = useState(false);
-  const reviewSectionRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => setIsReviewSectionVisible(entry.isIntersecting), { threshold: 0.01 });
-    if (reviewSectionRef.current) observer.observe(reviewSectionRef.current);
-    return () => observer.disconnect();
-  }, []);
 
   const loadData = async () => {
     try {
@@ -918,7 +914,7 @@ function MenuPageContent({
         </div>
 
         {/* ── Rate Us Card ── */}
-        <div ref={reviewSectionRef} className="px-4 pb-6" id="review-section">
+        <div className="px-4 pb-6" id="review-section">
           <RateUsCard />
         </div>
 
@@ -930,19 +926,13 @@ function MenuPageContent({
         </div>
       </div>
 
-      {/* ── Rate footer bar (hides when RateUsCard visible) ── */}
-      <div className={["fixed inset-x-0 bottom-0 z-30 flex justify-center px-3 pb-3 transition-all duration-300", isReviewSectionVisible ? "translate-y-[150%] opacity-0 pointer-events-none" : "translate-y-0 opacity-100"].join(" ")}>
-        <button type="button" onClick={() => document.getElementById("review-section")?.scrollIntoView({ behavior: "smooth" })}
-          className="group flex w-full max-w-sm items-center justify-between gap-2 rounded-full border border-[color:var(--brand-gold)]/40 bg-[color:var(--brand-bg-deep)]/95 px-4 py-3 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.7)] backdrop-blur-md">
-          <span className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-[color:var(--brand-gold)]/15">
-              <Star className="h-4 w-4 fill-[color:var(--brand-gold)] text-[color:var(--brand-gold)]" />
-            </span>
-            <span className="font-serif text-[14px] text-[color:var(--brand-gold-soft)]">Rate Your Dining Experience</span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-[color:var(--brand-gold)] transition group-hover:translate-x-0.5" />
-        </button>
-      </div>
+      {/* ── Sticky cart bar — mirrors the Blinkit "View cart" pill; shows
+          only once the cart has items, replacing the old rate-us footer ── */}
+      <StickyCartBar
+        count={cartBadgeCount}
+        total={cartBadgeTotal}
+        onClick={() => { setIsCartOpen(true); setHasOpenedCart(true); }}
+      />
 
       {/* ── Modals & Drawers — lazy-mounted on first genuine interaction ── */}
       {hasOpenedCart && (

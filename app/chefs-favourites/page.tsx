@@ -11,6 +11,7 @@ import { useMenuHome } from "@/context/TableSessionContext";
 import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
 import { toast } from "sonner";
+import { StickyCartBar } from "@/components/StickyCartBar";
 
 function localizeDish(dish: any, lang: string) {
   return {
@@ -41,7 +42,7 @@ function localizeDish(dish: any, lang: string) {
 
 export default function ChefsFavouritesPage() {
   const router = useRouter();
-  const { addItem, totalItems } = useCart();
+  const { addItem, totalItems, totalPrice } = useCart();
   const { language: lang, t } = useLanguage();
   const menuHome = useMenuHome();
   const [rawDishes, setRawDishes] = useState<any[]>([]);
@@ -147,6 +148,12 @@ export default function ChefsFavouritesPage() {
           </div>
         )}
       </div>
+
+      <StickyCartBar
+        count={totalItems}
+        total={totalPrice}
+        onClick={() => router.push(`${menuHome}?cart=open`)}
+      />
     </main>
   );
 }
