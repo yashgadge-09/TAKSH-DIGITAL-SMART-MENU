@@ -12,7 +12,7 @@ import { useSharedSession, SharedSessionProvider } from "@/context/SharedSession
 import { trackCartEventClient } from "@/lib/client-analytics";
 import Link from "next/link";
 import { thumbUrl, playChime } from "@/lib/media";
-import { toast } from "sonner";
+import { StickyCartBar } from "@/components/StickyCartBar";
 
 function LanguageToggle() {
   const langs = ["EN", "HI", "MR"] as const;
@@ -70,7 +70,7 @@ function DishDetailContent() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const { addItem, items, totalItems } = useCart();
+  const { addItem, items, totalItems, totalPrice } = useCart();
   const { language: lang, t } = useLanguage();
   const searchParams = useSearchParams();
   const fromCategory = searchParams.get('from');
@@ -79,6 +79,9 @@ function DishDetailContent() {
   const cartBadgeCount = sharedSession
     ? sharedSession.sharedItems.reduce((sum, item) => sum + item.quantity, 0)
     : totalItems;
+  const cartBadgeTotal = sharedSession
+    ? sharedSession.sharedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    : totalPrice;
 
   const handleBack = () => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -308,7 +311,6 @@ function DishDetailContent() {
 
     setShouldScrollToRecommendations(true);
     setQty(1);
-    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   };
 
   const getRecommendationName = (recommendedDish: any) =>
@@ -768,6 +770,15 @@ function DishDetailContent() {
           </div>
         </div>
       </div>
+
+      {/* Overall-cart pill, stacked just above the dish-specific CTA above so
+          the two read as one connected bottom cluster rather than competing bars */}
+      <StickyCartBar
+        count={cartBadgeCount}
+        total={cartBadgeTotal}
+        bottomOffset={92}
+        onClick={() => router.push(`${menuHome}?cart=open`)}
+      />
     </main>
   );
 }

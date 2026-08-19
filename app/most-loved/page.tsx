@@ -10,7 +10,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useMenuHome } from "@/context/TableSessionContext";
 import Link from "next/link";
 import { thumbUrl } from "@/lib/media";
-import { toast } from "sonner";
+import { StickyCartBar } from "@/components/StickyCartBar";
 
 function localizeDish(dish: any, lang: string, orderCount: number) {
   return {
@@ -42,7 +42,7 @@ function localizeDish(dish: any, lang: string, orderCount: number) {
 
 export default function MostLovedPage() {
   const router = useRouter();
-  const { addItem, totalItems } = useCart();
+  const { addItem, totalItems, totalPrice } = useCart();
   const { language: lang, t } = useLanguage();
   const menuHome = useMenuHome();
   const [rawEntries, setRawEntries] = useState<Array<{ dish: any; orderCount: number }>>([]);
@@ -94,7 +94,6 @@ export default function MostLovedPage() {
       image: dish.image,
       category: dish.category,
     });
-    toast(`${dish.name} added to cart`, { position: "bottom-center", duration: 1600 });
   };
 
   return (
@@ -162,6 +161,12 @@ export default function MostLovedPage() {
           </div>
         )}
       </div>
+
+      <StickyCartBar
+        count={totalItems}
+        total={totalPrice}
+        onClick={() => router.push(`${menuHome}?cart=open`)}
+      />
     </main>
   );
 }
