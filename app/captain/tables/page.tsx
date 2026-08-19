@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type CaptainOrderItem = { id: string; name: string; quantity: number; price: number }
+export type CaptainOrderItem = { id: string; name: string; quantity: number; price: number; note: string | null }
 
 export type CaptainRound = {
   orderId: string

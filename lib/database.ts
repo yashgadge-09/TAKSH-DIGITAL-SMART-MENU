@@ -1967,7 +1967,7 @@ export type RawTableRow = {
       placed_at: string
       status: string
       customers: { name: string } | null
-      order_items: { id: string; name: string; quantity: number; price: number }[]
+      order_items: { id: string; name: string; quantity: number; price: number; note: string | null }[]
     }[]
   }[]
 }
@@ -1983,7 +1983,7 @@ export async function getTablesWithSessions(restaurantId: string): Promise<RawTa
         orders(
           id, round_number, placed_at, status,
           customers(name),
-          order_items(id, name, quantity, price)
+          order_items(id, name, quantity, price, note)
         )
       )
     `)
@@ -2446,7 +2446,7 @@ export type OrderHistoryRound = {
   placedAt: string
   status: string
   customerName: string | null
-  items: { id: string; name: string; quantity: number; price: number }[]
+  items: { id: string; name: string; quantity: number; price: number; note: string | null }[]
   roundTotal: number
 }
 
@@ -2461,7 +2461,7 @@ export async function getOrderHistoryDetail(sessionId: string): Promise<OrderHis
 
   const { data, error } = await adminSupabase
     .from('orders')
-    .select('id, round_number, placed_at, status, customers(name), order_items(id, name, quantity, price)')
+    .select('id, round_number, placed_at, status, customers(name), order_items(id, name, quantity, price, note)')
     .eq('session_id', sessionId)
     .neq('status', 'rejected')
     .order('round_number', { ascending: true })
@@ -3031,7 +3031,7 @@ export async function reprintKot(orderId: string): Promise<void> {
 
   const { data: items } = await adminSupabase
     .from('order_items')
-    .select('name, quantity')
+    .select('name, quantity, note')
     .eq('order_id', orderId)
   if (!items?.length) throw new Error('Order has no items')
 
@@ -3046,7 +3046,7 @@ export async function reprintKot(orderId: string): Promise<void> {
       customerName: ctx.customerName,
       roundNumber: order.round_number,
       time: formatTimeIST(order.placed_at),
-      items: items.map((i) => ({ name: i.name, qty: i.quantity })),
+      items: items.map((i) => ({ name: i.name, qty: i.quantity, note: i.note ?? undefined })),
     },
   })
   if (printError) throw new Error('Failed to queue KOT print job')
@@ -3194,7 +3194,7 @@ export async function addItemsToSession({
   printKot = true,
 }: {
   sessionId: string
-  items: { dishId: string; quantity: number }[]
+  items: { dishId: string; quantity: number; note?: string }[]
   /**
    * false = admin-only bill correction from /admin/history: the food was
    * already served, so no cook ticket must reach the kitchen.
@@ -3210,6 +3210,9 @@ export async function addItemsToSession({
   for (const item of items) {
     if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
       throw new Error('Quantity must be between 1 and 99')
+    }
+    if (item.note && item.note.length > 140) {
+      throw new Error('Note is too long (max 140 characters)')
     }
   }
 
@@ -3241,6 +3244,7 @@ export async function addItemsToSession({
       name: dish.name_en,
       price: dish.price,
       quantity: item.quantity,
+      note: item.note?.trim() || null,
     }
   })
 
@@ -3292,7 +3296,7 @@ export async function addItemsToSession({
         customerName: ctx.customerName,
         roundNumber,
         time: formatTimeIST(order.placed_at),
-        items: validatedItems.map((i) => ({ name: i.name, qty: i.quantity })),
+        items: validatedItems.map((i) => ({ name: i.name, qty: i.quantity, note: i.note ?? undefined })),
       },
     })
     if (printError) throw new Error('Items added but failed to queue KOT print job')
@@ -3333,7 +3337,7 @@ export type RawParcelRow = {
     placed_at: string
     status: string
     customers: { name: string } | null
-    order_items: { id: string; name: string; quantity: number; price: number }[]
+    order_items: { id: string; name: string; quantity: number; price: number; note: string | null }[]
   }[]
 }
 
@@ -3402,7 +3406,7 @@ export async function getParcelSessions(restaurantId: string): Promise<RawParcel
       orders(
         id, round_number, placed_at, status,
         customers(name),
-        order_items(id, name, quantity, price)
+        order_items(id, name, quantity, price, note)
       )
     `)
     .eq('restaurant_id', restaurantId)

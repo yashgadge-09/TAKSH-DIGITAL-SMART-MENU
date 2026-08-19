@@ -128,7 +128,12 @@ export function HistorySheet({
                   <ul className="divide-y divide-[#F0E4D0]">
                     {round.items.map(item => (
                       <li key={item.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-                        <span className="min-w-0 flex-1 truncate text-[#2C1810]">{item.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate text-[#2C1810]">{item.name}</span>
+                          {item.note && (
+                            <span className="block truncate text-[11px] italic text-[#A46833]">Note: {item.note}</span>
+                          )}
+                        </div>
                         <span className="ml-2 shrink-0 text-[#8E6D4E]">
                           {item.quantity}× {inrExact(item.price)} = {inrExact(item.price * item.quantity)}
                         </span>

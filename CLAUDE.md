@@ -183,11 +183,11 @@ Run: `cd print-bridge && npm i && npm start` (print loop) or `npm run qr` (QR PD
 
 Uses the **service role key** (required — `print_jobs` has no public SELECT/UPDATE RLS policy). Polls `print_jobs` every `POLL_MS` (default 2 s). `MOCK_PRINT=true` → formats KOT/bill to console. `MOCK_PRINT=false` → TCP socket to printer IP:9100 (ESC/POS). Chained `setTimeout` (not `setInterval`) prevents overlapping ticks. Per-job + per-tick try/catch → failed job marked `status: failed`, loop keeps running.
 
-Payload field names (exact — set by `approveOrder` / `generateBill`):
-- KOT: `{ tableNumber, roundNumber, time, items: { name, qty }[], orderType?, tokenNumber?, customerName? }`
+Payload field names (exact — set by `approveOrder` / `addItemsToSession` / `generateBill`):
+- KOT: `{ tableNumber, roundNumber, time, items: { name, qty, note? }[], orderType?, tokenNumber?, customerName? }`
 - Bill: `{ restaurantName, address, gstin, upiId, tableNumber, orderType?, tokenNumber?, customerName, rounds: { number, time, items: { name, qty, price }[] }[], subtotal, gstRate, gstAmount, total }`
 
-The three optional fields carry parcel orders (`orderType: 'parcel'`): the KOT prints `PARCEL #N` / `NAME:` in place of `TABLE N`, and the bill header reads `PARCEL #N`. They are absent on pre-parcel jobs, which still print exactly as before. **The bridge runs on the restaurant PC — it needs a `git pull` + restart there for parcel slips to format correctly.**
+The three optional fields carry parcel orders (`orderType: 'parcel'`): the KOT prints `PARCEL #N` / `NAME:` in place of `TABLE N`, and the bill header reads `PARCEL #N`. They are absent on pre-parcel jobs, which still print exactly as before. Per-item `note` (captain-entered prep instructions, e.g. "half portion", "extra spicy" — set only via `addItemsToSession`, never by guest-placed orders) prints as an indented, unbold line under that item on the KOT; absent on jobs queued before this shipped. **The bridge runs on the restaurant PC — it needs a `git pull` + restart there for both parcel slips and item notes to format correctly.**
 
 ### Push Notifications Flow
 

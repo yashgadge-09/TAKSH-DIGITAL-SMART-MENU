@@ -229,7 +229,12 @@ export function TableSheet({
                   <ul className="mb-2 divide-y divide-[#F0E4D0]">
                     {round.items.map(item => (
                       <li key={item.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-                        <span className="min-w-0 flex-1 truncate text-[#2C1810]">{item.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate text-[#2C1810]">{item.name}</span>
+                          {item.note && (
+                            <span className="block truncate text-[11px] italic text-[#A46833]">Note: {item.note}</span>
+                          )}
+                        </div>
                         {canEditItems ? (
                           <span className="flex shrink-0 items-center gap-2">
                             <span className="flex items-center gap-1 rounded-lg border border-[#E0CBAA] bg-[#FFFBF4]">
@@ -322,103 +327,114 @@ export function TableSheet({
             </p>
           )}
 
-          {table.status === "active" && (
+          {canEditItems ? (
+            // Editing needs the screen, not a wall of billing/table-management
+            // buttons underneath it — collapse everything else to one exit.
+            <button
+              onClick={() => setEditingBill(false)}
+              data-testid="done-editing"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white transition-colors hover:bg-[#8B5A2B] active:bg-[#8B5A2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Done Editing
+            </button>
+          ) : (
             <>
-              <button
-                onClick={() => handlePrintBill(true)}
-                disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
-                data-testid="print-bill-and-pay"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-50"
-              >
-                <Wallet className="h-4 w-4" />
-                {actionLoading ? "Working…" : "Print Bill & Take Payment"}
-              </button>
-              {!editingBill && (
-                <button
-                  onClick={() => setEditingBill(true)}
-                  disabled={actionLoading || table.rounds.length === 0}
-                  data-testid="edit-bill"
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
-                >
-                  <Pencil className="h-4 w-4" />
-                  Edit Bill
-                </button>
-              )}
-              <button
-                onClick={() => handlePrintBill(false)}
-                disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
-                data-testid="print-bill"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
-              >
-                <Receipt className="h-4 w-4" />
-                Print Bill
-              </button>
-            </>
-          )}
-
-          {table.status === "bill_generated" && (
-            <>
-              {billStale && (
-                <p className="text-xs font-medium text-[#C47A20]" data-testid="bill-stale-hint">
-                  Items changed after printing — reprint the bill before taking payment.
-                </p>
-              )}
-              <button
-                onClick={onRequestSettle}
-                disabled={actionLoading || billStale}
-                data-testid="settle-open"
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white transition-colors hover:bg-[#8B5A2B] active:bg-[#8B5A2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] focus-visible:ring-offset-2 disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Take Payment · Settle & Save
-              </button>
-              <div className="flex gap-2">
-                {!editingBill && (
+              {table.status === "active" && (
+                <>
+                  <button
+                    onClick={() => handlePrintBill(true)}
+                    disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
+                    data-testid="print-bill-and-pay"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-50"
+                  >
+                    <Wallet className="h-4 w-4" />
+                    {actionLoading ? "Working…" : "Print Bill & Take Payment"}
+                  </button>
                   <button
                     onClick={() => setEditingBill(true)}
-                    disabled={actionLoading}
+                    disabled={actionLoading || table.rounds.length === 0}
                     data-testid="edit-bill"
-                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
                   >
                     <Pencil className="h-4 w-4" />
                     Edit Bill
                   </button>
-                )}
+                  <button
+                    onClick={() => handlePrintBill(false)}
+                    disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
+                    data-testid="print-bill"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
+                  >
+                    <Receipt className="h-4 w-4" />
+                    Print Bill
+                  </button>
+                </>
+              )}
+
+              {table.status === "bill_generated" && (
+                <>
+                  {billStale && (
+                    <p className="text-xs font-medium text-[#C47A20]" data-testid="bill-stale-hint">
+                      Items changed after printing — reprint the bill before taking payment.
+                    </p>
+                  )}
+                  <button
+                    onClick={onRequestSettle}
+                    disabled={actionLoading || billStale}
+                    data-testid="settle-open"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white transition-colors hover:bg-[#8B5A2B] active:bg-[#8B5A2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] focus-visible:ring-offset-2 disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Take Payment · Settle & Save
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditingBill(true)}
+                      disabled={actionLoading}
+                      data-testid="edit-bill"
+                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit Bill
+                    </button>
+                    <button
+                      onClick={handleReprintBill}
+                      disabled={actionLoading || table.pendingCount > 0}
+                      data-testid="reprint-bill"
+                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
+                    >
+                      <Printer className="h-4 w-4" />
+                      {actionLoading ? "Printing…" : "Reprint Bill"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Nothing to carry across on a scanned or awaiting-approval table. */}
+              {serving && (
                 <button
-                  onClick={handleReprintBill}
-                  disabled={actionLoading || table.pendingCount > 0}
-                  data-testid="reprint-bill"
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
+                  onClick={onRequestMove}
+                  disabled={actionLoading}
+                  data-testid="move-table-open"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#CFAF8C] text-sm font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
                 >
-                  <Printer className="h-4 w-4" />
-                  {actionLoading ? "Printing…" : "Reprint Bill"}
+                  <ArrowLeftRight className="h-4 w-4" />
+                  Move Table
                 </button>
-              </div>
+              )}
+
+              <button
+                onClick={handleForceReset}
+                disabled={actionLoading}
+                data-testid="force-reset"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300/70 bg-white text-sm font-medium text-red-500 transition-colors hover:bg-red-50 active:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Force Reset (no bill)
+              </button>
             </>
           )}
-
-          {/* Nothing to carry across on a scanned or awaiting-approval table. */}
-          {serving && (
-            <button
-              onClick={onRequestMove}
-              disabled={actionLoading}
-              data-testid="move-table-open"
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#CFAF8C] text-sm font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
-            >
-              <ArrowLeftRight className="h-4 w-4" />
-              Move Table
-            </button>
-          )}
-
-          <button
-            onClick={handleForceReset}
-            disabled={actionLoading}
-            data-testid="force-reset"
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300/70 bg-white text-sm font-medium text-red-500 transition-colors hover:bg-red-50 active:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Force Reset (no bill)
-          </button>
         </div>
       </ResponsiveSheet>
 

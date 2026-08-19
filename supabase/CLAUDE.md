@@ -22,6 +22,7 @@ All schema changes are tracked in `supabase/migrations/` as timestamped SQL file
 2026070203_one_active_session_per_table.sql    — partial unique index (table_id WHERE status='active'): guarantees one host/PIN per table, closing the simultaneous-scan race
 2026073001_bills_realtime.sql                  — adds public.bills to the supabase_realtime publication so settling a bill live-updates /admin/analytics
 2026080601_activity_log.sql                    — activity_log audit table (A01): immutable, service-role only (RLS enabled, zero policies), deliberately NO foreign keys, UPDATE/DELETE revoked from app roles
+2026081901_order_item_notes.sql                — order_items.note (nullable text): captain-entered prep note per item, printed on the KOT
 ```
 
 ## Invariant: one active session per table
@@ -116,7 +117,7 @@ All tables are seeded and actively used by the ordering flow (T01–T14).
 - **`table_sessions`** — active dining sessions with 4-digit PIN; status: `active` / `bill_generated` / `closed`; `host_device_id` + `host_name` columns for shared-cart host tracking (added by `2026062501_shared_cart.sql`)
 - **`customers`** — name + optional phone; reused by `(restaurant_id, phone)`; `whatsapp_opted_in` bool
 - **`orders`** — round-based ordering per session; status: `pending_approval` / `approved` / `rejected` / `served`; default `pending_approval`
-- **`order_items`** — snapshotted dish `name` + `price` at order time; FK to `orders`
+- **`order_items`** — snapshotted dish `name` + `price` at order time; FK to `orders`; `note` (nullable text) is a captain-entered prep instruction, set only via `addItemsToSession`, printed on the KOT
 - **`bills`** — `subtotal`, `gst_amount`, `total` per session; created by `generateBill()`; `payment_method` + `settled_at` stamped by `settleBill()`. **`settled_at IS NOT NULL` = revenue** (`/admin/analytics` ignores unsettled bills). In the `supabase_realtime` publication; the `Admins read bills` SELECT policy keeps captains from receiving those events
 - **`print_jobs`** — KOT/bill print queue; type: `kot` / `bill`; status: `pending` / `sent` / `failed`; KOT rows created **only** by `approveOrder()`, never by `placeOrder()`
 - **`session_cart_items`** — shared DB-backed cart; one row per (session, dish, device); `added_by_device_id` + `added_by_name` for attribution; `on delete cascade` from `table_sessions`; in `supabase_realtime` publication; SELECT open to anon (for Realtime delivery); all writes via service role

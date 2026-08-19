@@ -528,9 +528,14 @@ export default function AdminHistoryPage() {
                                             key={item.id}
                                             className="flex items-center justify-between gap-2 py-1.5 text-sm"
                                           >
-                                            <span className="min-w-0 flex-1 truncate text-[#2C1810]">
-                                              {item.name}
-                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                              <span className="block truncate text-[#2C1810]">{item.name}</span>
+                                              {item.note && (
+                                                <span className="block truncate text-[11px] italic text-[#A46833]">
+                                                  Note: {item.note}
+                                                </span>
+                                              )}
+                                            </div>
                                             {editingSessionId === entry.sessionId ? (
                                               <span className="flex shrink-0 items-center gap-2">
                                                 <span className="flex items-center gap-1 rounded-lg border border-[#E0CBAA] bg-[#FFFBF4]">

@@ -40,6 +40,7 @@ export function AddItemModal({
   // input itself stays on `query` so typing echoes instantly.
   const [appliedQuery, setAppliedQuery] = useState("")
   const [quantities, setQuantities] = useState<Record<string, number>>({})
+  const [notes, setNotes] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [visibleCount, setVisibleCount] = useState(BATCH)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -113,13 +114,21 @@ export function AddItemModal({
     setQuantities(prev => ({ ...prev, [dishId]: Math.max(0, Math.min(99, qty)) }))
   }
 
+  function setNote(dishId: string, note: string) {
+    setNotes(prev => ({ ...prev, [dishId]: note }))
+  }
+
   async function handleAdd() {
     if (!selected.length) return
     setSaving(true)
     try {
       const { roundNumber } = await addItemsToSession({
         sessionId,
-        items: selected.map(([dishId, quantity]) => ({ dishId, quantity })),
+        items: selected.map(([dishId, quantity]) => ({
+          dishId,
+          quantity,
+          note: notes[dishId]?.trim() || undefined,
+        })),
         printKot,
       })
       toast.success(
@@ -194,38 +203,51 @@ export function AddItemModal({
                 return (
                   <li
                     key={dish.id}
-                    className="flex items-center justify-between gap-3 py-2.5 md:border-b md:border-[#F0E4D0]"
+                    className="flex flex-col gap-1.5 py-2.5 md:border-b md:border-[#F0E4D0]"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#2C1810]">{dish.name_en}</p>
-                      <p className="text-xs text-[#8E6D4E]">₹{Number(dish.price).toLocaleString("en-IN")}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[#2C1810]">{dish.name_en}</p>
+                        <p className="text-xs text-[#8E6D4E]">₹{Number(dish.price).toLocaleString("en-IN")}</p>
+                      </div>
+                      {qty === 0 ? (
+                        <button
+                          onClick={() => setQty(dish.id, 1)}
+                          data-testid={`add-dish-${dish.id}`}
+                          className="flex h-11 items-center gap-1 rounded-lg border border-[#2A6B3A] px-3 text-xs font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] md:h-9"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add
+                        </button>
+                      ) : (
+                        <span className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E0CBAA] bg-white">
+                          <button
+                            onClick={() => setQty(dish.id, qty - 1)}
+                            aria-label={`Decrease ${dish.name_en}`}
+                            className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="min-w-5 text-center text-sm font-semibold text-[#2C1810]">{qty}</span>
+                          <button
+                            onClick={() => setQty(dish.id, qty + 1)}
+                            aria-label={`Increase ${dish.name_en}`}
+                            className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      )}
                     </div>
-                    {qty === 0 ? (
-                      <button
-                        onClick={() => setQty(dish.id, 1)}
-                        data-testid={`add-dish-${dish.id}`}
-                        className="flex h-11 items-center gap-1 rounded-lg border border-[#2A6B3A] px-3 text-xs font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] md:h-9"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Add
-                      </button>
-                    ) : (
-                      <span className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E0CBAA] bg-white">
-                        <button
-                          onClick={() => setQty(dish.id, qty - 1)}
-                          aria-label={`Decrease ${dish.name_en}`}
-                          className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span className="min-w-5 text-center text-sm font-semibold text-[#2C1810]">{qty}</span>
-                        <button
-                          onClick={() => setQty(dish.id, qty + 1)}
-                          aria-label={`Increase ${dish.name_en}`}
-                          className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
+                    {qty > 0 && (
+                      <input
+                        type="text"
+                        value={notes[dish.id] ?? ""}
+                        onChange={e => setNote(dish.id, e.target.value)}
+                        placeholder="Note for the kitchen — e.g. half portion, extra spicy…"
+                        maxLength={140}
+                        data-testid={`add-item-note-${dish.id}`}
+                        className="h-9 w-full rounded-lg border border-[#E0CBAA] bg-[#FFFBF4] px-2.5 text-xs text-[#2C1810] outline-none placeholder:text-[#B49A80] focus:border-[#A46833]"
+                      />
                     )}
                   </li>
                 )
