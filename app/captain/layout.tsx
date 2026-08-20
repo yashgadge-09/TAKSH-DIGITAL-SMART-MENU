@@ -78,7 +78,13 @@ export default function CaptainLayout({ children }: { children: ReactNode }) {
     })()
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        // INITIAL_SESSION fires the instant this listener is registered, with
+        // whatever the client has resolved so far — on a fresh reload that can
+        // momentarily be null, a beat before cookies finish restoring the real
+        // session, racing the getSession() call above. The explicit check owns
+        // that decision; this listener only reacts to auth changes after mount.
+        if (event === "INITIAL_SESSION") return
         if (!session) {
           clearExpiryTimer()
           localStorage.removeItem(CAPTAIN_LOGIN_AT_KEY)

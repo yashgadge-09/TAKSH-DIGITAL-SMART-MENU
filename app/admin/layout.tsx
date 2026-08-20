@@ -39,7 +39,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        // INITIAL_SESSION fires the instant this listener is registered, with
+        // whatever the client has resolved so far — on a fresh reload that can
+        // momentarily be null, a beat before cookies finish restoring the real
+        // session, racing the getSession() call above. Ignore it; only react
+        // to auth changes that happen after mount.
+        if (event === "INITIAL_SESSION") return
         if (!session) {
           router.replace("/admin")
         }
