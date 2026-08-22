@@ -45,6 +45,9 @@ export function NotificationPrompt() {
   }, []);
 
   useEffect(() => {
+    // PAUSED — popup disabled until explicitly re-enabled. Do not remove; uncomment to restore.
+    return;
+    /*
     if (!initialized) return;
 
     const startTime = Date.now();
@@ -68,6 +71,7 @@ export function NotificationPrompt() {
       }
     }, 1000);
     return () => clearInterval(interval);
+    */
   }, [initialized]);
 
   const handleAccept = async () => {
