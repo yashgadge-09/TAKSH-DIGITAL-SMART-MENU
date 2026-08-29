@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { addItemsToSession } from "@/lib/database"
 import { toast } from "sonner"
-import { X, Search, Minus, Plus, ChefHat } from "lucide-react"
+import { ArrowLeft, Search, Minus, Plus, ChefHat } from "lucide-react"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
+import { cn } from "@/lib/utils"
 
 type PickerDish = { id: string; name_en: string; price: number }
 
@@ -43,8 +44,16 @@ export function AddItemModal({
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [visibleCount, setVisibleCount] = useState(BATCH)
+  const [searchFocused, setSearchFocused] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  // While the on-screen keyboard is up, the title/subtitle row is the one
+  // thing in the header that isn't earning its space — collapse it so the
+  // dish list keeps as much of the shrunk viewport as possible. Sticks once
+  // there's a query even after the field blurs (e.g. tapping a dish's Add
+  // button), since "still searching" matters more than "currently focused".
+  const compactHeader = searchFocused || query.trim().length > 0
 
   // While the round is being saved, closing must be impossible: the walk-in
   // flow treats onClose as "abandoned" and frees the table — racing that
@@ -145,39 +154,58 @@ export function AddItemModal({
 
   return (
     <ResponsiveSheet
-      variant="sheet"
+      variant="fullscreen"
       tier="raised"
       width="2xl"
       testId="add-item-modal"
       onClose={guardedClose}
-      // Fixed height (not max-h): the dish list loads async, and a
+      // Fixed height on desktop (not max-h): the dish list loads async, and a
       // content-sized panel would jump from stub to full-screen when it lands.
-      className="h-[85dvh] md:h-[min(80dvh,44rem)]"
+      // Mobile height comes from the `fullscreen` variant itself.
+      className="md:h-[min(80dvh,44rem)]"
     >
-      {/* Header */}
-      <div className="shrink-0 border-b border-[#E8D5BC] px-4 pb-3 pt-4">
-        <div className="mb-3 flex items-start justify-between">
-          <div className="min-w-0">
-            <SheetTitle asChild>
-              <h2 className="text-lg font-bold text-[#2C1810]">Add Items</h2>
-            </SheetTitle>
-            <p className="truncate text-xs text-[#8E6D4E]">
-              {label} — {printKot ? "new KOT round" : "bill correction (no KOT)"}
-            </p>
-          </div>
+      {/* Header — collapses to just the search bar while the captain is
+          actively searching, so the keyboard doesn't eat the whole list. */}
+      <div
+        className={cn(
+          "shrink-0 border-b border-[#E8D5BC] px-4 transition-[padding] duration-150",
+          compactHeader ? "pb-2 pt-2" : "pb-3 pt-4"
+        )}
+      >
+        <div className={cn("flex items-center gap-1", compactHeader ? "mb-1.5" : "mb-3")}>
           <button
             onClick={guardedClose}
-            data-testid="add-item-close"
-            className="-mr-2 -mt-2 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
+            aria-label="Back"
+            data-testid="add-item-back"
+            className="-ml-2 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
           >
-            <X className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
+          <div className="min-w-0 flex-1">
+            <SheetTitle asChild>
+              <h2
+                className={cn(
+                  "truncate font-bold text-[#2C1810] transition-[font-size] duration-150",
+                  compactHeader ? "text-sm" : "text-lg"
+                )}
+              >
+                Add Items
+              </h2>
+            </SheetTitle>
+            {!compactHeader && (
+              <p className="truncate text-xs text-[#8E6D4E]">
+                {label} — {printKot ? "new KOT round" : "bill correction (no KOT)"}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 rounded-xl border border-[#D4C4B4] bg-white px-3 focus-within:border-[#A46833]">
           <Search className="h-4 w-4 shrink-0 text-[#A08060]" />
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             placeholder="Search dishes…"
             data-testid="add-item-search"
             className="h-11 w-full bg-transparent text-sm text-[#2C1810] outline-none placeholder:text-[#B49A80]"

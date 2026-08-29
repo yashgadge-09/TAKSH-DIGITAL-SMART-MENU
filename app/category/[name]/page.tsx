@@ -1,0 +1,308 @@
+"use client";
+
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, ChefHat, Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
+import { getMenuListDishes, trackMenuView, addSharedCartItem } from "@/lib/database";
+import { shouldTrackClientEvent } from "@/lib/session";
+import { useCart } from "@/context/CartContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { useMenuHome, useResolvedTableEntry, TableSessionProvider } from "@/context/TableSessionContext";
+import { useSharedSession, SharedSessionProvider } from "@/context/SharedSessionContext";
+import { trackCartEventClient } from "@/lib/client-analytics";
+import { isSameCategory } from "@/lib/utils";
+import Link from "next/link";
+import { thumbUrl, playChime, isVideoUrl } from "@/lib/media";
+import { StickyCartBar } from "@/components/StickyCartBar";
+
+function localizeDish(dish: any, lang: string) {
+  return {
+    ...dish,
+    name: dish[`name_${lang}`] || dish.name?.[lang] || dish.name_en || "",
+    description: dish[`description_${lang}`] || dish.description?.[lang] || dish.description_en || "",
+    image: (() => {
+      if (Array.isArray(dish.image_url) && dish.image_url.length > 0) return dish.image_url[0];
+      if (typeof dish.image_url === "string" && dish.image_url.startsWith("[")) {
+        try {
+          const p = JSON.parse(dish.image_url);
+          if (Array.isArray(p) && p.length > 0) return p[0];
+        } catch {}
+      }
+      return dish.image_url || dish.image || "";
+    })(),
+    tasteDescription: dish[`taste_${lang}`] || dish.taste_en || "",
+    spiceLevel: Number(dish.spice_level ?? 0),
+    isChefSpecial: dish.is_chef_special ?? false,
+  };
+}
+
+export default function CategoryPage() {
+  const tableEntry = useResolvedTableEntry();
+
+  if (tableEntry) {
+    return (
+      <TableSessionProvider value={tableEntry}>
+        <SharedSessionProvider
+          restaurantId={tableEntry.restaurantId}
+          tableId={tableEntry.tableId}
+          tableNumber={tableEntry.tableNumber}
+        >
+          <CategoryPageContent />
+        </SharedSessionProvider>
+      </TableSessionProvider>
+    );
+  }
+
+  return <CategoryPageContent />;
+}
+
+function CategoryPageContent() {
+  const params = useParams();
+  const router = useRouter();
+  const categoryName = decodeURIComponent((params.name as string) || "");
+  const { addItem, totalItems, totalPrice } = useCart();
+  const { language: lang, t } = useLanguage();
+  const menuHome = useMenuHome();
+  const sharedSession = useSharedSession();
+  const [rawDishes, setRawDishes] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const cartBadgeCount = sharedSession
+    ? sharedSession.sharedItems.reduce((sum, item) => sum + item.quantity, 0)
+    : totalItems;
+  const cartBadgeTotal = sharedSession
+    ? sharedSession.sharedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    : totalPrice;
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getMenuListDishes();
+        setRawDishes((data || []).filter((dish: any) => isSameCategory(dish.category, categoryName)));
+      } catch (err) {
+        console.error("Failed to load category dishes", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+    if (shouldTrackClientEvent("menu-view", 30000)) {
+      void trackMenuView().catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryName]);
+
+  const dishes = useMemo(() => rawDishes.map(d => localizeDish(d, lang)), [rawDishes, lang]);
+
+  const filteredDishes = useMemo(() => {
+    const sl = searchQuery.toLowerCase().trim();
+    if (!sl) return dishes;
+    return dishes.filter(d =>
+      (d.name || "").toLowerCase().includes(sl) || (d.description || "").toLowerCase().includes(sl)
+    );
+  }, [dishes, searchQuery]);
+
+  const handleAddDishToCart = (dish: any) => {
+    const cartDish = { id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category };
+    if (sharedSession) {
+      playChime();
+      sharedSession.addOptimisticItem(cartDish);
+      void addSharedCartItem({
+        sessionId: sharedSession.sessionId,
+        deviceId: sharedSession.deviceId,
+        displayName: sharedSession.displayName,
+        dish: cartDish,
+      }).catch(() => {});
+      trackCartEventClient(cartDish.id, cartDish.name, cartDish.category || "General", Number(cartDish.price) || 0);
+    } else {
+      addItem(cartDish);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-[color:var(--brand-bg)] text-[color:var(--brand-gold-soft)] pb-28">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-50 bg-[color:var(--brand-bg)]/95 backdrop-blur-md pb-1 border-b border-[color:var(--brand-gold)]/10">
+        <header className="px-4 pt-5 pb-2">
+          <div className="mx-auto max-w-sm grid grid-cols-[40px_1fr_40px] items-center gap-3">
+            <button
+              onClick={() => router.push(menuHome)}
+              className="grid h-9 w-9 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)]"
+              aria-label="Back to menu"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="text-center">
+              <h1 className="font-serif text-[20px] leading-none tracking-wide text-[color:var(--brand-gold)] truncate">
+                {categoryName}
+              </h1>
+              <p className="mt-1 text-[8px] font-medium tracking-[0.2em] text-[color:var(--brand-gold-muted)] uppercase">
+                TAKSH PURE VEG
+              </p>
+            </div>
+            {/* Cart shortcut */}
+            <Link
+              href={`${menuHome}?cart=open`}
+              className="relative grid h-9 w-9 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] ml-auto"
+              aria-label={`View cart, ${cartBadgeCount} items`}
+            >
+              <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
+              {cartBadgeCount > 0 && (
+                <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-[color:var(--brand-gold)] text-[9px] font-semibold text-[color:var(--brand-bg-deep)]">
+                  {cartBadgeCount}
+                </span>
+              )}
+            </Link>
+          </div>
+
+          {/* Search within this category */}
+          <div className="mx-auto mt-3 max-w-sm">
+            <label htmlFor="category-search" className="sr-only">Search in {categoryName}</label>
+            <div
+              className="flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] ring-1 ring-[color:var(--brand-gold)]/40"
+              style={{
+                background: "linear-gradient(110deg, var(--brand-gold) 0%, #FFE4B5 35%, var(--brand-gold) 70%, #B87333 100%)"
+              }}
+            >
+              <Search className="h-4 w-4 shrink-0 text-[color:var(--brand-bg-deep)]" strokeWidth={2.4} />
+              <input
+                id="category-search"
+                type="search"
+                placeholder={t("searchPlaceholder") || "Search for dishes, drinks…"}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent text-[13px] font-medium text-[color:var(--brand-bg-deep)] placeholder:text-[color:var(--brand-bg-deep)]/70 focus:outline-none"
+              />
+            </div>
+          </div>
+        </header>
+      </div>
+
+      {/* Content */}
+      <div className="mx-auto w-full max-w-sm px-4 pt-6">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <RefreshCw className="h-8 w-8 animate-spin text-[color:var(--brand-gold)] mb-3" />
+            <p className="text-[13px] text-[color:var(--brand-gold-muted)]">Loading menu…</p>
+          </div>
+        ) : filteredDishes.length === 0 ? (
+          <div className="flex flex-col items-center py-20 text-center">
+            <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/20">
+              <span className="text-3xl">🍽️</span>
+            </div>
+            <p className="font-serif text-[18px] text-[color:var(--brand-gold)]">{t("noDishesFound")}</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-[color:var(--brand-gold-muted)]">
+              {searchQuery ? t("tryDifferentKeywords") : t("noDishesAvailable")}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredDishes.map((dish, index) => (
+              <DishCard
+                key={dish.id}
+                dish={dish}
+                index={index}
+                onAdd={() => handleAddDishToCart(dish)}
+                onClick={() => router.push(`/dish/${dish.id}?from=${encodeURIComponent(categoryName)}`)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <StickyCartBar
+        count={cartBadgeCount}
+        total={cartBadgeTotal}
+        onClick={() => router.push(`${menuHome}?cart=open`)}
+      />
+    </main>
+  );
+}
+
+function DishCard({ dish, index, onAdd, onClick }: any) {
+  const isSpecial = dish.isChefSpecial;
+  const [isVisible, setIsVisible] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setIsVisible(true);
+      },
+      { threshold: 0.1 }
+    );
+    if (cardRef.current) observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <article
+      ref={cardRef}
+      onClick={onClick}
+      className={`relative flex cursor-pointer items-center gap-4 rounded-2xl shadow-[0_8px_20px_-12px_rgba(0,0,0,0.7)] transition-all duration-700 hover:ring-[color:var(--brand-gold)]/40 hover:-translate-y-0.5 ${
+        isVisible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
+      } ${
+        isSpecial
+          ? "p-4 -mx-3 my-3 animated-gradient-bg border border-[color:var(--brand-gold)]/50"
+          : "p-3 bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15"
+      }`}
+      style={{ transitionDelay: `${index * 50}ms` }}
+    >
+      {isSpecial && (
+        <div className="absolute -top-2.5 -left-2 bg-gradient-to-r from-[color:var(--brand-gold)] to-[#b37435] text-[color:var(--brand-bg-deep)] px-2.5 py-0.5 text-[9px] font-extrabold tracking-widest uppercase rounded shadow-[0_4px_10px_rgba(212,140,70,0.4)] border border-[color:var(--brand-gold)] z-10 flex items-center gap-1">
+          <ChefHat className="h-3 w-3" strokeWidth={2.5} /> Chef's Pick
+        </div>
+      )}
+      <div className="relative flex-1 min-w-0">
+        <h3 className={`font-serif leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 ${isSpecial ? "text-[17px]" : "text-[15px]"}`}>
+          {dish.name}
+        </h3>
+        {dish.tasteDescription && (
+          <p className={`mt-0.5 italic text-[color:var(--brand-gold-muted)] line-clamp-1 ${isSpecial ? "text-[13px]" : "text-[12px]"}`}>
+            {dish.tasteDescription}
+          </p>
+        )}
+        {dish.spiceLevel > 0 && (
+          <span className={`mt-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 font-bold uppercase tracking-wider text-orange-400 ${isSpecial ? "px-2.5 py-1 text-[11px]" : "px-2 py-0.5 text-[10px]"}`}>
+            {"🔥".repeat(dish.spiceLevel)} {dish.spiceLevel === 1 ? "Low" : dish.spiceLevel === 2 ? "Medium" : "High"}
+          </span>
+        )}
+        <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>
+          ₹{dish.price}
+        </p>
+      </div>
+      <div className="relative flex shrink-0 flex-col items-center">
+        <div className={`overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
+          {dish.image ? (
+            isVideoUrl(dish.image) ? (
+              <video src={dish.image} muted loop autoPlay playsInline className="h-full w-full object-cover" />
+            ) : (
+              <img
+                src={thumbUrl(dish.image, 300)}
+                alt={dish.name}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            )
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
+              <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onAdd(); }}
+          className={`absolute -bottom-3 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ${isSpecial ? "px-4 py-1.5 text-[11px]" : "px-3 py-1 text-[10px]"}`}
+          aria-label={`Add ${dish.name} to cart`}
+        >
+          ADD <Plus className={`h-3 w-3 ${isSpecial ? "scale-110" : ""}`} strokeWidth={2.4} />
+        </button>
+      </div>
+    </article>
+  );
+}
