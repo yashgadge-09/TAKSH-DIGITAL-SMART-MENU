@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { TakshBrand } from "@/components/TakshBrand"
@@ -11,6 +11,24 @@ export default function CaptainLoginPage() {
   const [password, setPassword] = useState("")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  // A signed-in captain landing back on /captain — e.g. the system back
+  // button popping history from /captain/tables — should bounce straight
+  // to the panel instead of being shown the login form again.
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!mounted) return
+      if (data.session) {
+        router.replace("/captain/tables")
+        return
+      }
+      setCheckingSession(false)
+    })()
+    return () => { mounted = false }
+  }, [router])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,10 +46,20 @@ export default function CaptainLoginPage() {
       return
     }
 
-    // Admins may open the captain panel too; captains land here only
+    // Admins may open the captain panel too; captains land here only.
+    // `replace` (not `push`) keeps /captain out of history after a
+    // successful sign-in, so the back button lands on /captain/tables.
     if (data.user?.app_metadata?.role === "captain" || data.user) {
-      router.push("/captain/tables")
+      router.replace("/captain/tables")
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#2A190F_0%,#140C08_100%)] px-4 text-center text-sm text-[#F1D2A2]">
+        Checking session...
+      </div>
+    )
   }
 
   return (
