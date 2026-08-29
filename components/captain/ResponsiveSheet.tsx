@@ -18,10 +18,15 @@ import { cn } from "@/lib/utils"
  * one DOM tree, no useIsMobile, no hydration flash.
  *
  * Variants:
- *   sheet  — < md: bottom sheet exactly as today (rounded-t-3xl, slide-up);
- *            ≥ md: centered dialog with fade + zoom.
- *   dialog — centered card at every width, as today on mobile; width-capped
- *            from sm up instead of stretching with inset-x-4.
+ *   sheet      — < md: bottom sheet exactly as today (rounded-t-3xl, slide-up);
+ *                ≥ md: centered dialog with fade + zoom.
+ *   dialog     — centered card at every width, as today on mobile; width-capped
+ *                from sm up instead of stretching with inset-x-4.
+ *   fullscreen — < md: edge-to-edge, full-height (no rounded corners) — for
+ *                content-heavy panels (the dish picker) where the 88dvh sheet
+ *                cap plus header/footer chrome leaves almost nothing once the
+ *                on-screen keyboard opens; ≥ md: identical centered dialog to
+ *                `sheet`, so desktop is unaffected.
  *
  * Parents keep their existing mount pattern (`{selected && <Sheet …/>}`) —
  * the Root is always open and unmount happens through onClose, so Escape and
@@ -42,6 +47,11 @@ const WIDTH = {
   "2xl": "md:max-w-2xl",
 } as const
 
+// Shared by `sheet` and `fullscreen` — both become the same centered dialog
+// from md up; they only differ below md.
+const CENTERED_DIALOG_FROM_MD =
+  "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-full md:-translate-x-1/2 md:-translate-y-1/2 md:max-h-[min(80dvh,44rem)] md:rounded-3xl md:shadow-[0_24px_70px_rgba(0,0,0,0.5)] md:slide-in-from-bottom-0 md:zoom-in-95 md:duration-200"
+
 export function ResponsiveSheet({
   variant = "sheet",
   tier = "base",
@@ -52,7 +62,7 @@ export function ResponsiveSheet({
   className,
   children,
 }: {
-  variant?: "sheet" | "dialog"
+  variant?: "sheet" | "dialog" | "fullscreen"
   tier?: keyof typeof TIER
   width?: keyof typeof WIDTH
   onClose: () => void
@@ -91,8 +101,17 @@ export function ResponsiveSheet({
                   // ≥ md — centered dialog. Tailwind v4 translate utilities use
                   // the independent `translate` property, so the centering
                   // survives tw-animate's transform-based zoom keyframe.
-                  "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-full md:-translate-x-1/2 md:-translate-y-1/2 md:max-h-[min(80dvh,44rem)] md:rounded-3xl md:shadow-[0_24px_70px_rgba(0,0,0,0.5)]",
-                  "md:slide-in-from-bottom-0 md:zoom-in-95 md:duration-200"
+                  CENTERED_DIALOG_FROM_MD
+                )
+              : variant === "fullscreen"
+              ? cn(
+                  // < md — edge-to-edge, no rounded corners, no chrome eating
+                  // into the content height. `h-[100dvh]` (not max-h) so it
+                  // always fills the viewport the keyboard has already shrunk.
+                  "inset-0 flex h-[100dvh] flex-col overflow-hidden",
+                  "animate-in fade-in-0 slide-in-from-bottom-4 duration-200",
+                  // ≥ md — identical centered dialog to `sheet`.
+                  CENTERED_DIALOG_FROM_MD
                 )
               : cn(
                   // Centered card at every width; the panel itself scrolls when
