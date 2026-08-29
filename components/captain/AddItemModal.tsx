@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { addItemsToSession } from "@/lib/database"
 import { toast } from "sonner"
-import { ArrowLeft, Search, Minus, Plus, ChefHat } from "lucide-react"
+import { ArrowLeft, Search, Minus, Plus, ChefHat, CheckCircle2 } from "lucide-react"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import { cn } from "@/lib/utils"
 
@@ -33,6 +33,7 @@ export function AddItemModal({
   onClose: () => void
   onAdded: () => void
 }) {
+  const [view, setView] = useState<"picker" | "confirm">("picker")
   const [dishes, setDishes] = useState<PickerDish[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState("")
@@ -53,13 +54,20 @@ export function AddItemModal({
   // dish list keeps as much of the shrunk viewport as possible. Sticks once
   // there's a query even after the field blurs (e.g. tapping a dish's Add
   // button), since "still searching" matters more than "currently focused".
-  const compactHeader = searchFocused || query.trim().length > 0
+  const compactHeader = view === "picker" && (searchFocused || query.trim().length > 0)
 
   // While the round is being saved, closing must be impossible: the walk-in
   // flow treats onClose as "abandoned" and frees the table — racing that
   // against a KOT already in flight could close a session mid-order.
   function guardedClose() {
     if (!saving) onClose()
+  }
+
+  // The header back arrow steps out of the confirm screen instead of closing
+  // the whole modal — the captain can still edit quantities before sending.
+  function handleBack() {
+    if (view === "confirm") setView("picker")
+    else guardedClose()
   }
 
   useEffect(() => {
@@ -174,7 +182,7 @@ export function AddItemModal({
       >
         <div className={cn("flex items-center gap-1", compactHeader ? "mb-1.5" : "mb-3")}>
           <button
-            onClick={guardedClose}
+            onClick={handleBack}
             aria-label="Back"
             data-testid="add-item-back"
             className="-ml-2 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
@@ -189,7 +197,7 @@ export function AddItemModal({
                   compactHeader ? "text-sm" : "text-lg"
                 )}
               >
-                Add Items
+                {view === "confirm" ? "Confirm Order" : "Add Items"}
               </h2>
             </SheetTitle>
             {!compactHeader && (
@@ -199,24 +207,26 @@ export function AddItemModal({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-[#D4C4B4] bg-white px-3 focus-within:border-[#A46833]">
-          <Search className="h-4 w-4 shrink-0 text-[#A08060]" />
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            placeholder="Search dishes…"
-            data-testid="add-item-search"
-            className="h-11 w-full bg-transparent text-sm text-[#2C1810] outline-none placeholder:text-[#B49A80]"
-          />
-        </div>
+        {view === "picker" && (
+          <div className="flex items-center gap-2 rounded-xl border border-[#D4C4B4] bg-white px-3 focus-within:border-[#A46833]">
+            <Search className="h-4 w-4 shrink-0 text-[#A08060]" />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              placeholder="Search dishes…"
+              data-testid="add-item-search"
+              className="h-11 w-full bg-transparent text-sm text-[#2C1810] outline-none placeholder:text-[#B49A80]"
+            />
+          </div>
+        )}
       </div>
 
       {/* Dish list */}
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto overscroll-contain px-4 py-2"
+        className={cn("flex-1 overflow-y-auto overscroll-contain px-4 py-2", view === "confirm" && "hidden")}
         data-testid="add-item-list"
       >
         {loading ? (
@@ -289,21 +299,67 @@ export function AddItemModal({
         )}
       </div>
 
+      {/* Confirm screen — a review step before the KOT actually fires. Reuses
+          `selected`/`quantities`/`notes` from the picker so going Back keeps
+          everything intact. */}
+      {view === "confirm" && (
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-2" data-testid="add-item-review-list">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-[#A46833]">
+            {printKot ? "Sends to the kitchen printer" : "Added to bill — no KOT"}
+          </p>
+          <ul className="divide-y divide-[#F0E4D0]">
+            {selected.map(([dishId, qty]) => {
+              const dish = dishes.find(d => d.id === dishId)
+              if (!dish) return null
+              return (
+                <li key={dishId} className="py-2.5" data-testid={`review-item-${dishId}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-[#2C1810]">
+                      {qty} × {dish.name_en}
+                    </p>
+                    <p className="shrink-0 text-sm font-semibold text-[#2C1810]">
+                      ₹{(dish.price * qty).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  {notes[dishId]?.trim() && (
+                    <p className="mt-0.5 text-xs italic text-[#8E6D4E]">Note: {notes[dishId].trim()}</p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="shrink-0 border-t border-[#E8D5BC] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 md:pb-4">
-        <button
-          onClick={handleAdd}
-          disabled={saving || selectedCount === 0}
-          data-testid="add-item-confirm"
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-40"
-        >
-          <ChefHat className="h-4 w-4" />
-          {saving
-            ? "Adding…"
-            : selectedCount === 0
+        {view === "picker" ? (
+          <button
+            onClick={() => selectedCount > 0 && setView("confirm")}
+            disabled={selectedCount === 0}
+            data-testid="add-item-review"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-40"
+          >
+            <ChefHat className="h-4 w-4" />
+            {selectedCount === 0
               ? "Select items to add"
-              : `Add ${selectedCount} item${selectedCount !== 1 ? "s" : ""} · ₹${selectedTotal.toLocaleString("en-IN")}`}
-        </button>
+              : `Review ${selectedCount} item${selectedCount !== 1 ? "s" : ""} · ₹${selectedTotal.toLocaleString("en-IN")}`}
+          </button>
+        ) : (
+          <button
+            onClick={handleAdd}
+            disabled={saving || selectedCount === 0}
+            data-testid="add-item-confirm"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-40"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {saving
+              ? "Sending…"
+              : printKot
+                ? `Confirm & Send to Kitchen · ₹${selectedTotal.toLocaleString("en-IN")}`
+                : `Confirm · ₹${selectedTotal.toLocaleString("en-IN")}`}
+          </button>
+        )}
       </div>
     </ResponsiveSheet>
   )
