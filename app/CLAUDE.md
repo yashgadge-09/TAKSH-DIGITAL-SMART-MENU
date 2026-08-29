@@ -13,12 +13,12 @@ All routes use Next.js 16 App Router. The root `page.tsx` immediately redirects 
 | `/menu` | `app/menu/page.tsx` + `app/menu/menu-client.tsx` | Main catalog. `page.tsx` is an **async Server Component** — awaits `getMenuInitialData()` (`lib/database.ts`, `unstable_cache`-backed, narrowed columns) and reads the `searchParams` prop, passing both down as props to `MenuPage`/`MenuPageContent` in `menu-client.tsx` (`"use client"`). Dishes render in the initial server HTML — no client-side fetch on first paint. `MenuPageContent` deliberately does **not** call `useSearchParams()` (that hook forces Next to defer the whole subtree to client rendering during SSR); initial `category`/`search`/`cart` state comes from the server props instead, with `usePathname()` + `router.replace` used to keep the URL in sync afterwards. Heavy modals (`CartDrawer`, `OrderFlow`, `ReviewModal`, `NotificationPrompt`) are `next/dynamic({ ssr: false })` and lazy-mounted on first interaction |
 | `/[slug]/table/[number]` | `app/[slug]/table/[number]/page.tsx` | T06 — QR table entry; async Server Component. Resolves restaurant+table via cached `getTableEntryCached` and fetches `getMenuInitialData()` in parallel, then wraps `<MenuPage initialDishes initialCategories initialCategory initialSearch initialCartOpen />` in `<TableSessionProvider>` — same SSR treatment as `/menu` |
 | `/dish/[id]` | `app/dish/[id]/page.tsx` | Dish detail with recommendations. `"use client"` — no `generateMetadata()`. Fetches `getDishById` first and paints immediately, then `Promise.allSettled`s the two recommendation queries in parallel (previously three sequential awaits) |
-| `/chefs-favourites` | `app/chefs-favourites/page.tsx` | `is_chef_special = true` dishes. Uses the cached `getAllDishes()` (no cache-bust timestamp); language switch is a client-side re-map, not a refetch |
-| `/most-loved` | `app/most-loved/page.tsx` | Ranked by order count (`getMostOrderedDishesCached`). Same cached-fetch + client-side localization pattern as the other curated pages |
 | `/todays-special` | `app/todays-special/page.tsx` | `is_todays_special = true` dishes. Same cached-fetch pattern |
 | `/preview` | `app/preview/page.tsx` | Admin preview of customer view |
 
 `/category/[name]` was removed (2026) — it was dead code (nothing linked to it; the menu's category chips filter client-side over already-loaded dishes).
+
+`/chefs-favourites` and `/most-loved` were removed (2026) — their homepage carousel sections were dropped from `app/menu/menu-client.tsx` to give the dish grid more space, leaving both curated pages unreachable. `getMostOrderedDishesCached` (`lib/database.ts`) is now unused by the guest menu but left in place — it may still be useful for an admin-side "most ordered" view.
 
 ### Admin Routes (`/admin/`)
 

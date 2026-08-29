@@ -51,7 +51,7 @@ npm run lint      # ESLint
 /[slug]/table/[number]   → T06 QR table entry (resolves restaurant+table, wraps /menu)
 /category/[name]         → dishes by category
 /dish/[id]               → dish detail page
-/chefs-favourites, /most-loved, /todays-special → curated views
+/todays-special          → curated view (Chef's Favourites / Most Loved removed from guest menu)
 /preview                 → customer-side preview
 /admin/dashboard         → admin home (analytics overview)
 /admin/incoming          → live pending-orders queue (T11); Approve fires KOT, Reject discards

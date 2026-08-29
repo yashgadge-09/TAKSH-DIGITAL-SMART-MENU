@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Search, ShoppingCart, RefreshCw, ChevronRight, Flame, Plus, ChefHat, Lock } from "lucide-react";
 import { useCart, type CartItem } from "@/context/CartContext";
-import { getMenuListDishes, getCategories, getMostOrderedDishesCached, trackMenuView, addSharedCartItem } from "@/lib/database";
+import { getMenuListDishes, getCategories, trackMenuView, addSharedCartItem } from "@/lib/database";
 import { trackCartEventClient } from "@/lib/client-analytics";
 import { playChime, thumbUrl, isVideoUrl } from "@/lib/media";
 import { shouldTrackClientEvent } from "@/lib/session";
@@ -47,8 +47,6 @@ function ModalPendingSpinner() {
 const PREVIEW_LIMIT = 6;
 const MENU_REFETCH_COOLDOWN_MS = 60_000;
 const RENDER_BATCH_SIZE = 24;
-
-type MostOrderedRow = { dishId: string; orderCount: number };
 
 type AddToCartDish = { id: string; name: string; price: number; image: string; category: string };
 
@@ -134,44 +132,43 @@ const DishMedia = memo(function DishMedia({
   image,
   alt,
   width,
-  fallbackTextClass,
   eager = false,
+  onLoadError,
 }: {
   image: string;
   alt: string;
   width: number;
-  fallbackTextClass: string;
   eager?: boolean;
+  /** Fired once if the image/video 404s or otherwise fails to load — lets the
+   * caller (DishCard/ScrollCard) collapse its whole media box, same as if
+   * there had been no image at all, instead of leaving a broken/empty frame. */
+  onLoadError?: () => void;
 }) {
-  if (!image) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
-        <span className={`font-medium leading-tight text-[color:var(--brand-gold-muted)] ${fallbackTextClass}`}>Image to be added</span>
-      </div>
-    );
-  }
+  const [failed, setFailed] = useState(false);
+  // No image on file, or it failed to load — callers skip rendering this
+  // component's wrapper entirely (see DishCard/ScrollCard) rather than
+  // showing an empty or broken box.
+  if (!image || failed) return null;
 
-  return (
-    <>
-      {isVideoUrl(image) ? (
-        <video src={image} muted loop autoPlay playsInline preload="none" className="h-full w-full object-cover" />
-      ) : (
-        <img
-          src={thumbUrl(image, width)}
-          alt={alt}
-          width={width}
-          height={width}
-          loading={eager ? "eager" : "lazy"}
-          fetchPriority={eager ? "high" : "auto"}
-          decoding="async"
-          className="h-full w-full object-cover transition duration-300 hover:scale-105"
-          onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
-        />
-      )}
-      <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
-        <span className={`font-medium leading-tight text-[color:var(--brand-gold-muted)] ${fallbackTextClass}`}>Image to be added</span>
-      </div>
-    </>
+  const handleError = () => {
+    setFailed(true);
+    onLoadError?.();
+  };
+
+  return isVideoUrl(image) ? (
+    <video src={image} muted loop autoPlay playsInline preload="none" className="h-full w-full object-cover" onError={handleError} />
+  ) : (
+    <img
+      src={thumbUrl(image, width)}
+      alt={alt}
+      width={width}
+      height={width}
+      loading={eager ? "eager" : "lazy"}
+      fetchPriority={eager ? "high" : "auto"}
+      decoding="async"
+      className="h-full w-full object-cover transition duration-300 hover:scale-105"
+      onError={handleError}
+    />
   );
 });
 
@@ -187,6 +184,13 @@ const DishCard = memo(function DishCard({
   eager?: boolean;
 }) {
   const isSpecial = dish.isChefSpecial;
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasImage = Boolean(dish.image) && !imageFailed;
+
+  const handleAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onAdd({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category });
+  };
 
   return (
     <article
@@ -211,18 +215,30 @@ const DishCard = memo(function DishCard({
         )}
         <p className={`mt-2 font-serif text-[color:var(--brand-gold)] ${isSpecial ? "text-[19px]" : "text-[17px]"}`}>₹{dish.price}</p>
       </div>
-      <div className="relative flex shrink-0 flex-col items-center">
-        <div className={`relative overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
-          <DishMedia image={dish.image} alt={dish.name} width={isSpecial ? 300 : 264} fallbackTextClass="text-[10px]" eager={eager} />
+      {hasImage ? (
+        <div className="relative flex shrink-0 flex-col items-center">
+          <div className={`relative overflow-hidden rounded-2xl ring-1 ring-[color:var(--brand-gold)]/20 ${isSpecial ? "h-[110px] w-[100px]" : "h-[88px] w-[88px]"}`}>
+            <DishMedia image={dish.image} alt={dish.name} width={isSpecial ? 300 : 264} eager={eager} onLoadError={() => setImageFailed(true)} />
+          </div>
+          <button
+            onClick={handleAdd}
+            className={`absolute -bottom-3 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ${isSpecial ? "px-4 py-1.5 text-[11px]" : "px-3 py-1 text-[10px]"}`}
+            aria-label={`Add ${dish.name} to cart`}
+          >
+            ADD <Plus className={`h-3 w-3 ${isSpecial ? "scale-110" : ""}`} strokeWidth={2.4} />
+          </button>
         </div>
+      ) : (
+        // No photo on file — no image box at all (not even a placeholder),
+        // so the ADD button sits inline at the top-right of the text.
         <button
-          onClick={(e) => { e.stopPropagation(); onAdd({ id: dish.id, name: dish.name, price: dish.price, image: dish.image, category: dish.category }); }}
-          className={`absolute -bottom-3 inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ${isSpecial ? "px-4 py-1.5 text-[11px]" : "px-3 py-1 text-[10px]"}`}
+          onClick={handleAdd}
+          className={`relative shrink-0 self-start inline-flex items-center gap-1 rounded-full border border-[color:var(--brand-gold)] bg-[color:var(--brand-bg-deep)] font-semibold tracking-wider text-[color:var(--brand-gold)] transition hover:bg-[color:var(--brand-gold)] hover:text-[color:var(--brand-bg-deep)] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ${isSpecial ? "px-4 py-1.5 text-[11px]" : "px-3 py-1 text-[10px]"}`}
           aria-label={`Add ${dish.name} to cart`}
         >
           ADD <Plus className={`h-3 w-3 ${isSpecial ? "scale-110" : ""}`} strokeWidth={2.4} />
         </button>
-      </div>
+      )}
     </article>
   );
 });
@@ -238,14 +254,19 @@ const ScrollCard = memo(function ScrollCard({
   onAdd: (dish: AddToCartDish) => void;
   onOpen: (dish: any) => void;
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasImage = Boolean(dish.image) && !imageFailed;
+
   return (
     <article
       onClick={() => onOpen(dish)}
       className="flex w-[170px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-20px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
     >
-      <div className="relative aspect-[4/3] w-full overflow-hidden">
-        <DishMedia image={dish.image} alt={dish.name} width={340} fallbackTextClass="text-[12px]" />
-      </div>
+      {hasImage && (
+        <div className="relative aspect-[4/3] w-full overflow-hidden">
+          <DishMedia image={dish.image} alt={dish.name} width={340} onLoadError={() => setImageFailed(true)} />
+        </div>
+      )}
       <div className="flex flex-1 flex-col gap-2 p-3">
         <h3 className="font-serif text-[14px] leading-snug text-[color:var(--brand-gold-soft)] line-clamp-2 min-h-[2.4em]">{dish.name}</h3>
         <div className="flex items-center justify-between gap-2">
@@ -383,7 +404,6 @@ function MenuPageContent({
   const [hasOpenedReview, setHasOpenedReview] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [lastAddedCategory, setLastAddedCategory] = useState<string | null>(null);
-  const [mostOrderedDishes, setMostOrderedDishes] = useState<MostOrderedRow[]>([]);
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const pendingScrollCategoryRef = useRef<string | null>(null);
   const lastLoadRef = useRef(0);
@@ -406,33 +426,30 @@ function MenuPageContent({
   const [categoryImageMap, setCategoryImageMap] = useState<Record<string, string | null>>(() => initialCategories ? mapCategoryRows(initialCategories).imgMap : {});
   const hasSeedData = Boolean(initialDishes && initialDishes.length > 0);
   const [isLoading, setIsLoading] = useState(!hasSeedData);
-  const { language: lang, setLanguage: setLang, t } = useLanguage();
+  const { language: lang, t } = useLanguage();
+  const [isReviewSectionVisible, setIsReviewSectionVisible] = useState(false);
+  const reviewSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => setIsReviewSectionVisible(entry.isIntersecting), { threshold: 0.01 });
+    if (reviewSectionRef.current) observer.observe(reviewSectionRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const loadData = async () => {
     try {
       lastLoadRef.current = Date.now();
       setIsLoading(true);
-      const [data, categoryData, liveMostOrdered] = await Promise.all([
+      const [data, categoryData] = await Promise.all([
         getMenuListDishes(),
         getCategories().catch(() => []),
-        getMostOrderedDishesCached(10).catch(() => []),
       ]);
       setDishes(mapDishRows(data as any[]));
-      setMostOrderedDishes(Array.isArray(liveMostOrdered) ? liveMostOrdered : []);
       const { categoryNames, imgMap } = mapCategoryRows(categoryData as any[]);
       setCategories(categoryNames);
       setCategoryImageMap(imgMap);
     } catch (err) { console.error("Failed to load dishes", err); }
     finally { setIsLoading(false); }
-  };
-
-  // Most-ordered isn't in the SSR payload (it's a 30-day aggregation, not
-  // worth blocking first paint on) — fetch it separately after mount.
-  const loadMostOrdered = async () => {
-    try {
-      const liveMostOrdered = await getMostOrderedDishesCached(10);
-      setMostOrderedDishes(Array.isArray(liveMostOrdered) ? liveMostOrdered : []);
-    } catch { /* non-critical strip */ }
   };
 
   useEffect(() => {
@@ -443,7 +460,6 @@ function MenuPageContent({
     }
     if (hasSeedData) {
       lastLoadRef.current = Date.now();
-      void loadMostOrdered();
     } else {
       loadData();
     }
@@ -548,19 +564,6 @@ function MenuPageContent({
     setDebouncedSearchQuery(name);
   }, []);
 
-  const guestFavorites = useMemo(() => {
-    if (mostOrderedDishes.length === 0) return [];
-    const byId = new Map(localizedDishes.map(d => [String(d.id), d]));
-    return mostOrderedDishes
-      .map(r => {
-        const d = byId.get(String(r.dishId));
-        if (!d) return null;
-        return { ...d, orderCount: r.orderCount };
-      })
-      .filter((d): d is any => Boolean(d));
-  }, [localizedDishes, mostOrderedDishes]);
-
-  const chefSpecials = useMemo(() => localizedDishes.filter(d => d.isChefSpecial), [localizedDishes]);
   const todaysSpecials = useMemo(() => localizedDishes.filter(d => d.isTodaysSpecial), [localizedDishes]);
 
   const handleAddDishToCart = useCallback((dish: AddToCartDish) => {
@@ -653,37 +656,37 @@ function MenuPageContent({
         {/* ── Sticky Container ── */}
         <div id="sticky-header" className="sticky top-0 z-50 bg-background/95 backdrop-blur-md pb-1 border-b border-[color:var(--brand-gold)]/10">
           {/* ── Header ── */}
-          <header className="px-4 pt-5 pb-2">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h1 className="font-serif text-[28px] leading-none tracking-[0.18em] text-[color:var(--brand-gold)]">TAKSH</h1>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(74,222,128,0.7)]" />
-                  <p className="text-[9px] font-medium tracking-[0.25em] text-[color:var(--brand-gold-muted)]">PURE VEG RESTAURANT</p>
-                  {isLoading && <RefreshCw className="h-3 w-3 animate-spin text-[color:var(--brand-gold-muted)]" />}
+          <header className="px-4 pt-5 pb-0.5">
+            <div className="flex items-center gap-3">
+              {/* Search bar */}
+              <div className="min-w-0 flex-1">
+                <label htmlFor="menu-search" className="sr-only">Search dishes</label>
+                <div
+                  className="flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] ring-1 ring-[color:var(--brand-gold)]/40"
+                  style={{
+                    background: "linear-gradient(110deg, var(--brand-gold) 0%, #FFE4B5 35%, var(--brand-gold) 70%, #B87333 100%)"
+                  }}
+                >
+                  <Search className="h-4 w-4 shrink-0 text-[color:var(--brand-bg-deep)]" strokeWidth={2.4} />
+                  <input id="menu-search" type="search"
+                    placeholder={t("searchPlaceholder") || "Search for dishes, drinks…"}
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-transparent text-[13px] font-medium text-[color:var(--brand-bg-deep)] placeholder:text-[color:var(--brand-bg-deep)]/70 focus:outline-none"
+                  />
+                  {isLoading && <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[color:var(--brand-bg-deep)]/70" />}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Language toggle */}
-                <div role="group" aria-label="Language" className="flex items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] p-0.5">
-                  {(["en", "hi", "mr"] as const).map(l => (
-                    <button key={l} type="button" onClick={() => setLang(l)}
-                      className={["rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wider transition", lang === l ? "bg-[color:var(--brand-gold)] text-[color:var(--brand-bg-deep)]" : "text-[color:var(--brand-gold-muted)] hover:text-[color:var(--brand-gold)]"].join(" ")}>
-                      {l.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-                {/* Cart button */}
-                <button onClick={() => { setIsCartOpen(true); setHasOpenedCart(true); }} aria-label={`View cart, ${cartBadgeCount} items`}
-                  className="relative grid h-8 w-8 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
-                  <ShoppingCart className="h-4 w-4" strokeWidth={1.6} />
-                  {cartBadgeCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#8B0000] px-1 text-[10px] font-extrabold text-[color:var(--brand-gold)] shadow-[0_0_10px_rgba(139,0,0,0.8)] ring-1 ring-[color:var(--brand-gold)]">
-                      {cartBadgeCount}
-                    </span>
-                  )}
-                </button>
-              </div>
+              {/* Cart button */}
+              <button onClick={() => { setIsCartOpen(true); setHasOpenedCart(true); }} aria-label={`View cart, ${cartBadgeCount} items`}
+                className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[color:var(--brand-gold)]/30 bg-[color:var(--brand-bg-deep)] text-[color:var(--brand-gold)] transition hover:border-[color:var(--brand-gold)]/60">
+                <ShoppingCart className="h-5 w-5" strokeWidth={1.6} />
+                {cartBadgeCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#8B0000] px-1 text-[10px] font-extrabold text-[color:var(--brand-gold)] shadow-[0_0_10px_rgba(139,0,0,0.8)] ring-1 ring-[color:var(--brand-gold)]">
+                    {cartBadgeCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Persistent table PIN — host only, visible until the session ends */}
@@ -703,59 +706,40 @@ function MenuPageContent({
                 </div>
               </div>
             )}
-
-            {/* Search bar */}
-            <div className="mt-3">
-              <label htmlFor="menu-search" className="sr-only">Search dishes</label>
-              <div
-                className="flex items-center gap-2.5 rounded-full px-4 py-2.5 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] ring-1 ring-[color:var(--brand-gold)]/40"
-                style={{
-                  background: "linear-gradient(110deg, var(--brand-gold) 0%, #FFE4B5 35%, var(--brand-gold) 70%, #B87333 100%)"
-                }}
-              >
-                <Search className="h-4 w-4 shrink-0 text-[color:var(--brand-bg-deep)]" strokeWidth={2.4} />
-                <input id="menu-search" type="search"
-                  placeholder={t("searchPlaceholder") || "Search for dishes, drinks…"}
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-transparent text-[13px] font-medium text-[color:var(--brand-bg-deep)] placeholder:text-[color:var(--brand-bg-deep)]/70 focus:outline-none"
-                />
-              </div>
-            </div>
           </header>
 
           {/* ── Category tabs ── */}
-          <nav aria-label="Menu categories" className="mt-3 pb-1">
-            <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-2 pb-2">
+          <nav aria-label="Menu categories" className="mt-1 pb-1">
+            <ul className="no-scrollbar flex gap-4 overflow-x-auto px-4 pt-1 pb-2">
               {["All", ...menuTabs].map(tab => {
                 const isActive = activeCategory === tab;
                 const displayLabel = tab === "All" ? (t("all") || "All") : tab;
                 const imgSrc = categoryImageMap[tab.toLowerCase()] || null;
 
                 return (
-                  <li key={tab} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5">
+                  <li key={tab} className="flex w-[60px] shrink-0 flex-col items-center gap-0.5">
                     <button
                       type="button"
                       ref={el => { categoryButtonRefs.current[tab] = el; }}
                       onClick={() => handleCategoryChange(tab)}
                       aria-label={displayLabel}
-                      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${isActive
+                      className={`relative h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-[color:var(--brand-bg)] transition ${isActive
                         ? "ring-[color:var(--brand-gold)]"
                         : "ring-[color:var(--brand-gold)]/40 hover:ring-[color:var(--brand-gold)]/80"
                         }`}
                     >
                       {imgSrc ? (
                         <img
-                          src={thumbUrl(imgSrc, 112)}
+                          src={thumbUrl(imgSrc, 88)}
                           alt={displayLabel}
-                          width={56}
-                          height={56}
+                          width={44}
+                          height={44}
                           loading="eager"
                           className="h-full w-full object-cover"
                           onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                         />
                       ) : (
-                        <div className="h-full w-full flex items-center justify-center bg-[color:var(--brand-bg-deep)] text-[22px] select-none">
+                        <div className="h-full w-full flex items-center justify-center bg-[color:var(--brand-bg-deep)] text-[16px] select-none">
                           {tab === "All" ? "🍽️" : "🫕"}
                         </div>
                       )}
@@ -801,49 +785,11 @@ function MenuPageContent({
                 </div>
               </section>
             )}
-            {chefSpecials.length > 0 && (
-              <section className="mt-6">
-                <div
-                  onClick={() => handleSeeAll("/chefs-favourites")}
-                  className="flex items-center justify-between px-4 cursor-pointer group"
-                >
-                  <div>
-                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("chefFavourites") || "Chef's Favourites"}</h2>
-                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Hand-picked by our chef</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
-                    See All <ChevronRight className="h-3 w-3" />
-                  </div>
-                </div>
-                <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {chefSpecials.map(dish => <ScrollCard key={dish.id} dish={dish} onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
-                </div>
-              </section>
-            )}
-            {guestFavorites.length > 0 && (
-              <section className="mt-6">
-                <div
-                  onClick={() => handleSeeAll("/most-loved")}
-                  className="flex items-center justify-between px-4 cursor-pointer group"
-                >
-                  <div>
-                    <h2 className="font-serif text-[22px] leading-tight text-[color:var(--brand-gold)] group-hover:text-[color:var(--brand-gold-soft)] transition-colors">{t("mostLoved") || "Most Loved"}</h2>
-                    <p className="mt-0.5 text-[11px] text-[color:var(--brand-gold-muted)]">Guest favourites at Taksh</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--brand-gold)] opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
-                    See All <ChevronRight className="h-3 w-3" />
-                  </div>
-                </div>
-                <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {guestFavorites.map(dish => <ScrollCard key={dish.id} dish={dish} showOrderCount onAdd={handleAddDishToCart} onOpen={handleOpenDish} />)}
-                </div>
-              </section>
-            )}
           </>
         )}
 
         {/* ── Dish listing ── */}
-        <div className="px-4 mt-6">
+        <div className="px-4 mt-2">
           {activeCategory === "All" && !debouncedSearchQuery ? (
             previewCategories.map((tab, tabIndex) => {
               const catDishes = groupedDishes[tab.categoryValue] || [];
