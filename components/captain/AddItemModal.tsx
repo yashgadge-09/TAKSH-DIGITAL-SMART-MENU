@@ -314,12 +314,31 @@ export function AddItemModal({
               return (
                 <li key={dishId} className="py-2.5" data-testid={`review-item-${dishId}`}>
                   <div className="flex items-center justify-between gap-3">
-                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-[#2C1810]">
-                      {qty} × {dish.name_en}
-                    </p>
-                    <p className="shrink-0 text-sm font-semibold text-[#2C1810]">
-                      ₹{(dish.price * qty).toLocaleString("en-IN")}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[#2C1810]">{dish.name_en}</p>
+                      <p className="text-xs text-[#8E6D4E]">
+                        ₹{Number(dish.price).toLocaleString("en-IN")} · ₹{(dish.price * qty).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E0CBAA] bg-white">
+                      <button
+                        onClick={() => setQty(dishId, qty - 1)}
+                        aria-label={`Decrease ${dish.name_en}`}
+                        data-testid={`review-decrease-${dishId}`}
+                        className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="min-w-5 text-center text-sm font-semibold text-[#2C1810]">{qty}</span>
+                      <button
+                        onClick={() => setQty(dishId, qty + 1)}
+                        aria-label={`Increase ${dish.name_en}`}
+                        data-testid={`review-increase-${dishId}`}
+                        className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
                   </div>
                   {notes[dishId]?.trim() && (
                     <p className="mt-0.5 text-xs italic text-[#8E6D4E]">Note: {notes[dishId].trim()}</p>
