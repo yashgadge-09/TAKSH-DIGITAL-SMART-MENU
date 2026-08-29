@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { addItemsToSession } from "@/lib/database"
 import { toast } from "sonner"
-import { ArrowLeft, Search, Minus, Plus, ChefHat, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, Search, Minus, Plus, ChefHat, CheckCircle2, StickyNote } from "lucide-react"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import { cn } from "@/lib/utils"
 
@@ -43,6 +43,9 @@ export function AddItemModal({
   const [appliedQuery, setAppliedQuery] = useState("")
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [notes, setNotes] = useState<Record<string, string>>({})
+  // Which dish's note field is expanded on the review screen — one at a time,
+  // tapping the note icon toggles it.
+  const [noteOpenId, setNoteOpenId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [visibleCount, setVisibleCount] = useState(BATCH)
   const [searchFocused, setSearchFocused] = useState(false)
@@ -66,8 +69,12 @@ export function AddItemModal({
   // The header back arrow steps out of the confirm screen instead of closing
   // the whole modal — the captain can still edit quantities before sending.
   function handleBack() {
-    if (view === "confirm") setView("picker")
-    else guardedClose()
+    if (view === "confirm") {
+      setView("picker")
+      setNoteOpenId(null)
+    } else {
+      guardedClose()
+    }
   }
 
   useEffect(() => {
@@ -241,51 +248,38 @@ export function AddItemModal({
                 return (
                   <li
                     key={dish.id}
-                    className="flex flex-col gap-1.5 py-2.5 md:border-b md:border-[#F0E4D0]"
+                    className="flex items-center justify-between gap-3 py-2.5 md:border-b md:border-[#F0E4D0]"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[#2C1810]">{dish.name_en}</p>
-                        <p className="text-xs text-[#8E6D4E]">₹{Number(dish.price).toLocaleString("en-IN")}</p>
-                      </div>
-                      {qty === 0 ? (
-                        <button
-                          onClick={() => setQty(dish.id, 1)}
-                          data-testid={`add-dish-${dish.id}`}
-                          className="flex h-11 items-center gap-1 rounded-lg border border-[#2A6B3A] px-3 text-xs font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] md:h-9"
-                        >
-                          <Plus className="h-3.5 w-3.5" /> Add
-                        </button>
-                      ) : (
-                        <span className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E0CBAA] bg-white">
-                          <button
-                            onClick={() => setQty(dish.id, qty - 1)}
-                            aria-label={`Decrease ${dish.name_en}`}
-                            className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
-                          >
-                            <Minus className="h-3.5 w-3.5" />
-                          </button>
-                          <span className="min-w-5 text-center text-sm font-semibold text-[#2C1810]">{qty}</span>
-                          <button
-                            onClick={() => setQty(dish.id, qty + 1)}
-                            aria-label={`Increase ${dish.name_en}`}
-                            className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                        </span>
-                      )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[#2C1810]">{dish.name_en}</p>
+                      <p className="text-xs text-[#8E6D4E]">₹{Number(dish.price).toLocaleString("en-IN")}</p>
                     </div>
-                    {qty > 0 && (
-                      <input
-                        type="text"
-                        value={notes[dish.id] ?? ""}
-                        onChange={e => setNote(dish.id, e.target.value)}
-                        placeholder="Note for the kitchen — e.g. half portion, extra spicy…"
-                        maxLength={140}
-                        data-testid={`add-item-note-${dish.id}`}
-                        className="h-9 w-full rounded-lg border border-[#E0CBAA] bg-[#FFFBF4] px-2.5 text-xs text-[#2C1810] outline-none placeholder:text-[#B49A80] focus:border-[#A46833]"
-                      />
+                    {qty === 0 ? (
+                      <button
+                        onClick={() => setQty(dish.id, 1)}
+                        data-testid={`add-dish-${dish.id}`}
+                        className="flex h-11 items-center gap-1 rounded-lg border border-[#2A6B3A] px-3 text-xs font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] md:h-9"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add
+                      </button>
+                    ) : (
+                      <span className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E0CBAA] bg-white">
+                        <button
+                          onClick={() => setQty(dish.id, qty - 1)}
+                          aria-label={`Decrease ${dish.name_en}`}
+                          className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="min-w-5 text-center text-sm font-semibold text-[#2C1810]">{qty}</span>
+                        <button
+                          onClick={() => setQty(dish.id, qty + 1)}
+                          aria-label={`Increase ${dish.name_en}`}
+                          className="flex h-11 w-11 items-center justify-center text-[#A46833] transition-colors hover:bg-[#F7E6D2] active:bg-[#F7E6D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#A46833] md:h-9 md:w-9"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
                     )}
                   </li>
                 )
@@ -311,6 +305,8 @@ export function AddItemModal({
             {selected.map(([dishId, qty]) => {
               const dish = dishes.find(d => d.id === dishId)
               if (!dish) return null
+              const hasNote = !!notes[dishId]?.trim()
+              const noteOpen = noteOpenId === dishId
               return (
                 <li key={dishId} className="py-2.5" data-testid={`review-item-${dishId}`}>
                   <div className="flex items-center justify-between gap-3">
@@ -320,6 +316,19 @@ export function AddItemModal({
                         ₹{Number(dish.price).toLocaleString("en-IN")} · ₹{(dish.price * qty).toLocaleString("en-IN")}
                       </p>
                     </div>
+                    <button
+                      onClick={() => setNoteOpenId(noteOpen ? null : dishId)}
+                      aria-label={hasNote ? `Edit note for ${dish.name_en}` : `Add note for ${dish.name_en}`}
+                      data-testid={`review-note-toggle-${dishId}`}
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]",
+                        hasNote || noteOpen
+                          ? "border-[#A46833] bg-[#F7E6D2] text-[#A46833]"
+                          : "border-[#E0CBAA] bg-white text-[#B49A80] hover:bg-[#F7E6D2] active:bg-[#F7E6D2]"
+                      )}
+                    >
+                      <StickyNote className="h-4 w-4" />
+                    </button>
                     <span className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E0CBAA] bg-white">
                       <button
                         onClick={() => setQty(dishId, qty - 1)}
@@ -340,9 +349,21 @@ export function AddItemModal({
                       </button>
                     </span>
                   </div>
-                  {notes[dishId]?.trim() && (
+                  {noteOpen ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={notes[dishId] ?? ""}
+                      onChange={e => setNote(dishId, e.target.value)}
+                      onBlur={() => setNoteOpenId(null)}
+                      placeholder="Note for the kitchen — e.g. half portion, extra spicy…"
+                      maxLength={140}
+                      data-testid={`review-note-input-${dishId}`}
+                      className="mt-1.5 h-9 w-full rounded-lg border border-[#E0CBAA] bg-[#FFFBF4] px-2.5 text-xs text-[#2C1810] outline-none placeholder:text-[#B49A80] focus:border-[#A46833]"
+                    />
+                  ) : hasNote ? (
                     <p className="mt-0.5 text-xs italic text-[#8E6D4E]">Note: {notes[dishId].trim()}</p>
-                  )}
+                  ) : null}
                 </li>
               )
             })}
