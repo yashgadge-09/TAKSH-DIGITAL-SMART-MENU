@@ -8,6 +8,7 @@ import {
   Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil, KeyRound,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { BillCustomerModal } from "@/components/captain/BillCustomerModal"
 import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import type { RemovalReason } from "@/lib/activity"
@@ -52,6 +53,10 @@ export function TableSheet({
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [billStale, setBillStale] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState<{ itemId: string; name: string } | null>(null)
+  // Non-null while the bill is blocked on capturing the customer; the flag it
+  // holds is the print action we resume once the name is saved.
+  const [customerPrompt, setCustomerPrompt] = useState<{ thenSettle: boolean } | null>(null)
+  const [editCustomerOpen, setEditCustomerOpen] = useState(false)
 
   const approvedRounds = table.rounds.filter(r => r.status !== "pending_approval").length
   // Mirrors isServing() in the captain page. Kept local rather than imported:
@@ -64,6 +69,12 @@ export function TableSheet({
   // removing needs an admin. The server enforces this too; hiding the minus
   // button just keeps the UI honest.
   const canReduce = table.status === "active" || isAdmin
+  // What the bill header will actually say. computeBillForSession reads the
+  // name off the latest round's customer and falls back to the session's, so a
+  // guest who checked out normally already has one and must not be re-asked.
+  // Only a table where NEITHER exists — a scanned QR whose rounds the captain
+  // punched — would print blank, and that is the one we stop and ask about.
+  const hasBillCustomer = !!table.hostCustomerId || table.rounds.some(r => !!r.customerName)
 
   async function handleQuantityChange(
     itemId: string,
@@ -106,6 +117,19 @@ export function TableSheet({
   }
 
   async function handlePrintBill(thenSettle: boolean) {
+    if (!table.sessionId) return
+    // Every bill carries a name. A table the guests only scanned has no
+    // customers row at all — and a round the captain punched for them had
+    // nowhere to put one — so ask now rather than print a blank header and
+    // lose the visit from the customer directory.
+    if (!hasBillCustomer) {
+      setCustomerPrompt({ thenSettle })
+      return
+    }
+    await printBill(thenSettle)
+  }
+
+  async function printBill(thenSettle: boolean) {
     if (!table.sessionId) return
     setActionLoading(true)
     try {
@@ -160,9 +184,22 @@ export function TableSheet({
                   Table {table.tableNumber}
                 </p>
               </SheetTitle>
-              <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
-                {table.hostName ?? "No host"}
-              </h2>
+              {table.sessionId ? (
+                <button
+                  onClick={() => setEditCustomerOpen(true)}
+                  data-testid="edit-customer"
+                  className="mt-0.5 flex max-w-full items-center gap-1.5 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
+                >
+                  <span className={`truncate text-lg font-bold ${hasBillCustomer ? "text-[#F4DEC0]" : "text-[#C89F72]"}`}>
+                    {hasBillCustomer ? (table.hostName ?? "Guest") : "Add customer"}
+                  </span>
+                  <Pencil className="h-3.5 w-3.5 shrink-0 text-[#A08060]" />
+                </button>
+              ) : (
+                <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
+                  {table.hostName ?? "No host"}
+                </h2>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -340,6 +377,23 @@ export function TableSheet({
             </button>
           ) : (
             <>
+              {/* Taking the next round is the single most common thing a
+                  captain does at a live table, at EVERY stage — a guest who
+                  scanned and ordered round 1 themselves still waves the captain
+                  over for round 2. It must never be buried behind Edit Bill
+                  mode, and it must not depend on who opened the session.
+                  Green stays reserved for the money actions below it. */}
+              {table.status !== "bill_generated" && table.sessionId && (
+                <button
+                  onClick={() => setAddItemOpen(true)}
+                  data-testid="take-order"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white transition-colors hover:bg-[#8B5A2B] active:bg-[#8B5A2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Take Order
+                </button>
+              )}
+
               {table.status === "active" && (
                 <>
                   <button
@@ -408,6 +462,18 @@ export function TableSheet({
                       {actionLoading ? "Printing…" : "Reprint Bill"}
                     </button>
                   </div>
+                  {/* Post-bill lockdown allows captains to ADD (never reduce),
+                      so the action gets a real button rather than living only
+                      inside Edit Bill — but it sits below settle/reprint, since
+                      anything added here makes the printed bill stale. */}
+                  <button
+                    onClick={() => setAddItemOpen(true)}
+                    data-testid="take-order-post-bill"
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Items (reprint after)
+                  </button>
                 </>
               )}
 
@@ -446,6 +512,38 @@ export function TableSheet({
           onAdded={() => {
             setAddItemOpen(false)
             if (table.status === "bill_generated") setBillStale(true)
+            onChanged()
+          }}
+        />
+      )}
+
+      {/* Bill-time capture: save the customer, then resume the print that
+          triggered it — one uninterrupted action from the captain's side. */}
+      {customerPrompt && table.sessionId && (
+        <BillCustomerModal
+          sessionId={table.sessionId}
+          label={`Table ${table.tableNumber}`}
+          initialName={table.hostName}
+          onClose={() => setCustomerPrompt(null)}
+          onSaved={async () => {
+            const { thenSettle } = customerPrompt
+            setCustomerPrompt(null)
+            onChanged()
+            await printBill(thenSettle)
+          }}
+        />
+      )}
+
+      {editCustomerOpen && table.sessionId && (
+        <BillCustomerModal
+          sessionId={table.sessionId}
+          label={`Table ${table.tableNumber}`}
+          initialName={table.hostName}
+          isEdit
+          onClose={() => setEditCustomerOpen(false)}
+          onSaved={name => {
+            setEditCustomerOpen(false)
+            toast.success(`Customer saved — ${name}`)
             onChanged()
           }}
         />

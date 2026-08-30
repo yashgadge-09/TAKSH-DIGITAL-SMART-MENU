@@ -8,6 +8,7 @@ import {
   CheckCircle2, Minus, Plus, Trash2, ShoppingBag,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { BillCustomerModal } from "@/components/captain/BillCustomerModal"
 import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import type { RemovalReason } from "@/lib/activity"
@@ -50,12 +51,19 @@ export function ParcelSheet({
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [billStale, setBillStale] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState<{ itemId: string; name: string } | null>(null)
+  // Non-null while the bill is blocked on capturing the customer; the flag it
+  // holds is the print action we resume once the name is saved.
+  const [customerPrompt, setCustomerPrompt] = useState<{ thenSettle: boolean } | null>(null)
 
   const label = `Parcel #${parcel.tokenNumber}`
   const hasItems = parcel.rounds.length > 0
   // Same post-bill lockdown as TableSheet: once the bill is printed, a captain
   // can only add — reducing or removing needs an admin (server-enforced too).
   const canReduce = parcel.status === "active" || isAdmin
+  // Parcel rounds are captain-punched and carry no customer row, so unless one
+  // was attached at bill time the bill falls back to the token-time name — a
+  // label, not a customer. Ask once, prefilled, before the first print.
+  const hasBillCustomer = !!parcel.hostCustomerId || parcel.rounds.some(r => !!r.customerName)
 
   async function handleQuantityChange(
     itemId: string,
@@ -82,6 +90,17 @@ export function ParcelSheet({
   }
 
   async function handlePrintBill(thenSettle: boolean) {
+    // Same rule as a table: no bill prints without a name on it. A parcel's
+    // name is optional when the token is issued, so this is often the first
+    // time it is asked for.
+    if (!hasBillCustomer) {
+      setCustomerPrompt({ thenSettle })
+      return
+    }
+    await printBill(thenSettle)
+  }
+
+  async function printBill(thenSettle: boolean) {
     setActionLoading(true)
     try {
       await generateBill({ sessionId: parcel.sessionId })
@@ -346,6 +365,21 @@ export function ParcelSheet({
             setAddItemOpen(false)
             if (parcel.status === "bill_generated") setBillStale(true)
             onChanged()
+          }}
+        />
+      )}
+
+      {customerPrompt && (
+        <BillCustomerModal
+          sessionId={parcel.sessionId}
+          label={label}
+          initialName={parcel.customerName ?? undefined}
+          onClose={() => setCustomerPrompt(null)}
+          onSaved={async () => {
+            const { thenSettle } = customerPrompt
+            setCustomerPrompt(null)
+            onChanged()
+            await printBill(thenSettle)
           }}
         />
       )}
