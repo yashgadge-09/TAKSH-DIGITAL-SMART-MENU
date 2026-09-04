@@ -64,19 +64,23 @@ Extra checks:
 
 ## B. Overlays — each at 390px AND 1440px
 
-Overlays: **TableSheet · ParcelSheet · HistorySheet · AddItemModal ·
-SettleModal · MoveTableModal · NewParcelModal**
+Overlays: **TableSheet · ParcelSheet · SheetActionMenu · HistorySheet ·
+AddItemModal · SettleModal · MoveTableModal · NewParcelModal**
 
 Per overlay × width, verify all five:
 
-1. **Form** — 390: TableSheet/ParcelSheet/HistorySheet/AddItemModal are bottom
-   sheets (rounded top, drag pill); Settle/Move/NewParcel are centered cards.
-   1440: everything is a centered dialog — sheets ≤ `max-w-2xl`, action
-   modals ≤ `max-w-md`; no drag pill visible at 1440.
-2. **Primary button reachable** — the footer CTA (Print Bill & Take Payment /
-   Settle & Save / Add N items / Move / Open & Add Items) is fully visible and
-   clickable; on a real iPhone also check it clears the home indicator
-   (safe-area padding).
+1. **Form** — 390: TableSheet/ParcelSheet are edge-to-edge full-screen (no
+   rounded top, no drag pill); SheetActionMenu/HistorySheet/AddItemModal are
+   bottom sheets (rounded top, drag pill); Settle/Move/NewParcel are centered
+   cards. 1440: everything is a centered dialog — sheets ≤ `max-w-2xl`,
+   SheetActionMenu/action modals ≤ `max-w-md`; no drag pill visible at 1440.
+2. **Actions reachable** — TableSheet/ParcelSheet show ONLY the ordered dishes
+   + a sticky Total; every action lives behind the header **☰** which opens
+   SheetActionMenu (context-aware list: Print Bill / Settle / Reprint / Edit
+   Dishes / Move Table / Force Reset / Cancel Parcel). Each menu row is fully
+   visible and clickable; on a real iPhone the last row clears the home
+   indicator (safe-area padding). "Edit Dishes" hides the ☰ and swaps the
+   footer to a single "Done Editing" button.
 3. **Escape closes** — and focus returns to the card/button that opened it
    (visible ring when reached via keyboard).
 4. **Focus trapped** — Tab cycles inside the overlay only; page behind is
@@ -88,6 +92,7 @@ Per overlay × width, verify all five:
 |---|---|---|---|---|---|---|---|---|
 | TableSheet | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | |
 | ParcelSheet | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | |
+| SheetActionMenu | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | opens from TableSheet/ParcelSheet ☰ |
 | HistorySheet | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | |
 | AddItemModal | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | |
 | SettleModal | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | |
@@ -104,15 +109,17 @@ Overlay-specific:
 - [ ] AddItemModal totals: add a dish, search it away — footer count/total
       keeps it; clearing search shows its stepper again.
 - [ ] Qty −/+ steppers ≥ 44px on phone, denser at desktop; same for close X.
-- [ ] TableSheet at 844×390 (landscape): KOT list scrolls, footer CTA visible.
+- [ ] TableSheet at 844×390 (landscape): KOT list scrolls, sticky Total +
+      header ☰ stay visible; SheetActionMenu list scrolls if it overflows.
 
 ## C. Nested overlay paths
 
-- [ ] TableSheet → Edit Bill → Add Item → **Esc** closes ONLY AddItemModal;
-      TableSheet still open, body still locked; close TableSheet, page scrolls
-      again.
-- [ ] TableSheet → Print Bill & Take Payment → SettleModal stacks above the
-      sheet; settle → both close, grid refreshes.
+- [ ] TableSheet → ☰ → Edit Dishes → Add Item → **Esc** closes ONLY
+      AddItemModal; TableSheet still open (in edit mode), body still locked;
+      Done Editing → ☰ returns; close TableSheet, page scrolls again.
+- [ ] TableSheet → ☰ → Print Bill & Take Payment → menu closes, SettleModal
+      stacks above the sheet; settle → both close, grid refreshes.
+- [ ] TableSheet → ☰ → Move Table → menu closes, MoveTableModal opens.
 - [ ] ParcelSheet → Add Item → add 2 dishes → returns to ParcelSheet with new
       round visible.
 - [ ] New Parcel → name → Open & Add Items → dish picker opens directly on

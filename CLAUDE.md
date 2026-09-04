@@ -80,9 +80,11 @@ npm run lint      # ESLint
 /admin/preview           → admin preview of guest-facing menu
 /captain                 → captain login (C02); shared account captain@taksh.com, app_metadata.role = "captain"
 /captain/tables          → captain panel (C03–C07): mobile-first table grid + pending-approval strip (Realtime);
-                           tap table → bottom sheet (KOT view, session PIN chip, reprint KOT, edit item
-                           qty, Add Item, Print Bill, Print Bill & Take Payment, Move Table, Settle &
-                           Save). POST-BILL LOCKDOWN: once the bill prints, captains can only ADD items
+                           tap table → full-screen sheet showing ONLY the ordered dishes + a sticky
+                           Total; session PIN chip + reprint KOT inline. Every action lives behind the
+                           top-left header ☰ (SheetActionMenu): Print Bill, Print Bill & Take Payment, Take
+                           Payment · Settle & Save, Reprint Bill, Edit Dishes (qty +/- + Add Item),
+                           Move Table, Force Reset. POST-BILL LOCKDOWN: once the bill prints, captains can only ADD items
                            (KOT fires, reprint picks it up) or reprint unchanged — reducing/removing is
                            admin-only (server-enforced in updateOrderItemQuantity). Every removal
                            requires a reason (RemoveReasonDialog) logged to activity_log.
@@ -98,7 +100,7 @@ npm run lint      # ESLint
 
 ```
 
-**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, revenue, or the activity log. Users without a role are admins and may also open `/captain/tables` (the page passes `isAdmin` down so admins keep post-bill reduce/remove). The role check is by role, not email — create **one auth account per captain** so `activity_log` names the exact person. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `NewParcelModal`, `NewTableOrderModal`, `RemoveReasonDialog`). `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them; `AddItemModal` also takes `printKot` (false = admin bill correction, no cook ticket).
+**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, revenue, or the activity log. Users without a role are admins and may also open `/captain/tables` (the page passes `isAdmin` down so admins keep post-bill reduce/remove). The role check is by role, not email — create **one auth account per captain** so `activity_log` names the exact person. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `SheetActionMenu`, `NewParcelModal`, `NewTableOrderModal`, `RemoveReasonDialog`). `SheetActionMenu` is the shared `☰` action list (top-left header button) for `TableSheet`/`ParcelSheet` — a `tier="raised"` `ResponsiveSheet` taking `{ title, actions: SheetAction[] }`; each `SheetAction` self-closes the menu on tap. `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them; `AddItemModal` also takes `printKot` (false = admin bill correction, no cook ticket).
 
 API routes under `/api/`:
 - `cron/notify` — scheduled review notification trigger

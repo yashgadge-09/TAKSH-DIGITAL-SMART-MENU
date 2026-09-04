@@ -5,11 +5,12 @@ import { generateBill, reprintBill, reprintKot, updateOrderItemQuantity, forceRe
 import { toast } from "sonner"
 import {
   X, Clock, Users, ChefHat, Receipt, Printer, ArrowLeftRight,
-  Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil, KeyRound,
+  Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil, KeyRound, Menu,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
 import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
+import { SheetActionMenu, type SheetAction } from "@/components/captain/SheetActionMenu"
 import type { RemovalReason } from "@/lib/activity"
 import type { CaptainTable } from "@/app/captain/tables/page"
 
@@ -49,6 +50,7 @@ export function TableSheet({
   const [reprintingId, setReprintingId] = useState<string | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editingBill, setEditingBill] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [billStale, setBillStale] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState<{ itemId: string; name: string } | null>(null)
@@ -147,22 +149,83 @@ export function TableSheet({
     }
   }
 
+  // Every footer button from the old layout, now a single context-aware list
+  // behind the ⋮ in the header. Order = most-used first; Force Reset last.
+  const menuActions: SheetAction[] = []
+  if (table.status === "active") {
+    menuActions.push({
+      key: "print-pay", label: "Print Bill & Take Payment", icon: Wallet, tone: "primary",
+      testId: "print-bill-and-pay", onClick: () => handlePrintBill(true),
+      disabled: actionLoading || approvedRounds === 0 || table.pendingCount > 0,
+      hint: table.pendingCount > 0 ? "Approve or reject pending orders first" : undefined,
+    })
+    menuActions.push({
+      key: "print", label: "Print Bill", icon: Receipt, testId: "print-bill",
+      onClick: () => handlePrintBill(false),
+      disabled: actionLoading || approvedRounds === 0 || table.pendingCount > 0,
+    })
+    menuActions.push({
+      key: "edit", label: "Edit Dishes", icon: Pencil, testId: "edit-bill",
+      onClick: () => setEditingBill(true),
+      disabled: actionLoading || table.rounds.length === 0,
+    })
+  }
+  if (table.status === "bill_generated") {
+    menuActions.push({
+      key: "settle", label: "Take Payment · Settle & Save", icon: CheckCircle2, tone: "primary",
+      testId: "settle-open", onClick: onRequestSettle,
+      disabled: actionLoading || billStale,
+      hint: billStale ? "Reprint the bill before taking payment" : undefined,
+    })
+    menuActions.push({
+      key: "reprint", label: "Reprint Bill", icon: Printer, testId: "reprint-bill",
+      onClick: handleReprintBill,
+      disabled: actionLoading || table.pendingCount > 0,
+    })
+    menuActions.push({
+      key: "edit", label: "Edit Dishes", icon: Pencil, testId: "edit-bill",
+      onClick: () => setEditingBill(true), disabled: actionLoading,
+    })
+  }
+  if (serving) {
+    menuActions.push({
+      key: "move", label: "Move Table", icon: ArrowLeftRight, testId: "move-table-open",
+      onClick: onRequestMove, disabled: actionLoading,
+    })
+  }
+  menuActions.push({
+    key: "reset", label: "Force Reset (no bill)", icon: Trash2, tone: "danger",
+    testId: "force-reset", onClick: handleForceReset, disabled: actionLoading,
+  })
+
   return (
     <>
-      <ResponsiveSheet variant="sheet" tier="base" width="2xl" testId="table-sheet" onClose={onClose}>
+      <ResponsiveSheet variant="fullscreen" tier="base" width="2xl" testId="table-sheet" onClose={onClose}>
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="shrink-0 bg-[linear-gradient(130deg,#2A180F,#1A100A)] px-5 pb-4 pt-3">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25 md:hidden" />
-          <div className="flex items-start justify-between">
-            <div className="min-w-0">
-              <SheetTitle asChild>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#C89F72]">
-                  Table {table.tableNumber}
-                </p>
-              </SheetTitle>
-              <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
-                {table.hostName ?? "No host"}
-              </h2>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 items-start gap-1">
+              {!canEditItems && (
+                <button
+                  onClick={() => setMenuOpen(true)}
+                  data-testid="sheet-menu-open"
+                  aria-label={`Table ${table.tableNumber} actions`}
+                  className="-ml-3 -mt-1.5 shrink-0 rounded-full p-3 text-[#A08060] transition-colors hover:bg-white/10 hover:text-[#F4DEC0] active:text-[#F4DEC0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              )}
+              <div className="min-w-0">
+                <SheetTitle asChild>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#C89F72]">
+                    Table {table.tableNumber}
+                  </p>
+                </SheetTitle>
+                <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
+                  {table.hostName ?? "No host"}
+                </h2>
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -312,18 +375,17 @@ export function TableSheet({
           )}
         </div>
 
-        {/* ── Footer actions ─────────────────────────────────────────────── */}
+        {/* ── Footer ─────────────────────────────────────────────────────── */}
         <div className="shrink-0 space-y-2.5 border-t border-[#E8D5BC] bg-[#FFF8EE] px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 md:pb-6">
-          <div className="flex items-center justify-between rounded-xl bg-[#F7E6D2] px-4 py-2.5">
-            <span className="text-sm font-semibold text-[#6B5744]">Total</span>
-            <span className="text-lg font-bold text-[#2C1810]" data-testid="sheet-total">
-              ₹{table.runningTotal.toLocaleString("en-IN")}
-            </span>
-          </div>
-
           {table.pendingCount > 0 && (
             <p className="text-xs font-medium text-[#C0392B]">
               {table.pendingCount} order{table.pendingCount !== 1 ? "s" : ""} still waiting approval — approve or reject before billing.
+            </p>
+          )}
+
+          {table.status === "bill_generated" && billStale && (
+            <p className="text-xs font-medium text-[#C47A20]" data-testid="bill-stale-hint">
+              Items changed after printing — reprint the bill before taking payment.
             </p>
           )}
 
@@ -339,104 +401,23 @@ export function TableSheet({
               Done Editing
             </button>
           ) : (
-            <>
-              {table.status === "active" && (
-                <>
-                  <button
-                    onClick={() => handlePrintBill(true)}
-                    disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
-                    data-testid="print-bill-and-pay"
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2A6B3A] text-sm font-bold text-white transition-colors hover:bg-[#235930] active:bg-[#235930] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] focus-visible:ring-offset-2 disabled:opacity-50"
-                  >
-                    <Wallet className="h-4 w-4" />
-                    {actionLoading ? "Working…" : "Print Bill & Take Payment"}
-                  </button>
-                  <button
-                    onClick={() => setEditingBill(true)}
-                    disabled={actionLoading || table.rounds.length === 0}
-                    data-testid="edit-bill"
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit Bill
-                  </button>
-                  <button
-                    onClick={() => handlePrintBill(false)}
-                    disabled={actionLoading || approvedRounds === 0 || table.pendingCount > 0}
-                    data-testid="print-bill"
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
-                  >
-                    <Receipt className="h-4 w-4" />
-                    Print Bill
-                  </button>
-                </>
-              )}
-
-              {table.status === "bill_generated" && (
-                <>
-                  {billStale && (
-                    <p className="text-xs font-medium text-[#C47A20]" data-testid="bill-stale-hint">
-                      Items changed after printing — reprint the bill before taking payment.
-                    </p>
-                  )}
-                  <button
-                    onClick={onRequestSettle}
-                    disabled={actionLoading || billStale}
-                    data-testid="settle-open"
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#A46833] text-sm font-bold text-white transition-colors hover:bg-[#8B5A2B] active:bg-[#8B5A2B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] focus-visible:ring-offset-2 disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Take Payment · Settle & Save
-                  </button>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setEditingBill(true)}
-                      disabled={actionLoading}
-                      data-testid="edit-bill"
-                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#A46833] text-sm font-bold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Edit Bill
-                    </button>
-                    <button
-                      onClick={handleReprintBill}
-                      disabled={actionLoading || table.pendingCount > 0}
-                      data-testid="reprint-bill"
-                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#2A6B3A] text-sm font-bold text-[#2A6B3A] transition-colors hover:bg-[#EAF5ED] active:bg-[#EAF5ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6B3A] disabled:opacity-50"
-                    >
-                      <Printer className="h-4 w-4" />
-                      {actionLoading ? "Printing…" : "Reprint Bill"}
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {/* Nothing to carry across on a scanned or awaiting-approval table. */}
-              {serving && (
-                <button
-                  onClick={onRequestMove}
-                  disabled={actionLoading}
-                  data-testid="move-table-open"
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#CFAF8C] text-sm font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833] disabled:opacity-50"
-                >
-                  <ArrowLeftRight className="h-4 w-4" />
-                  Move Table
-                </button>
-              )}
-
-              <button
-                onClick={handleForceReset}
-                disabled={actionLoading}
-                data-testid="force-reset"
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300/70 bg-white text-sm font-medium text-red-500 transition-colors hover:bg-red-50 active:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Force Reset (no bill)
-              </button>
-            </>
+            <div className="flex items-center justify-between rounded-xl bg-[#F7E6D2] px-4 py-3">
+              <span className="text-sm font-semibold text-[#6B5744]">Total</span>
+              <span className="text-lg font-bold text-[#2C1810]" data-testid="sheet-total">
+                ₹{table.runningTotal.toLocaleString("en-IN")}
+              </span>
+            </div>
           )}
         </div>
       </ResponsiveSheet>
+
+      {menuOpen && (
+        <SheetActionMenu
+          title={`Table ${table.tableNumber}${table.hostName ? ` · ${table.hostName}` : ""}`}
+          actions={menuActions}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
 
       {addItemOpen && table.sessionId && (
         <AddItemModal
