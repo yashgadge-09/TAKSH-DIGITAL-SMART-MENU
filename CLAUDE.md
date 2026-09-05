@@ -51,7 +51,7 @@ npm run lint      # ESLint
 /[slug]/table/[number]   → T06 QR table entry (resolves restaurant+table, wraps /menu)
 /category/[name]         → dishes by category
 /dish/[id]               → dish detail page
-/chefs-favourites, /most-loved, /todays-special → curated views
+/todays-special          → curated view (Chef's Favourites / Most Loved removed from guest menu)
 /preview                 → customer-side preview
 /admin/dashboard         → admin home (analytics overview)
 /admin/incoming          → live pending-orders queue (T11); Approve fires KOT, Reject discards
@@ -93,9 +93,19 @@ npm run lint      # ESLint
                            (RemoveReasonDialog) logged to activity_log.
                            Walk-in flow (W01): "New Table Order" button or tap a FREE table → pick
                            table + name + optional phone → dish picker opens → first round lands
-                           already approved, KOT prints. Session has a real PIN (shown in the sheet)
-                           so a guest who scans mid-meal joins normally. Abandoning the picker with
-                           no items frees the table (cancelEmptySession).
+                           already approved, KOT prints. Abandoning the picker with no items frees
+                           the table (cancelEmptySession) — ONLY for a session this flow opened.
+                           EITHER SIDE MAY GO FIRST, AT EVERY ROUND: the picker lists every table
+                           except a billed one — free ones open a session, live ones ("Menu open" /
+                           "Pending" / "Running") JOIN the session already there (startCaptainOrder
+                           returns `joined: true`), and a table whose customer we already know asks
+                           for no name. Every table's sheet also carries the quick-add search bar
+                           described above regardless of who opened the session, so taking round 2 on
+                           a table the GUEST opened is one tap and never depends on who started it.
+                           Bill-time customer capture: Print Bill opens `BillCustomerModal` when
+                           the bill would print with no name on it (name required, phone optional
+                           — `setSessionCustomer`), then resumes the print. Same on parcels. The
+                           sheet header doubles as an edit affordance for a wrong name.
                            Parcel strip (P01): "New Parcel" → optional name → dish picker → KOT prints
                            as PARCEL #token → Print Bill & Take Payment → settle. No table involved.
 /captain/history         → captain order history (H01) — same data as /admin/history, mobile-first;
@@ -103,7 +113,7 @@ npm run lint      # ESLint
 
 ```
 
-**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, revenue, or the activity log. Users without a role are admins and may also open `/captain/tables` (the page passes `isAdmin` down so admins keep post-bill reduce/remove). The role check is by role, not email — create **one auth account per captain** so `activity_log` names the exact person. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `SheetActionMenu`, `NewParcelModal`, `NewTableOrderModal`, `RemoveReasonDialog`). `SheetActionMenu` is the shared `☰` action list (top-left header button) for `TableSheet`/`ParcelSheet` — a `tier="raised"` `ResponsiveSheet` taking `{ title, actions: SheetAction[] }`; each `SheetAction` self-closes the menu on tap. `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them; `AddItemModal` also takes `printKot` (false = admin bill correction, no cook ticket).
+**Captain role model:** users with `app_metadata.role = "captain"` are redirected away from all `/admin/*` pages (guard in `app/admin/layout.tsx`) — they never see analytics, customers, reports, revenue, or the activity log. Users without a role are admins and may also open `/captain/tables` (the page passes `isAdmin` down so admins keep post-bill reduce/remove). The role check is by role, not email — create **one auth account per captain** so `activity_log` names the exact person. Captain components live in `components/captain/` (`TableSheet`, `SettleModal`, `MoveTableModal`, `AddItemModal`, `ParcelSheet`, `SheetActionMenu`, `NewParcelModal`, `NewTableOrderModal`, `RemoveReasonDialog`, `BillCustomerModal`). `SheetActionMenu` is the shared `☰` action list (top-left header button) for `TableSheet`/`ParcelSheet` — a `tier="raised"` `ResponsiveSheet` taking `{ title, actions: SheetAction[] }`; each `SheetAction` self-closes the menu on tap. `AddItemModal` and `SettleModal` take a plain `label` string (`"Table 6"` / `"Parcel #7"`) so both flows share them; `AddItemModal` also takes `printKot` (false = admin bill correction, no cook ticket). `BillCustomerModal` captures a customer name (required) + optional phone before a bill prints nameless, and doubles as the header's "edit customer" affordance on an already-named table.
 
 API routes under `/api/`:
 - `cron/notify` — scheduled review notification trigger
@@ -171,7 +181,9 @@ Client-side only (`CartContext`). State lives in React memory — not persisted.
 - `approveOrder` is the **only** function that creates a KOT print job. (`addItemsToSession` also queues a KOT — it's the staff path where the captain IS the approver; `printKot: false` skips it for admin bill corrections.)
 - **Post-bill lockdown:** on a `bill_generated` session, captains may only *increase* quantities or add items; any decrease/removal throws unless the caller is an admin. Enforced in `updateOrderItemQuantity`, not just the UI. Settled = session closed = frozen for everyone.
 - **Removals need a reason** (`customer_changed_mind | wrong_entry | out_of_stock`) — `updateOrderItemQuantity` throws without one when quantity is 0. Reason vocabulary lives in `lib/activity.ts` (plain module — `database.ts` is `"use server"` and cannot export consts).
-- **Captain walk-in sessions** get `host_device_id: 'captain:<uuid>'` — never NULL, or `joinTable`'s orphan cleanup would close them on the next QR scan.
+- **Captain walk-in sessions** get `host_device_id: 'captain:<uuid>'` — never NULL, or `joinTable`'s orphan cleanup would close them on the next QR scan. That sentinel also means "no customer host yet": in `joinTable`, the **first guest device to scan claims the host slot** (guarded UPDATE on `host_device_id LIKE 'captain:%'` — concurrent scanners lose the race and fall to the PIN path). **The PIN is guest↔guest only** — it keeps one table's guests out of another's shared cart; it must never make the guests at a table ask staff for a code. Without the claim a captain-opened table's guests stay non-host forever and `CartDrawer` tells them only the host can order.
+- **Staff are never blocked by session ownership.** `startCaptainOrder` joins an existing `active` session rather than throwing (it only fills `host_name`/`host_customer_id` if still null — never overwrites a guest's own details); `addItemsToSession` accepts any non-closed session. Callers **must not** call `cancelEmptySession` on a session they merely joined.
+- **A bill never prints nameless.** The captain sheets gate Print Bill on `hostCustomerId || rounds.some(r => r.customerName)` — the same fallback chain `computeBillForSession` uses — and open `BillCustomerModal` when neither exists. `setSessionCustomer` attaches the customer, back-fills `orders.customer_id` on rounds that have none (so the visit reaches the customer directory), and logs `customer_set`. Guest-side `generateBill` ("Request Bill") is deliberately **not** server-gated on this — guest checkout already collects a name.
 - `generateBill` takes `{ sessionId }` (object, not a bare string).
 - `useTableSession()` returns `null` on plain `/menu` — always null-check before calling ordering actions.
 - All admin table reads/writes **must** use `adminSupabase` server actions — the anon browser client fails on nested joins (PostgREST FK rule: `customers(name)` must be nested inside `orders`, not `table_sessions`) and is blocked by RLS on writes.

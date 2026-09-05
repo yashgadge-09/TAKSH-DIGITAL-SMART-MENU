@@ -49,6 +49,8 @@ export type CaptainTable = {
   status: "open" | "scanned" | "engaged" | "active" | "bill_generated"
   sessionId?: string
   hostName?: string
+  /** Set once a customers row is attached — null on a table only scanned. */
+  hostCustomerId?: string | null
   openedAt?: string
   /** Session join PIN — shown in the sheet so mid-meal scanners can join. */
   pin?: string
@@ -67,6 +69,8 @@ export type CaptainParcel = {
   tokenNumber: number
   status: "active" | "bill_generated"
   customerName: string | null
+  /** Set once a customers row is attached — null on a nameless parcel. */
+  hostCustomerId?: string | null
   openedAt: string
   runningTotal: number
   roundCount: number
@@ -163,6 +167,7 @@ export function buildCaptainTable(t: RawTableRow): CaptainTable {
     status,
     sessionId: session.id,
     hostName: hostName ?? undefined,
+    hostCustomerId: session.host_customer_id ?? null,
     openedAt: session.opened_at,
     pin: session.pin ?? undefined,
     runningTotal: preService ? 0 : runningTotal,
@@ -192,6 +197,7 @@ export function buildCaptainParcel(p: RawParcelRow): CaptainParcel {
     tokenNumber: p.token_number ?? 0,
     status: p.status === "bill_generated" ? "bill_generated" : "active",
     customerName: p.host_name ?? null,
+    hostCustomerId: p.host_customer_id ?? null,
     openedAt: p.opened_at,
     // Captain-punched parcel rounds are approved on creation, so unlike a
     // table there is no pre-service state to hold revenue back from.
@@ -230,7 +236,9 @@ export default function CaptainTablesPage() {
   // Walk-in flow (W01): modal + the same open-picker-immediately rhythm.
   const [newTableOrderOpen, setNewTableOrderOpen] = useState(false)
   const [newTableOrderPreselect, setNewTableOrderPreselect] = useState<string | null>(null)
-  const [pendingTableAdd, setPendingTableAdd] = useState<{ sessionId: string; tableId: string; tableNumber: number } | null>(null)
+  const [pendingTableAdd, setPendingTableAdd] = useState<
+    { sessionId: string; tableId: string; tableNumber: number; joined: boolean } | null
+  >(null)
   // Admins may open this panel too; captains lose post-bill reduce/remove.
   // Server actions enforce the same rule — this only shapes the UI.
   const [isAdmin, setIsAdmin] = useState(false)
@@ -759,15 +767,34 @@ export default function CaptainTablesPage() {
       {newTableOrderOpen && restIdRef.current && (
         <NewTableOrderModal
           restaurantId={restIdRef.current}
-          freeTables={tables
-            .filter(t => t.status === "open")
-            .map(t => ({ tableId: t.tableId, tableNumber: t.tableNumber }))}
+          pickableTables={tables
+            // Every table a captain can punch a round on. A free one opens a
+            // new session; a live one JOINS the session already there — which
+            // is how round 2 gets taken on a table the guest scanned and
+            // ordered from themselves. Only a billed table is excluded:
+            // post-bill additions belong in its sheet, next to the reprint
+            // warning they trigger.
+            .filter(t => t.status !== "bill_generated")
+            .map(t => ({
+              tableId: t.tableId,
+              tableNumber: t.tableNumber,
+              note:
+                t.status === "scanned" ? "Menu open"
+                  : t.status === "engaged" ? "Pending"
+                  : t.status === "active" ? "Running"
+                  : undefined,
+              hostName: t.hostName,
+              // Same test as TableSheet's hasBillCustomer and the join branch
+              // of startCaptainOrder — when a customer already exists the
+              // captain is not made to retype a name we have.
+              hasCustomer: !!t.hostCustomerId || t.rounds.some(r => !!r.customerName),
+            }))}
           initialTableId={newTableOrderPreselect}
           onClose={() => { setNewTableOrderOpen(false); setNewTableOrderPreselect(null) }}
-          onCreated={(sessionId, tableId, tableNumber) => {
+          onCreated={(sessionId, tableId, tableNumber, joined) => {
             setNewTableOrderOpen(false)
             setNewTableOrderPreselect(null)
-            setPendingTableAdd({ sessionId, tableId, tableNumber })
+            setPendingTableAdd({ sessionId, tableId, tableNumber, joined })
             if (restIdRef.current) fetchTables(restIdRef.current)
           }}
         />
@@ -783,9 +810,17 @@ export default function CaptainTablesPage() {
           onClose={async () => {
             const abandoned = pendingTableAdd
             setPendingTableAdd(null)
-            try {
-              await cancelEmptySession(abandoned.sessionId)
-            } catch { /* best-effort — force reset still covers a stuck table */ }
+            // Only a session THIS flow opened may be cancelled. Joining a
+            // guest's live session and then backing out must leave their
+            // table exactly as it was — cancelling it would close a session
+            // someone is actively browsing on.
+            if (!abandoned.joined) {
+              try {
+                await cancelEmptySession(abandoned.sessionId)
+              } catch { /* best-effort — force reset still covers a stuck table */ }
+            } else {
+              setSelectedId(abandoned.tableId)
+            }
             if (restIdRef.current) fetchTables(restIdRef.current)
           }}
           onAdded={() => {

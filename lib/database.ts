@@ -1960,6 +1960,7 @@ export type RawTableRow = {
     status: string
     opened_at: string
     host_name: string | null
+    host_customer_id: string | null
     pin: string | null
     orders: {
       id: string
@@ -1979,7 +1980,7 @@ export async function getTablesWithSessions(restaurantId: string): Promise<RawTa
     .select(`
       id, table_number,
       table_sessions(
-        id, status, opened_at, host_name, pin,
+        id, status, opened_at, host_name, host_customer_id, pin,
         orders(
           id, round_number, placed_at, status,
           customers(name),
@@ -3330,6 +3331,7 @@ export type RawParcelRow = {
   status: string
   opened_at: string
   host_name: string | null
+  host_customer_id: string | null
   token_number: number | null
   orders: {
     id: string
@@ -3402,7 +3404,7 @@ export async function getParcelSessions(restaurantId: string): Promise<RawParcel
   const { data, error } = await adminSupabase
     .from('table_sessions')
     .select(`
-      id, status, opened_at, host_name, token_number,
+      id, status, opened_at, host_name, host_customer_id, token_number,
       orders(
         id, round_number, placed_at, status,
         customers(name),
@@ -3481,14 +3483,14 @@ export async function startCaptainOrder({
 }: {
   restaurantId: string
   tableId: string
-  customerName: string
+  /** Required to OPEN a table, and to join one that has no customer yet. */
+  customerName?: string
   customerPhone?: string
   wantsWhatsapp?: boolean
-}): Promise<{ sessionId: string; pin: string; tableNumber: number }> {
+}): Promise<{ sessionId: string; pin: string; tableNumber: number; joined: boolean }> {
   const user = await requireStaff()
   if (!restaurantId || !tableId) throw new Error('restaurantId and tableId are required')
-  const name = customerName?.trim().slice(0, 60)
-  if (!name) throw new Error('Customer name is required')
+  const name = customerName?.trim().slice(0, 60) || ''
   // Client validates too, but phone is the customers dedup key — never let a
   // bypassed client write garbage into it.
   const phone = customerPhone?.trim() || undefined
@@ -3506,16 +3508,84 @@ export async function startCaptainOrder({
     throw new Error('Table belongs to a different restaurant')
   }
 
-  // Friendly pre-check. The unique index only covers ACTIVE sessions, so a
+  // A session may already be running — most often because a guest scanned the
+  // QR first. Staff are never locked out of a live table: join the existing
+  // session instead of refusing, so the captain can punch the round from their
+  // own device. The unique index only covers ACTIVE sessions, so a
   // billed-but-unsettled session would not collide on insert — check both.
   const { data: existing } = await adminSupabase
     .from('table_sessions')
-    .select('id')
+    .select('id, pin, status, host_customer_id, host_name')
     .eq('table_id', tableId)
     .in('status', ['active', 'bill_generated'])
     .limit(1)
     .maybeSingle()
-  if (existing) throw new Error(`Table ${tableRow.table_number} already has a running session`)
+
+  if (existing) {
+    // A billed table is mid-settlement — adding a fresh round from the "new
+    // order" entry point would be a mistake. The table sheet is the right
+    // place for post-bill additions, and it enforces the lockdown rules.
+    if (existing.status === 'bill_generated') {
+      throw new Error(`Table ${tableRow.table_number} already has a printed bill — open the table to add items`)
+    }
+
+    // Only fill in customer details the session is still missing. A guest who
+    // completed host onboarding already has a customers row; the name typed on
+    // the captain's device must never silently overwrite it.
+    if (!existing.host_customer_id) {
+      // A guest who checked out normally is attached to the ROUND, not the
+      // session. Adopt that customer rather than asking the captain to retype
+      // a name we already have — and keep the two in sync so the bill-time
+      // check and the table sheet agree from here on.
+      const { data: ordered } = await adminSupabase
+        .from('orders')
+        .select('customer_id')
+        .eq('session_id', existing.id)
+        .not('customer_id', 'is', null)
+        .limit(1)
+        .maybeSingle()
+
+      if (ordered?.customer_id) {
+        await adminSupabase
+          .from('table_sessions')
+          .update({ host_customer_id: ordered.customer_id })
+          .eq('id', existing.id)
+          .is('host_customer_id', null)
+      } else {
+        if (!name) throw new Error('Customer name is required')
+        const { customerId: joinedCustomerId } = await findOrCreateCustomer({
+          restaurantId,
+          name,
+          phone,
+          wantsWhatsapp,
+        })
+        await adminSupabase
+          .from('table_sessions')
+          .update({ host_name: name, host_customer_id: joinedCustomerId })
+          .eq('id', existing.id)
+          .is('host_customer_id', null)
+
+        await logActivity({
+          restaurantId,
+          actor: user,
+          action: 'customer_set',
+          sessionId: existing.id,
+          label: `Table ${tableRow.table_number}`,
+          details: { customerName: name, hasPhone: !!phone, source: 'new_table_order' },
+        })
+      }
+    }
+
+    return {
+      sessionId: existing.id,
+      pin: existing.pin ?? '',
+      tableNumber: tableRow.table_number,
+      joined: true,
+    }
+  }
+
+  // Opening a table from scratch: there is nothing to inherit a name from.
+  if (!name) throw new Error('Customer name is required')
 
   const { customerId } = await findOrCreateCustomer({
     restaurantId,
@@ -3562,7 +3632,7 @@ export async function startCaptainOrder({
     details: { customerName: name },
   })
 
-  return { sessionId: session.id, pin, tableNumber: tableRow.table_number }
+  return { sessionId: session.id, pin, tableNumber: tableRow.table_number, joined: false }
 }
 
 /**
@@ -3609,6 +3679,89 @@ export async function cancelEmptySession(sessionId: string): Promise<void> {
       .eq('status', 'closed')
     if (reopenError) console.error('[cancelEmptySession] reopen failed:', reopenError.message)
   }
+}
+
+/**
+ * Attaches (or corrects) the customer on a live session — the captain's
+ * bill-time capture. A table that a guest merely scanned carries no customers
+ * row at all, and a captain who punches the round for them has nowhere to put
+ * the name, so the bill would print blank. The captain sheet calls this before
+ * generating a bill whenever the session has no customer yet.
+ *
+ * Phone stays optional: it is only asked for, never required, because it is
+ * the customer's to give. When supplied it is the dedup key into `customers`,
+ * so a returning guest links to their existing row rather than a new one.
+ */
+export async function setSessionCustomer({
+  sessionId,
+  name,
+  phone,
+  wantsWhatsapp,
+}: {
+  sessionId: string
+  name: string
+  phone?: string
+  wantsWhatsapp?: boolean
+}): Promise<{ customerId: string; name: string }> {
+  const user = await requireStaff()
+  if (!sessionId) throw new Error('sessionId is required')
+  const trimmedName = name?.trim().slice(0, 60)
+  if (!trimmedName) throw new Error('Customer name is required')
+  // findOrCreateCustomer validates too — checking here keeps the captain from
+  // losing the whole form to a server error on an obvious typo.
+  const cleanPhone = phone?.trim() || undefined
+  if (cleanPhone && !isValidIndianPhone(cleanPhone)) {
+    throw new Error(PHONE_VALIDATION_MESSAGE)
+  }
+
+  const { data: session, error: sessionError } = await adminSupabase
+    .from('table_sessions')
+    .select('id, status, restaurant_id, host_customer_id')
+    .eq('id', sessionId)
+    .single()
+  if (sessionError || !session) throw new Error('Session not found')
+  // A closed session is a settled bill — its customer is booked history.
+  if (session.status === 'closed') throw new Error('Session is closed — customer details are final')
+
+  const { customerId } = await findOrCreateCustomer({
+    restaurantId: session.restaurant_id,
+    name: trimmedName,
+    phone: cleanPhone,
+    wantsWhatsapp,
+  })
+
+  const { error: updateError } = await adminSupabase
+    .from('table_sessions')
+    .update({ host_name: trimmedName, host_customer_id: customerId })
+    .eq('id', sessionId)
+  if (updateError) throw new Error('Failed to save customer details')
+
+  // Back-fill the rounds already punched on this session. computeBillForSession
+  // reads the customer off the latest order, and the customer directory counts
+  // visits the same way — without this the guest would be attached to the
+  // session but missing from their own order history.
+  const { error: backfillError } = await adminSupabase
+    .from('orders')
+    .update({ customer_id: customerId })
+    .eq('session_id', sessionId)
+    .is('customer_id', null)
+  if (backfillError) console.error('[setSessionCustomer] order backfill failed:', backfillError.message)
+
+  const ctx = await getSessionLogContext(sessionId)
+  await logActivity({
+    restaurantId: session.restaurant_id,
+    actor: user,
+    action: 'customer_set',
+    sessionId,
+    label: ctx.label,
+    details: {
+      customerName: trimmedName,
+      hasPhone: !!cleanPhone,
+      replaced: !!session.host_customer_id,
+    },
+  })
+
+  return { customerId, name: trimmedName }
 }
 
 // ── Activity log reads (A01, admin-only) ────────────────────────────────────
@@ -3865,7 +4018,32 @@ export async function joinTable({
     activeSession = winner
   }
 
-  const isHost = activeSession.host_device_id === deviceId
+  // A staff-opened table has no customer host yet: startCaptainOrder parks a
+  // synthetic 'captain:<uuid>' in host_device_id purely so the orphan sweep
+  // above does not close it. The PIN exists to keep one guest out of another
+  // guest's shared cart — it was never meant to make the guests sitting at the
+  // table ask a captain for a code. So the first customer device to scan claims
+  // the empty host slot and walks straight in; their friends then join with the
+  // PIN off their screen, exactly as on a guest-opened table.
+  let hostDeviceId: string | null = activeSession.host_device_id
+  if (hostDeviceId?.startsWith('captain:')) {
+    // Guarded update: two phones scanning in the same second both reach here,
+    // but only the one whose UPDATE still matches the sentinel gets a row back.
+    // The loser falls through to the PIN path like any other second device.
+    const { data: claimed } = await adminSupabase
+      .from('table_sessions')
+      .update({
+        host_device_id: deviceId,
+        joined_device_ids: [...(activeSession.joined_device_ids ?? []), deviceId],
+      })
+      .eq('id', activeSession.id)
+      .like('host_device_id', 'captain:%')
+      .select('id')
+      .maybeSingle()
+    if (claimed) hostDeviceId = deviceId
+  }
+
+  const isHost = hostDeviceId === deviceId
   const joinedDeviceIds: string[] = activeSession.joined_device_ids ?? []
   const alreadyJoined = isHost || joinedDeviceIds.includes(deviceId)
 

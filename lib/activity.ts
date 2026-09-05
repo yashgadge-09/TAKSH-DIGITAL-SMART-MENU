@@ -12,6 +12,7 @@ export const REMOVAL_REASONS: Record<RemovalReason, string> = {
 
 export type ActivityAction =
   | 'order_started'
+  | 'customer_set'
   | 'item_added'
   | 'item_qty_changed'
   | 'item_removed'
@@ -26,6 +27,7 @@ export type ActivityAction =
 
 export const ACTIVITY_ACTION_LABELS: Record<ActivityAction, string> = {
   order_started: 'Order started',
+  customer_set: 'Customer details set',
   item_added: 'Item added',
   item_qty_changed: 'Qty changed',
   item_removed: 'Item removed',

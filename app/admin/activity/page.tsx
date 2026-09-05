@@ -48,7 +48,7 @@ const FILTER_ACTIONS: Record<Exclude<ActionFilter, "all">, ActivityAction[]> = {
   flagged: FLAGGED_ACTIONS,
   items: ["item_added", "item_qty_changed", "item_removed"],
   bills: ["bill_printed", "bill_reprinted", "bill_settled"],
-  orders: ["order_started", "order_approved", "order_rejected", "table_moved"],
+  orders: ["order_started", "customer_set", "order_approved", "order_rejected", "table_moved"],
 }
 
 const ROLE_BADGE: Record<ActivityLogEntry["actorRole"], string> = {

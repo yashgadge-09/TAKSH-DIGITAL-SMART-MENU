@@ -110,6 +110,9 @@ function DishDetailContent() {
   const heroRef = useRef<HTMLDivElement>(null);
   const heroCarouselRef = useRef<HTMLDivElement>(null);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  // Hero image URLs that failed to load (e.g. a dead/expired CDN link) — these
+  // are dropped from the carousel entirely, same as never having had a photo.
+  const [failedHeroUrls, setFailedHeroUrls] = useState<Set<string>>(new Set());
 
   const dish = useMemo(() => {
     if (!rawDish) return null;
@@ -255,6 +258,7 @@ function DishDetailContent() {
 
   useEffect(() => {
     setActiveHeroIndex(0);
+    setFailedHeroUrls(new Set());
     if (heroCarouselRef.current) {
       heroCarouselRef.current.scrollTo({ left: 0, behavior: 'instant' });
     }
@@ -343,7 +347,8 @@ function DishDetailContent() {
   const heroScale = 1 - fadeProgress * 0.08;
   const heroBlur = fadeProgress * 6;
   const total = dish.price * qty;
-  const heroImages = Array.isArray(dish.images) ? dish.images.filter(Boolean) : [];
+  const heroImages = (Array.isArray(dish.images) ? dish.images.filter(Boolean) : [])
+    .filter((url: string) => !failedHeroUrls.has(url));
   const hasMultipleHeroImages = heroImages.length > 1;
 
   const handleHeroCarouselScroll = () => {
@@ -377,9 +382,9 @@ function DishDetailContent() {
           willChange: "transform, opacity, filter",
         }}
       >
-        <div className="relative w-full max-w-[100vw] md:max-w-[min(50vw,50vh)]">
-          <div className="relative aspect-square w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]">
-            {heroImages.length > 0 ? (
+        {heroImages.length > 0 && (
+          <div className="relative w-full max-w-[100vw] md:max-w-[min(50vw,50vh)]">
+            <div className="relative aspect-square w-full overflow-hidden md:rounded-3xl md:ring-1 md:ring-[color:var(--brand-gold)]/15 md:shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)]">
               <div
                 ref={heroCarouselRef}
                 onScroll={handleHeroCarouselScroll}
@@ -395,6 +400,7 @@ function DishDetailContent() {
                         muted
                         playsInline
                         className="h-full w-full object-cover"
+                        onError={() => setFailedHeroUrls(prev => new Set(prev).add(mediaUrl))}
                       />
                     ) : (
                       <img
@@ -403,62 +409,52 @@ function DishDetailContent() {
                         loading={index === 0 ? undefined : "lazy"}
                         decoding="async"
                         className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        }}
+                        onError={() => setFailedHeroUrls(prev => new Set(prev).add(mediaUrl))}
                       />
                     )}
-                    <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg)] p-4 text-center pointer-events-none">
-                      <span className="text-[14px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-                    </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="flex w-full h-full items-center justify-center bg-[color:var(--brand-bg)] p-4 text-center">
-                 <span className="text-[14px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-              </div>
-            )}
-            {hasMultipleHeroImages && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex items-center justify-center gap-1.5">
-                {heroImages.map((_: string, index: number) => (
-                  <span
-                    key={`hero-dot-${index}`}
-                    className={`h-1.5 rounded-full transition-all ${index === activeHeroIndex ? 'w-5 bg-[color:var(--brand-gold)]' : 'w-1.5 bg-[color:var(--brand-gold)]/50'}`}
-                  />
-                ))}
-              </div>
-            )}
-            {/* Soft inner top gradient for sticky-controls legibility */}
+              {hasMultipleHeroImages && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex items-center justify-center gap-1.5">
+                  {heroImages.map((_: string, index: number) => (
+                    <span
+                      key={`hero-dot-${index}`}
+                      className={`h-1.5 rounded-full transition-all ${index === activeHeroIndex ? 'w-5 bg-[color:var(--brand-gold)]' : 'w-1.5 bg-[color:var(--brand-gold)]/50'}`}
+                    />
+                  ))}
+                </div>
+              )}
+              {/* Soft inner top gradient for sticky-controls legibility */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 top-0 h-24"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(35,22,10,0.55) 0%, rgba(35,22,10,0) 100%)",
+                }}
+              />
+            </div>
+            {/* Smooth fade from image bottom into the page background */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 top-0 h-24"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5"
               style={{
                 background:
-                  "linear-gradient(180deg, rgba(35,22,10,0.55) 0%, rgba(35,22,10,0) 100%)",
+                  "linear-gradient(180deg, rgba(35,22,10,0) 0%, rgba(35,22,10,0.55) 55%, var(--brand-bg) 100%)",
+              }}
+            />
+            {/* Extra blend zone that bleeds the image into the page below the square */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-full h-24"
+              style={{
+                background:
+                  "linear-gradient(180deg, var(--brand-bg) 0%, rgba(35,22,10,0) 100%)",
               }}
             />
           </div>
-          {/* Smooth fade from image bottom into the page background */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(35,22,10,0) 0%, rgba(35,22,10,0.55) 55%, var(--brand-bg) 100%)",
-            }}
-          />
-          {/* Extra blend zone that bleeds the image into the page below the square */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-full h-24"
-            style={{
-              background:
-                "linear-gradient(180deg, var(--brand-bg) 0%, rgba(35,22,10,0) 100%)",
-            }}
-          />
-        </div>
+        )}
       </div>
 
       {/* Sticky top controls (fade as user scrolls) */}
@@ -498,10 +494,16 @@ function DishDetailContent() {
 
       {/* Content above the hero */}
       <div className="relative z-10 mx-auto w-full max-w-md pb-12">
-        {/* Spacer that lets the top-anchored hero show through. */}
+        {/* Spacer that lets the top-anchored hero show through. No image on
+            file → no hero to reserve space for; just clear the fixed topbar
+            (back/language/cart buttons) so the text starts right below it. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none h-[calc(100vw-80px)] w-full md:h-[calc(min(50vw,50vh)-80px)]"
+          className={
+            heroImages.length > 0
+              ? "pointer-events-none h-[calc(100vw-80px)] w-full md:h-[calc(min(50vw,50vh)-80px)]"
+              : "pointer-events-none h-16 w-full"
+          }
         />
 
         {/* Veg indicator */}
@@ -606,31 +608,27 @@ function DishDetailContent() {
                   href={`/dish/${item.id}`}
                   className="group flex w-[130px] shrink-0 flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg-deep)] ring-1 ring-[color:var(--brand-gold)]/15 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.8)] transition hover:ring-[color:var(--brand-gold)]/40"
                 >
-                  <div className="relative aspect-square w-full overflow-hidden">
-                    {getRecommendationImage(item) ? (
-                      <>
-                        {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
-                          <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
-                        ) : (
-                          <img
-                            src={thumbUrl(String(getRecommendationImage(item)), 340)}
-                            alt={getRecommendationName(item)}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-                            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
-                          />
-                        )}
-                        <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
-                          <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
-                        <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-                      </div>
-                    )}
-                  </div>
+                  {getRecommendationImage(item) && (
+                    <div className="dish-rec-media relative aspect-square w-full overflow-hidden">
+                      {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
+                        <video
+                          src={String(getRecommendationImage(item))}
+                          muted loop autoPlay
+                          className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                          onError={(e) => { e.currentTarget.closest('.dish-rec-media')?.remove(); }}
+                        />
+                      ) : (
+                        <img
+                          src={thumbUrl(String(getRecommendationImage(item)), 340)}
+                          alt={getRecommendationName(item)}
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                          onError={(e) => { e.currentTarget.closest('.dish-rec-media')?.remove(); }}
+                        />
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-col gap-0.5 px-2.5 py-2">
                     <h3 className="truncate font-serif text-[13px] text-[color:var(--brand-gold-soft)]">
                       {getRecommendationName(item)}
@@ -675,31 +673,27 @@ function DishDetailContent() {
                     href={`/dish/${item.id}`}
                     className="group flex w-[140px] shrink-0 flex-col overflow-hidden rounded-2xl bg-[color:var(--brand-bg)] ring-1 ring-[color:var(--brand-gold)]/15 transition hover:ring-[color:var(--brand-gold)]/40"
                   >
-                    <div className="relative aspect-[4/3] w-full overflow-hidden">
-                      {getRecommendationImage(item) ? (
-                        <>
-                          {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
-                            <video src={String(getRecommendationImage(item))} muted loop autoPlay className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
-                          ) : (
-                            <img
-                              src={thumbUrl(String(getRecommendationImage(item)), 340)}
-                              alt={getRecommendationName(item)}
-                              loading="lazy"
-                              decoding="async"
-                              className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-                              onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
-                            />
-                          )}
-                          <div className="hidden absolute inset-0 flex items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center pointer-events-none">
-                            <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[color:var(--brand-bg-deep)] p-2 text-center">
-                          <span className="text-[10px] font-medium leading-tight text-[color:var(--brand-gold-muted)]">Image to be added</span>
-                        </div>
-                      )}
-                    </div>
+                    {getRecommendationImage(item) && (
+                      <div className="dish-rec-media relative aspect-[4/3] w-full overflow-hidden">
+                        {(String(getRecommendationImage(item)).match(/\.(mp4|webm|ogg|mov|m4v)$/i) || String(getRecommendationImage(item)).includes('/video/upload/')) ? (
+                          <video
+                            src={String(getRecommendationImage(item))}
+                            muted loop autoPlay
+                            className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                            onError={(e) => { e.currentTarget.closest('.dish-rec-media')?.remove(); }}
+                          />
+                        ) : (
+                          <img
+                            src={thumbUrl(String(getRecommendationImage(item)), 340)}
+                            alt={getRecommendationName(item)}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                            onError={(e) => { e.currentTarget.closest('.dish-rec-media')?.remove(); }}
+                          />
+                        )}
+                      </div>
+                    )}
                     <div className="flex flex-col gap-1 px-2.5 py-2">
                       <h3 className="truncate font-serif text-[13px] text-[color:var(--brand-gold-soft)]">
                         {getRecommendationName(item)}

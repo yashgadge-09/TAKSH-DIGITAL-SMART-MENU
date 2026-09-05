@@ -8,6 +8,7 @@ import {
   Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil, KeyRound, Menu, Search,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
+import { BillCustomerModal } from "@/components/captain/BillCustomerModal"
 import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
 import { ResponsiveSheet, SheetTitle } from "@/components/captain/ResponsiveSheet"
 import { SheetActionMenu, type SheetAction } from "@/components/captain/SheetActionMenu"
@@ -54,6 +55,10 @@ export function TableSheet({
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [billStale, setBillStale] = useState(false)
   const [pendingRemoval, setPendingRemoval] = useState<{ itemId: string; name: string } | null>(null)
+  // Non-null while the bill is blocked on capturing the customer; the flag it
+  // holds is the print action we resume once the name is saved.
+  const [customerPrompt, setCustomerPrompt] = useState<{ thenSettle: boolean } | null>(null)
+  const [editCustomerOpen, setEditCustomerOpen] = useState(false)
 
   const approvedRounds = table.rounds.filter(r => r.status !== "pending_approval").length
   // Mirrors isServing() in the captain page. Kept local rather than imported:
@@ -66,6 +71,12 @@ export function TableSheet({
   // removing needs an admin. The server enforces this too; hiding the minus
   // button just keeps the UI honest.
   const canReduce = table.status === "active" || isAdmin
+  // What the bill header will actually say. computeBillForSession reads the
+  // name off the latest round's customer and falls back to the session's, so a
+  // guest who checked out normally already has one and must not be re-asked.
+  // Only a table where NEITHER exists — a scanned QR whose rounds the captain
+  // punched — would print blank, and that is the one we stop and ask about.
+  const hasBillCustomer = !!table.hostCustomerId || table.rounds.some(r => !!r.customerName)
 
   async function handleQuantityChange(
     itemId: string,
@@ -108,6 +119,19 @@ export function TableSheet({
   }
 
   async function handlePrintBill(thenSettle: boolean) {
+    if (!table.sessionId) return
+    // Every bill carries a name. A table the guests only scanned has no
+    // customers row at all — and a round the captain punched for them had
+    // nowhere to put one — so ask now rather than print a blank header and
+    // lose the visit from the customer directory.
+    if (!hasBillCustomer) {
+      setCustomerPrompt({ thenSettle })
+      return
+    }
+    await printBill(thenSettle)
+  }
+
+  async function printBill(thenSettle: boolean) {
     if (!table.sessionId) return
     setActionLoading(true)
     try {
@@ -222,9 +246,22 @@ export function TableSheet({
                     Table {table.tableNumber}
                   </p>
                 </SheetTitle>
-                <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
-                  {table.hostName ?? "No host"}
-                </h2>
+                {table.sessionId ? (
+                  <button
+                    onClick={() => setEditCustomerOpen(true)}
+                    data-testid="edit-customer"
+                    className="mt-0.5 flex max-w-full items-center gap-1.5 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A33D]"
+                  >
+                    <span className={`truncate text-lg font-bold ${hasBillCustomer ? "text-[#F4DEC0]" : "text-[#C89F72]"}`}>
+                      {hasBillCustomer ? (table.hostName ?? "Guest") : "Add customer"}
+                    </span>
+                    <Pencil className="h-3.5 w-3.5 shrink-0 text-[#A08060]" />
+                  </button>
+                ) : (
+                  <h2 className="mt-0.5 truncate text-lg font-bold text-[#F4DEC0]">
+                    {table.hostName ?? "No host"}
+                  </h2>
+                )}
               </div>
             </div>
             <button
@@ -433,6 +470,38 @@ export function TableSheet({
           onAdded={() => {
             setAddItemOpen(false)
             if (table.status === "bill_generated") setBillStale(true)
+            onChanged()
+          }}
+        />
+      )}
+
+      {/* Bill-time capture: save the customer, then resume the print that
+          triggered it — one uninterrupted action from the captain's side. */}
+      {customerPrompt && table.sessionId && (
+        <BillCustomerModal
+          sessionId={table.sessionId}
+          label={`Table ${table.tableNumber}`}
+          initialName={table.hostName}
+          onClose={() => setCustomerPrompt(null)}
+          onSaved={async () => {
+            const { thenSettle } = customerPrompt
+            setCustomerPrompt(null)
+            onChanged()
+            await printBill(thenSettle)
+          }}
+        />
+      )}
+
+      {editCustomerOpen && table.sessionId && (
+        <BillCustomerModal
+          sessionId={table.sessionId}
+          label={`Table ${table.tableNumber}`}
+          initialName={table.hostName}
+          isEdit
+          onClose={() => setEditCustomerOpen(false)}
+          onSaved={name => {
+            setEditCustomerOpen(false)
+            toast.success(`Customer saved — ${name}`)
             onChanged()
           }}
         />
