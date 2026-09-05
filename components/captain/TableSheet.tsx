@@ -5,7 +5,7 @@ import { generateBill, reprintBill, reprintKot, updateOrderItemQuantity, forceRe
 import { toast } from "sonner"
 import {
   X, Clock, Users, ChefHat, Receipt, Printer, ArrowLeftRight,
-  Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil, KeyRound, Menu,
+  Wallet, CheckCircle2, Minus, Plus, Trash2, Pencil, KeyRound, Menu, Search,
 } from "lucide-react"
 import { AddItemModal } from "@/components/captain/AddItemModal"
 import { RemoveReasonDialog } from "@/components/captain/RemoveReasonDialog"
@@ -260,6 +260,22 @@ export function TableSheet({
           </div>
         </div>
 
+        {/* ── Quick add ──────────────────────────────────────────────────── */}
+        {/* Always reachable — a captain adding a next round shouldn't have to
+            go through Edit Dishes first. Opens the same AddItemModal. */}
+        {table.sessionId && serving && (
+          <div className="shrink-0 border-b border-[#E8D5BC] bg-[#FFFBF4] px-5 py-3">
+            <button
+              onClick={() => setAddItemOpen(true)}
+              data-testid="quick-add-item-open"
+              className="flex h-11 w-full items-center gap-2 rounded-xl border border-[#D4C4B4] bg-white px-3 text-sm text-[#8E6D4E] transition-colors hover:border-[#A46833] active:border-[#A46833] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
+            >
+              <Search className="h-4 w-4 shrink-0 text-[#A08060]" />
+              Search dishes to add for next round…
+            </button>
+          </div>
+        )}
+
         {/* ── KOT rounds ─────────────────────────────────────────────────── */}
         <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4" data-testid="kot-list">
           {table.rounds.length === 0 ? (
@@ -362,16 +378,6 @@ export function TableSheet({
             <p className="text-xs font-medium text-[#C47A20]" data-testid="post-bill-add-only-hint">
               Bill printed — you can add items; removing or reducing needs an admin.
             </p>
-          )}
-
-          {canEditItems && table.sessionId && (
-            <button
-              onClick={() => setAddItemOpen(true)}
-              data-testid="add-item-open"
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#CFAF8C] bg-white/60 py-3 text-sm font-semibold text-[#A46833] transition-colors hover:bg-[#FFF3E0] active:bg-[#FFF3E0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A46833]"
-            >
-              <Plus className="h-4 w-4" /> Add Item
-            </button>
           )}
         </div>
 

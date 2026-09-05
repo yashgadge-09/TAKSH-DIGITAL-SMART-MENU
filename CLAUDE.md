@@ -81,13 +81,16 @@ npm run lint      # ESLint
 /captain                 → captain login (C02); shared account captain@taksh.com, app_metadata.role = "captain"
 /captain/tables          → captain panel (C03–C07): mobile-first table grid + pending-approval strip (Realtime);
                            tap table → full-screen sheet showing ONLY the ordered dishes + a sticky
-                           Total; session PIN chip + reprint KOT inline. Every action lives behind the
-                           top-left header ☰ (SheetActionMenu): Print Bill, Print Bill & Take Payment, Take
-                           Payment · Settle & Save, Reprint Bill, Edit Dishes (qty +/- + Add Item),
-                           Move Table, Force Reset. POST-BILL LOCKDOWN: once the bill prints, captains can only ADD items
-                           (KOT fires, reprint picks it up) or reprint unchanged — reducing/removing is
-                           admin-only (server-enforced in updateOrderItemQuantity). Every removal
-                           requires a reason (RemoveReasonDialog) logged to activity_log.
+                           Total; session PIN chip + reprint KOT inline. A "Search dishes to add for
+                           next round…" bar sits right under the header, always reachable (no need to
+                           enter Edit Dishes first) — tapping it opens AddItemModal directly. Every other
+                           action lives behind the top-left header ☰ (SheetActionMenu): Print Bill, Print
+                           Bill & Take Payment, Take Payment · Settle & Save, Reprint Bill, Edit Dishes
+                           (qty +/-), Move Table, Force Reset. POST-BILL LOCKDOWN: once the bill prints,
+                           captains can only ADD items (KOT fires, reprint picks it up) or reprint
+                           unchanged — reducing/removing is admin-only (server-enforced in
+                           updateOrderItemQuantity). Every removal requires a reason
+                           (RemoveReasonDialog) logged to activity_log.
                            Walk-in flow (W01): "New Table Order" button or tap a FREE table → pick
                            table + name + optional phone → dish picker opens → first round lands
                            already approved, KOT prints. Session has a real PIN (shown in the sheet)
